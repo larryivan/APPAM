@@ -1,0 +1,16 @@
+Flask==3.0.3
+Flask-SocketIO==6.0.0
+requests==2.32.3
+# AI Assistant dependencies (updated to latest)
+openai>=1.54.0
+python-dotenv==1.0.1
+tiktoken==0.8.0
+# Knowledge base dependencies (latest versions)
+langchain==0.3.7
+langchain-community==0.3.7
+chromadb==0.5.23
+sentence-transformers==3.3.1
+huggingface-hub==0.26.2
+transformers==4.46.3
+# System monitoring
+psutil==6.1.0 

@@ -1,0 +1,292 @@
+
+[
+  {
+    "tool_name": "FastQC",
+    "description": "A high throughput sequence QC analysis tool that reads sequence files and produces quality control reports.",
+    "parameters": [
+      { "name": "input_files", "description": "Input sequence files to analyze (FASTQ, BAM, SAM)", "type": "file", "multiple": true, "extensions": [".fastq", ".fq", ".fastq.gz", ".fq.gz", ".bam", ".sam"] },
+      { "name": "-o", "description": "Create all output files in the specified output directory", "type": "directory", "default": "/results/fastqc" },
+      { "name": "-t", "description": "Number of files which can be processed simultaneously", "type": "integer", "default": 4 },
+      { "name": "-f", "description": "Bypass normal sequence file format detection and force specified format", "type": "string", "options": ["fastq", "bam", "sam", "bam_mapped", "sam_mapped"] },
+      { "name": "--extract", "description": "Uncompress the zipped output file after creation", "type": "flag", "default": false },
+      { "name": "--noextract", "description": "Do not uncompress the output file after creating it", "type": "flag", "default": false },
+      { "name": "--nogroup", "description": "Disable grouping of bases for reads >50bp", "type": "flag", "default": false },
+      { "name": "-k", "description": "Length of Kmer to look for in Kmer content module (2-10)", "type": "integer", "default": 7 },
+      { "name": "-q", "description": "Suppress all progress messages and only report errors", "type": "flag", "default": false }
+    ]
+  },
+  {
+    "tool_name": "MultiQC",
+    "description": "Aggregates results from bioinformatics analyses across many samples into a single HTML report.",
+    "parameters": [
+      { "name": "analysis_directories", "description": "Directories to scan for analysis results", "type": "directory", "multiple": true },
+      { "name": "-o", "description": "Create report in the specified output directory", "type": "directory", "default": "/results/multiqc" },
+      { "name": "-f", "description": "Overwrite any existing reports", "type": "flag", "default": false },
+      { "name": "-n", "description": "Report filename", "type": "string", "default": "multiqc_report.html" },
+      { "name": "-i", "description": "Report title", "type": "string" },
+      { "name": "-m", "description": "Use only this module. Can specify multiple times", "type": "string", "multiple": true },
+      { "name": "-e", "description": "Do not use this module. Can specify multiple times", "type": "string", "multiple": true },
+      { "name": "-x", "description": "Ignore analysis files (glob expression)", "type": "string" },
+      { "name": "--ignore-samples", "description": "Ignore sample names (glob expression)", "type": "string" },
+      { "name": "-d", "description": "Prepend directory to sample names", "type": "flag", "default": false },
+      { "name": "-v", "description": "Increase output verbosity", "type": "integer", "default": 0 },
+      { "name": "-q", "description": "Only show log warnings", "type": "flag", "default": false }
+    ]
+  },
+  {
+    "tool_name": "AdapterRemoval",
+    "description": "Searches for and removes remnant adapter sequences from single-end and paired-end read data, with optional quality trimming and read merging.",
+    "parameters": [
+      { "name": "--file1", "description": "Input files containing mate 1 reads or single-ended reads", "type": "file", "multiple": true, "extensions": [".fastq", ".fq", ".fastq.gz", ".fq.gz", ".fastq.bz2", ".fq.bz2"] },
+      { "name": "--file2", "description": "Input files containing mate 2 reads (paired-end mode)", "type": "file", "multiple": true, "extensions": [".fastq", ".fq", ".fastq.gz", ".fq.gz", ".fastq.bz2", ".fq.bz2"] },
+      { "name": "--basename", "description": "Default prefix for all output files", "type": "string", "default": "your_output" },
+      { "name": "--threads", "description": "Maximum number of threads", "type": "integer", "default": 1 },
+      { "name": "--identify-adapters", "description": "Attempt to identify adapter pair of PE reads by searching for overlaps", "type": "flag", "default": false },
+      { "name": "--adapter1", "description": "Adapter sequence expected in mate 1 reads", "type": "string" },
+      { "name": "--adapter2", "description": "Adapter sequence expected in mate 2 reads", "type": "string" },
+      { "name": "--adapter-list", "description": "Read table of adapter pairs from file", "type": "file", "extensions": [".txt", ".tsv"] },
+      { "name": "--minadapteroverlap", "description": "Minimum adapter overlap required for trimming (SE mode)", "type": "integer", "default": 0 },
+      { "name": "--mm", "description": "Max error-rate when aligning reads/adapters (fraction or 1/N)", "type": "float", "default": 0.33 },
+      { "name": "--trimns", "description": "Trim ambiguous bases (N) at 5'/3' termini", "type": "flag", "default": false },
+      { "name": "--maxns", "description": "Discard reads with more than N ambiguous bases after trimming", "type": "integer", "default": 1000 },
+      { "name": "--trimqualities", "description": "Trim bases at 5'/3' termini with low quality scores", "type": "flag", "default": false },
+      { "name": "--minquality", "description": "Inclusive minimum quality score for trimming", "type": "integer", "default": 2 },
+      { "name": "--minlength", "description": "Discard reads shorter than this length after trimming", "type": "integer", "default": 15 },
+      { "name": "--maxlength", "description": "Discard reads longer than this length after trimming", "type": "integer", "default": 4294967295 },
+      { "name": "--collapse", "description": "Merge overlapping paired-end reads into single consensus sequence", "type": "flag", "default": false },
+      { "name": "--minalignmentlength", "description": "Minimum overlap required for collapsing reads", "type": "integer", "default": 11 },
+      { "name": "--interleaved", "description": "Enable both interleaved input and output", "type": "flag", "default": false },
+      { "name": "--gzip", "description": "Enable gzip compression for output files", "type": "flag", "default": false },
+      { "name": "--gzip-level", "description": "Gzip compression level (0-9)", "type": "integer", "default": 6 }
+    ]
+  },
+  {
+    "tool_name": "bwa",
+    "description": "Burrows-Wheeler Aligner for mapping sequences against a reference genome using BWA-MEM algorithm.",
+    "parameters": [
+      { "name": "command", "description": "BWA command to run", "type": "string", "options": ["index", "mem"], "default": "mem" },
+      { "name": "reference_genome", "description": "Reference genome file (FASTA) or indexed reference prefix", "type": "file", "extensions": [".fasta", ".fa", ".fas", ".fna"] },
+      { "name": "input_reads", "description": "Input reads file(s) (FASTQ)", "type": "file", "multiple": true, "extensions": [".fastq", ".fq", ".fastq.gz", ".fq.gz"] },
+      { "name": "-t", "description": "Number of threads", "type": "integer", "default": 4 },
+      { "name": "-o", "description": "Output SAM file", "type": "string", "default": "output.sam" },
+      { "name": "-M", "description": "Mark shorter split hits as secondary (for Picard compatibility)", "type": "flag", "default": false }
+    ]
+  },
+  {
+    "tool_name": "PMDtools",
+    "description": "A tool to assess post-mortem DNA damage in ancient DNA samples.",
+    "parameters": [
+      { "name": "--threshold", "description": "PMD score threshold.", "type": "integer", "default": 3 }
+    ]
+  },
+  {
+    "tool_name": "bedtools",
+    "description": "A powerful toolset for genome arithmetic operations on genomic intervals.",
+    "parameters": [
+      { "name": "subcommand", "description": "Bedtools subcommand to run", "type": "string", "options": ["intersect", "merge", "sort", "coverage", "getfasta", "bamtobed", "subtract", "closest", "window"], "default": "intersect" },
+      { "name": "input_file", "description": "Primary input file (BED/BAM/VCF/GFF)", "type": "file", "extensions": [".bed", ".bam", ".vcf", ".gff", ".gtf", ".bedgraph"] },
+      { "name": "-b", "description": "Second input file for comparison operations", "type": "file", "extensions": [".bed", ".bam", ".vcf", ".gff", ".gtf", ".bedgraph"] },
+      { "name": "-a", "description": "Input file A (alternative to input_file)", "type": "file", "extensions": [".bed", ".bam", ".vcf", ".gff", ".gtf", ".bedgraph"] },
+      { "name": "-g", "description": "Genome file (chromosome sizes)", "type": "file", "extensions": [".genome", ".txt"] },
+      { "name": "-f", "description": "Minimum overlap required as fraction of A", "type": "float", "default": 0.000001 },
+      { "name": "-r", "description": "Require that fraction overlap be reciprocal for A and B", "type": "flag", "default": false },
+      { "name": "-v", "description": "Only report those entries in A that have no overlaps with B", "type": "flag", "default": false },
+      { "name": "-u", "description": "Write unique A entries once if any overlaps found in B", "type": "flag", "default": false },
+      { "name": "-c", "description": "For each entry in A, report the number of overlaps with B", "type": "flag", "default": false },
+      { "name": "-s", "description": "Require same strandedness", "type": "flag", "default": false },
+      { "name": "-S", "description": "Require different strandedness", "type": "flag", "default": false }
+    ]
+  },
+  {
+    "tool_name": "KrakenUniq",
+    "description": "Taxonomic classification of reads with unique k-mer counting.",
+    "parameters": [
+      { "name": "input_files", "description": "Input FASTQ files to classify", "type": "file", "multiple": true, "extensions": [".fastq", ".fq", ".fastq.gz", ".fq.gz"] },
+      { "name": "--threads", "description": "Number of threads.", "type": "integer", "default": 4 },
+      { "name": "--db", "description": "Path to the database directory.", "type": "directory", "default": "/databases/kraken/standard" }
+    ]
+  },
+  {
+    "tool_name": "Krona",
+    "description": "Visualizes taxonomic classification results as an interactive HTML report.",
+    "parameters": [
+      { "name": "-o", "description": "Output HTML file.", "type": "string", "default": "krona_report.html" }
+    ]
+  },
+  {
+    "tool_name": "MEGAHIT",
+    "description": "A single-node assembler for large and complex metagenomics data.",
+    "parameters": [
+      { "name": "-1", "description": "Comma-separated list of paired-end #1 files", "type": "file", "multiple": true, "extensions": [".fastq", ".fq", ".fasta", ".fa", ".fastq.gz", ".fq.gz", ".fasta.gz", ".fa.gz", ".fastq.bz2", ".fq.bz2"] },
+      { "name": "-2", "description": "Comma-separated list of paired-end #2 files", "type": "file", "multiple": true, "extensions": [".fastq", ".fq", ".fasta", ".fa", ".fastq.gz", ".fq.gz", ".fasta.gz", ".fa.gz", ".fastq.bz2", ".fq.bz2"] },
+      { "name": "-r", "description": "Comma-separated list of single-end files", "type": "file", "multiple": true, "extensions": [".fastq", ".fq", ".fasta", ".fa", ".fastq.gz", ".fq.gz", ".fasta.gz", ".fa.gz", ".fastq.bz2", ".fq.bz2"] },
+      { "name": "-o", "description": "Output directory", "type": "directory", "default": "./megahit_out" },
+      { "name": "-t", "description": "Number of CPU threads", "type": "integer", "default": 4 },
+      { "name": "--presets", "description": "Assembly presets", "type": "string", "options": ["meta-sensitive", "meta-large"], "default": "meta-sensitive" },
+      { "name": "--k-list", "description": "Comma-separated list of kmer sizes (odd numbers, 15-255)", "type": "string", "default": "21,29,39,59,79,99,119,141" },
+      { "name": "--min-contig-len", "description": "Minimum length of contigs to output", "type": "integer", "default": 200 },
+      { "name": "--min-count", "description": "Minimum multiplicity for filtering kmers", "type": "integer", "default": 2 },
+      { "name": "-m", "description": "Max memory to be used (fraction 0-1 or absolute value)", "type": "float", "default": 0.9 },
+      { "name": "--continue", "description": "Continue from last checkpoint", "type": "flag", "default": false }
+    ]
+  },
+  {
+    "tool_name": "SPAdes",
+    "description": "A versatile genome assembler for single-cell, isolate, and metagenomic data.",
+    "parameters": [
+      { "name": "-1", "description": "File with forward paired-end reads", "type": "file", "multiple": true, "extensions": [".fastq", ".fq", ".fasta", ".fa", ".fastq.gz", ".fq.gz", ".fasta.gz", ".fa.gz"] },
+      { "name": "-2", "description": "File with reverse paired-end reads", "type": "file", "multiple": true, "extensions": [".fastq", ".fq", ".fasta", ".fa", ".fastq.gz", ".fq.gz", ".fasta.gz", ".fa.gz"] },
+      { "name": "-s", "description": "File with unpaired reads", "type": "file", "multiple": true, "extensions": [".fastq", ".fq", ".fasta", ".fa", ".fastq.gz", ".fq.gz", ".fasta.gz", ".fa.gz"] },
+      { "name": "-o", "description": "Output directory", "type": "directory", "default": "./spades_output" },
+      { "name": "--isolate", "description": "High-coverage isolate and multi-cell data mode", "type": "flag", "default": false },
+      { "name": "--meta", "description": "Metagenomic data assembly mode", "type": "flag", "default": false },
+      { "name": "--sc", "description": "Single-cell (MDA) data mode", "type": "flag", "default": false },
+      { "name": "--plasmid", "description": "Plasmid assembly mode", "type": "flag", "default": false },
+      { "name": "--rna", "description": "RNA-Seq data assembly mode", "type": "flag", "default": false },
+      { "name": "-t", "description": "Number of threads", "type": "integer", "default": 16 },
+      { "name": "-m", "description": "Memory limit in GB", "type": "integer", "default": 250 },
+      { "name": "-k", "description": "Comma-separated list of k-mer sizes (odd numbers)", "type": "string" },
+      { "name": "--careful", "description": "Reduce mismatches and short indels (small genomes only)", "type": "flag", "default": false },
+      { "name": "--continue", "description": "Continue from last checkpoint", "type": "flag", "default": false },
+      { "name": "--only-assembler", "description": "Run assembly module only", "type": "flag", "default": false },
+      { "name": "--only-error-correction", "description": "Run error correction only", "type": "flag", "default": false }
+    ]
+  },
+  {
+    "tool_name": "QUAST",
+    "description": "Evaluates genome assemblies by computing various metrics.",
+    "parameters": [
+      { "name": "assembly_files", "description": "Assembly files to evaluate (FASTA)", "type": "file", "multiple": true, "extensions": [".fasta", ".fa", ".fna"] },
+      { "name": "-t", "description": "Number of threads.", "type": "integer", "default": 4 }
+    ]
+  },
+  {
+    "tool_name": "Bowtie2",
+    "description": "An ultrafast and memory-efficient tool for aligning sequencing reads to long reference sequences.",
+    "parameters": [
+      { "name": "-x", "description": "Basename of the index for the reference genome", "type": "string" },
+      { "name": "-1", "description": "Files containing mate 1s (comma-separated)", "type": "file", "multiple": true, "extensions": [".fastq", ".fq", ".fasta", ".fa", ".fastq.gz", ".fq.gz", ".fasta.gz", ".fa.gz"] },
+      { "name": "-2", "description": "Files containing mate 2s (comma-separated)", "type": "file", "multiple": true, "extensions": [".fastq", ".fq", ".fasta", ".fa", ".fastq.gz", ".fq.gz", ".fasta.gz", ".fa.gz"] },
+      { "name": "-U", "description": "Files containing unpaired reads (comma-separated)", "type": "file", "multiple": true, "extensions": [".fastq", ".fq", ".fasta", ".fa", ".fastq.gz", ".fq.gz", ".fasta.gz", ".fa.gz"] },
+      { "name": "-S", "description": "File to write SAM alignments to", "type": "string", "default": "output.sam" },
+      { "name": "-p", "description": "Number of parallel search threads", "type": "integer", "default": 1 },
+      { "name": "--very-fast", "description": "Very fast preset (less sensitive)", "type": "flag", "default": false },
+      { "name": "--fast", "description": "Fast preset", "type": "flag", "default": false },
+      { "name": "--sensitive", "description": "Sensitive preset (default)", "type": "flag", "default": false },
+      { "name": "--very-sensitive", "description": "Very sensitive preset (more accurate)", "type": "flag", "default": false },
+      { "name": "--local", "description": "Local alignment mode (soft clipping allowed)", "type": "flag", "default": false },
+      { "name": "--end-to-end", "description": "End-to-end alignment mode (default)", "type": "flag", "default": false },
+      { "name": "-I", "description": "Minimum fragment length for paired-end alignments", "type": "integer", "default": 0 },
+      { "name": "-X", "description": "Maximum fragment length for paired-end alignments", "type": "integer", "default": 500 },
+      { "name": "--no-unal", "description": "Suppress SAM records for unaligned reads", "type": "flag", "default": false },
+      { "name": "--no-mixed", "description": "Disable individual mate alignments if no concordant pairs found", "type": "flag", "default": false },
+      { "name": "--no-discordant", "description": "Disable discordant alignments", "type": "flag", "default": false }
+    ]
+  },
+  {
+    "tool_name": "Samtools",
+    "description": "A suite of programs for interacting with high-throughput sequencing data in SAM/BAM/CRAM format.",
+    "parameters": [
+      { "name": "command", "description": "Samtools command to run", "type": "string", "options": ["view", "sort", "index", "flagstat", "stats", "depth", "merge", "fastq", "faidx"], "default": "view" },
+      { "name": "input_file", "description": "Input SAM/BAM/CRAM file", "type": "file", "extensions": [".sam", ".bam", ".cram", ".fasta", ".fa", ".fastq", ".fq"] },
+      { "name": "output_file", "description": "Output file", "type": "string" },
+      { "name": "-@", "description": "Number of threads", "type": "integer", "default": 1 },
+      { "name": "-b", "description": "Output in BAM format", "type": "flag", "default": false },
+      { "name": "-S", "description": "Input is SAM (auto-detected if not specified)", "type": "flag", "default": false },
+      { "name": "-h", "description": "Include header in output", "type": "flag", "default": false },
+      { "name": "-H", "description": "Output header only", "type": "flag", "default": false },
+      { "name": "-c", "description": "Count alignments instead of printing them", "type": "flag", "default": false },
+      { "name": "-f", "description": "Only include reads with all FLAG bits set", "type": "integer" },
+      { "name": "-F", "description": "Skip reads with any FLAG bits set", "type": "integer" },
+      { "name": "-q", "description": "Skip alignments with MAPQ smaller than INT", "type": "integer" },
+      { "name": "-o", "description": "Output file (alternative to output_file)", "type": "string" }
+    ]
+  },
+  {
+    "tool_name": "PyDamage",
+    "description": "Damage parameter estimation for ancient DNA samples.",
+    "parameters": [
+      { "name": "command", "description": "PyDamage command to run", "type": "string", "options": ["analyze", "filter", "binplot"], "default": "analyze" },
+      { "name": "input_file", "description": "Input BAM file or bin FASTA file", "type": "file", "extensions": [".bam", ".fasta", ".fa"] },
+      { "name": "-o", "description": "Output directory", "type": "directory", "default": "pydamage_results" },
+      { "name": "-t", "description": "Predicted accuracy filtering threshold (0-1, set to 0 for auto)", "type": "float", "default": 0.5 }
+    ]
+  },
+  {
+    "tool_name": "MetaBAT2",
+    "description": "A robust statistical framework for reconstructing single genomes from metagenomic assemblies.",
+    "parameters": [
+      { "name": "assembly_file", "description": "Assembly file (FASTA)", "type": "file", "multiple": false, "extensions": [".fasta", ".fa", ".fna"] },
+      { "name": "abundance_files", "description": "BAM files for abundance calculation", "type": "file", "multiple": true, "extensions": [".bam"] },
+      { "name": "--outDir", "description": "Output directory for bins", "type": "directory", "default": "/results/assembly/bins" },
+      { "name": "--tmpDir", "description": "Temporary directory", "type": "directory", "default": "/temp_files" },
+      { "name": "-t", "description": "Number of threads.", "type": "integer", "default": 4 }
+    ]
+  },
+  {
+    "tool_name": "MaxBin2",
+    "description": "An automated binning algorithm for single genomes from metagenomic data.",
+    "parameters": [
+      { "name": "-thread", "description": "Number of threads.", "type": "integer", "default": 4 }
+    ]
+  },
+  {
+    "tool_name": "CheckM",
+    "description": "Predicts the completeness and contamination of metagenome-assembled genomes (MAGs), single-amplified genomes (SAGs), and isolate genomes.",
+    "parameters": [
+      { "name": "command", "description": "CheckM2 command to run", "type": "string", "options": ["predict"], "default": "predict" },
+      { "name": "--input", "description": "Folder with FASTA files or list of FASTA files", "type": "file", "multiple": true, "extensions": [".fasta", ".fa", ".fna", ".fasta.gz", ".fa.gz", ".fna.gz"] },
+      { "name": "--output-directory", "description": "Output directory for results", "type": "directory", "default": "./checkm2_output" },
+      { "name": "--threads", "description": "Number of threads to use", "type": "integer", "default": 1 },
+      { "name": "--extension", "description": "File extension for input files (needed for gzipped folders)", "type": "string", "options": ["fasta", "fa", "fna", "gz"] },
+      { "name": "--genes", "description": "Input files are protein files (predicted by Prodigal)", "type": "flag", "default": false },
+      { "name": "--stdout", "description": "Print results to stdout instead of file", "type": "flag", "default": false },
+      { "name": "--lowmem", "description": "Low memory mode (reduces RAM usage)", "type": "flag", "default": false }
+    ]
+  },
+  {
+    "tool_name": "GTDB-Tk",
+    "description": "A toolkit for assigning objective taxonomic classifications to bacterial and archaeal genomes.",
+    "parameters": [
+      { "name": "--cpus", "description": "Number of CPUs.", "type": "integer", "default": 4 }
+    ]
+  },
+  {
+    "tool_name": "PROKKA",
+    "description": "Rapid bacterial genome annotation pipeline for prokaryotic genomes.",
+    "parameters": [
+      { "name": "contigs_fasta", "description": "Input contigs/genome FASTA file", "type": "file", "extensions": [".fasta", ".fa", ".fna", ".fas"] },
+      { "name": "--outdir", "description": "Output folder", "type": "directory", "default": "./prokka_output" },
+      { "name": "--prefix", "description": "Filename output prefix", "type": "string" },
+      { "name": "--force", "description": "Force overwriting existing output folder", "type": "flag", "default": false },
+      { "name": "--cpus", "description": "Number of CPUs to use (0=all available)", "type": "integer", "default": 1 },
+      { "name": "--kingdom", "description": "Annotation mode", "type": "string", "options": ["Archaea", "Bacteria", "Mitochondria", "Viruses"], "default": "Bacteria" },
+      { "name": "--genus", "description": "Genus name", "type": "string", "default": "Genus" },
+      { "name": "--species", "description": "Species name", "type": "string", "default": "species" },
+      { "name": "--strain", "description": "Strain name", "type": "string", "default": "strain" },
+      { "name": "--locustag", "description": "Locus tag prefix", "type": "string" },
+      { "name": "--gram", "description": "Gram staining", "type": "string", "options": ["pos", "+", "neg", "-"] },
+      { "name": "--metagenome", "description": "Improve gene predictions for highly fragmented genomes", "type": "flag", "default": false },
+      { "name": "--fast", "description": "Fast mode - only use basic BLASTP databases", "type": "flag", "default": false },
+      { "name": "--mincontiglen", "description": "Minimum contig size (NCBI needs 200)", "type": "integer", "default": 1 },
+      { "name": "--evalue", "description": "Similarity e-value cut-off", "type": "float", "default": 1e-09 },
+      { "name": "--coverage", "description": "Minimum coverage on query protein", "type": "integer", "default": 80 },
+      { "name": "--norrna", "description": "Don't run rRNA search", "type": "flag", "default": false },
+      { "name": "--notrna", "description": "Don't run tRNA search", "type": "flag", "default": false }
+    ]
+  },
+  {
+    "tool_name": "RGI",
+    "description": "Resistance Gene Identifier. Predicts resistomes from protein or nucleotide data.",
+    "parameters": [
+      { "name": "--num_threads", "description": "Number of threads.", "type": "integer", "default": 4 }
+    ]
+  },
+  {
+    "tool_name": "antiSMASH",
+    "description": "Rapidly identifies biosynthetic gene clusters in bacterial and fungal genomes.",
+    "parameters": [
+      { "name": "--cpus", "description": "Number of CPUs.", "type": "integer", "default": 4 }
+    ]
+  }
+]
