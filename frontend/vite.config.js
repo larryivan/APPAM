@@ -11,10 +11,10 @@ export default defineConfig({
     }
   },
   server: {
-    host: true, // 或者使用 '0.0.0.0'，true 会监听所有地址
-    port: 8081,
-    strictPort: true, // 如果端口被占用则报错
-    cors: true, // 启用CORS
+    host: '0.0.0.0', // 明确使用字符串而不是true
+    port: 8082,      // 临时换端口测试
+    strictPort: true,
+    cors: true,
     proxy: {
       '/api': {
         target: process.env.VITE_API_URL || 'http://127.0.0.1:5001',
