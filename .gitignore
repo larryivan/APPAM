@@ -51,14 +51,7 @@ htmlcov/
 .pytest_cache/
 
 # ===== 数据库和数据文件 =====
-# SQLite 数据库
-*.db
-*.sqlite
-*.sqlite3
 
-# 知识库数据
-knowledge/chroma_db/
-knowledge/*.db
 
 # 项目数据文件
 projects/*/
