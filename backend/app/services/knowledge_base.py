@@ -47,8 +47,11 @@ class KnowledgeBaseService:
             # 创建目录
             os.makedirs(self.chroma_db_path, exist_ok=True)
             
-            # 初始化ChromaDB客户端
-            self.client = chromadb.PersistentClient(path=self.chroma_db_path)
+            # 初始化ChromaDB客户端，禁用遥测功能以避免posthog兼容性问题
+            self.client = chromadb.PersistentClient(
+                path=self.chroma_db_path,
+                settings=chromadb.Settings(anonymized_telemetry=False)
+            )
             
             # 获取或创建集合
             try:
