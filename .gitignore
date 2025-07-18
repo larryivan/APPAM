@@ -124,7 +124,6 @@ logs
 results/
 output/
 analysis/
-*.html
 *.zip
 
 # 数据库索引文件
