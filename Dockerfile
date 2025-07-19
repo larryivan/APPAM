@@ -11,7 +11,8 @@ ENV LANG=C.UTF-8 \
     PYTHONUNBUFFERED=1 \
     PATH=/opt/conda/bin:$PATH \
     DEBIAN_FRONTEND=noninteractive \
-    TZ=Asia/Shanghai
+    TZ=Asia/Shanghai \
+    NODE_OPTIONS="--max-old-space-size=4096"
 
 # 预配置时区避免交互提示
 RUN ln -fs /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
@@ -43,8 +44,8 @@ RUN mamba update -n base -c conda-forge mamba && \
     conda config --add channels conda-forge && \
     conda config --set channel_priority flexible
 
-# 创建专用的Python 3.12环境并安装Node.js
-RUN mamba create -n appam python=3.12.0 nodejs=20 -y && \
+# 创建专用的Python 3.12环境并安装Node.js 18
+RUN mamba create -n appam python=3.12.0 nodejs=20 npm -y && \
     conda clean --all -f -y
 
 # 激活环境并安装生物信息学工具
@@ -77,8 +78,15 @@ RUN pip install -r requirements.txt
 
 # 构建前端应用
 WORKDIR /app/frontend
-RUN npm install -g pnpm@10.10.0 && \
-    pnpm install && \
+
+# 安装 pnpm 并设置 npm 配置
+RUN npm install -g pnpm@9.12.0 && \
+    npm config set registry https://registry.npmjs.org/ && \
+    pnpm config set registry https://registry.npmjs.org/
+
+# 清理 node_modules 和重新安装依赖
+RUN rm -rf node_modules pnpm-lock.yaml && \
+    pnpm install --frozen-lockfile=false && \
     pnpm run build
 
 # 创建启动脚本
