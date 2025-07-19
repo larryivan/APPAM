@@ -1,0 +1,38 @@
+services:
+  appam:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: appam-platform
+    ports:
+      - "5001:5001"  # 后端Flask应用
+      - "8082:8082"  # 前端Vue应用
+    volumes:
+      # 挂载数据目录以持久化存储
+      - ./data:/app/data
+      # 挂载项目目录以持久化项目数据
+      - appam_projects:/app/backend/projects
+      # 挂载知识库目录
+      - appam_knowledge:/app/backend/knowledge
+      # 挂载存储目录
+      - appam_storage:/app/backend/storage
+    environment:
+      - FLASK_DEBUG=false
+      - FLASK_PORT=5001
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/api/system/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  # 持久化卷用于存储应用数据
+  appam_projects:
+  appam_knowledge:
+  appam_storage:
+
+networks:
+  default:
+    name: appam-network 
