@@ -1,11 +1,12 @@
 Flask==3.0.3
 Flask-SocketIO==5.5.1
 requests==2.32.3
-# AI Assistant dependencies (updated to latest)
+flask_cors==6.0.1
+# AI Assistant dependencies
 openai>=1.54.0
 python-dotenv==1.0.1
 tiktoken==0.8.0
-# Knowledge base dependencies (latest versions)
+# Knowledge base dependencies
 langchain==0.3.7
 langchain-community==0.3.7
 chromadb==0.5.23

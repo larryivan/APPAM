@@ -7,42 +7,9 @@ import time
 import yaml
 import json
 import xml.etree.ElementTree as ET
-import hashlib
-import secrets
 from ..database import get_db_connection
 
 PROJECTS_DIR = './projects'
-
-# Password utilities
-def hash_password(password):
-    """Hash a password using a secure method."""
-    # Generate a random salt
-    salt = secrets.token_hex(32)
-    # Hash the password with salt
-    password_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
-    # Return salt and hash combined
-    return salt + password_hash.hex()
-
-def verify_password(password, stored_hash):
-    """Verify a password against a stored hash."""
-    try:
-        if not stored_hash or len(stored_hash) < 64:
-            return False
-            
-        # Extract salt from stored hash (first 64 characters)
-        salt = stored_hash[:64]
-        # Extract the hash (remaining characters)
-        stored_password_hash = stored_hash[64:]
-        
-        # Hash the provided password with the same salt
-        password_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
-        computed_hash = password_hash.hex()
-        
-        # Compare the hashes
-        result = computed_hash == stored_password_hash
-        return result
-    except Exception as e:
-        return False
 
 # File extension mappings - centralized configuration
 BIO_EXTENSIONS = {
@@ -431,13 +398,14 @@ def get_all_projects():
     projects = conn.execute('SELECT * FROM projects').fetchall()
     conn.close()
     
-    # Remove password_hash from returned data for security
+    # Remove password data from returned projects
     result = []
     for project in projects:
         project_dict = dict(project)
-        # Remove password_hash from the returned data
         if 'password_hash' in project_dict:
             del project_dict['password_hash']
+        if 'has_password' in project_dict:
+            del project_dict['has_password']
         result.append(project_dict)
     
     return result
@@ -452,13 +420,14 @@ def get_project_by_id(project_id):
         return None
     
     project_dict = dict(project)
-    # Remove password_hash from the returned data
     if 'password_hash' in project_dict:
         del project_dict['password_hash']
+    if 'has_password' in project_dict:
+        del project_dict['has_password']
     
     return project_dict
 
-def create_project(name, description='', creator='', password=''):
+def create_project(name, description='', creator=''):
     """Create a new project."""
     project_id = str(uuid.uuid4())
     
@@ -466,18 +435,11 @@ def create_project(name, description='', creator='', password=''):
     project_dir = get_project_path(project_id)
     os.makedirs(project_dir, exist_ok=True)
     
-    # Handle password
-    password_hash = None
-    has_password = False
-    if password:
-        password_hash = hash_password(password)
-        has_password = True
-    
     # Insert into database
     conn = get_db_connection()
     conn.execute(
-        'INSERT INTO projects (id, name, description, creator, password_hash, has_password) VALUES (?, ?, ?, ?, ?, ?)',
-        (project_id, name, description, creator, password_hash, has_password)
+        'INSERT INTO projects (id, name, description, creator) VALUES (?, ?, ?, ?)',
+        (project_id, name, description, creator)
     )
     conn.commit()
     
@@ -486,13 +448,14 @@ def create_project(name, description='', creator='', password=''):
     conn.close()
     
     project_dict = dict(project)
-    # Remove password_hash from the returned data
     if 'password_hash' in project_dict:
         del project_dict['password_hash']
+    if 'has_password' in project_dict:
+        del project_dict['has_password']
 
     return project_dict
 
-def update_project(project_id, name=None, description=None, creator=None, password=None):
+def update_project(project_id, name=None, description=None, creator=None):
     """Update an existing project."""
     conn = get_db_connection()
     
@@ -510,16 +473,6 @@ def update_project(project_id, name=None, description=None, creator=None, passwo
     if creator is not None:
         conn.execute('UPDATE projects SET creator = ? WHERE id = ?', (creator, project_id))
     
-    # Handle password update
-    if password is not None:
-        if password:  # Set new password
-            password_hash = hash_password(password)
-            conn.execute('UPDATE projects SET password_hash = ?, has_password = ? WHERE id = ?', 
-                        (password_hash, True, project_id))
-        else:  # Remove password
-            conn.execute('UPDATE projects SET password_hash = NULL, has_password = FALSE WHERE id = ?', 
-                        (project_id,))
-    
     conn.commit()
     
     # Get updated project
@@ -527,32 +480,12 @@ def update_project(project_id, name=None, description=None, creator=None, passwo
     conn.close()
     
     project_dict = dict(updated_project)
-    # Remove password_hash from the returned data
     if 'password_hash' in project_dict:
         del project_dict['password_hash']
+    if 'has_password' in project_dict:
+        del project_dict['has_password']
     
     return project_dict
-
-def verify_project_password(project_id, password):
-    """Verify a project password."""
-    
-    conn = get_db_connection()
-    project = conn.execute('SELECT password_hash, has_password FROM projects WHERE id = ?', (project_id,)).fetchone()
-    conn.close()
-    
-    if not project:
-        return False
-    
-    has_password = project['has_password']
-    password_hash = project['password_hash']
-    
-    # If project has no password, allow access
-    if not has_password or not password_hash:
-        return True
-    
-    # Verify password
-    result = verify_password(password, password_hash)
-    return result
 
 def update_project_access_time(project_id):
     """Update the last accessed time for a project."""

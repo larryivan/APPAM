@@ -9,9 +9,7 @@ CREATE TABLE IF NOT EXISTS projects (
     description TEXT,
     creator TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    password_hash TEXT,
-    has_password BOOLEAN DEFAULT FALSE
+    last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS process_history (
@@ -71,15 +69,6 @@ def migrate_db():
     if 'last_accessed' not in columns:
         print("Adding last_accessed column...")
         conn.execute("ALTER TABLE projects ADD COLUMN last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
-    
-    # Add password-related columns
-    if 'password_hash' not in columns:
-        print("Adding password_hash column...")
-        conn.execute("ALTER TABLE projects ADD COLUMN password_hash TEXT")
-    
-    if 'has_password' not in columns:
-        print("Adding has_password column...")
-        conn.execute("ALTER TABLE projects ADD COLUMN has_password BOOLEAN DEFAULT FALSE")
     
     # Check if process_history table exists
     cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='process_history'")

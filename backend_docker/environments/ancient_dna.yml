@@ -1,0 +1,7 @@
+name: ancient_dna
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - pmdtools==0.60
+  - pydamage==1.0

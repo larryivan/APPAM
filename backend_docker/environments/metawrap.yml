@@ -1,0 +1,8 @@
+name: metawrap
+channels:
+  - ursky
+  - bioconda
+  - conda-forge
+dependencies: []
+  # Dependencies installed via command line in Dockerfile to support --only-deps
+  # - metawrap-mg==1.3.2

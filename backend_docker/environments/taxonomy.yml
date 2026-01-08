@@ -1,0 +1,7 @@
+name: taxonomy
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - krakenuniq==1.0.4
+  - krona==2.8.1
