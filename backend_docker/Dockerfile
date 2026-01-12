@@ -47,7 +47,7 @@ RUN micromamba create -n checkm -f /tmp/environments/checkm.yml && \
     micromamba clean --all --yes
 
 RUN micromamba create -n metawrap -f /tmp/environments/metawrap.yml && \
-    micromamba install -n metawrap --only-deps -c ursky -c bioconda -c conda-forge metawrap-mg && \
+    micromamba install -n metawrap --only-deps -c ursky -c bioconda -c conda-forge metawrap-mg=1.3.2 && \
     micromamba clean --all --yes
 
 RUN micromamba create -n prokka -f /tmp/environments/prokka.yml && \
