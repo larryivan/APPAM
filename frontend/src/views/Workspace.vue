@@ -454,191 +454,26 @@ onMounted(async () => {
     }
   }
   
-  // 检查项目访问权限
-  await checkProjectAccess()
+  // 检查项目是否存在
+  await checkProjectExists()
 })
 
-// 检查项目访问权限
-const checkProjectAccess = async () => {
+// 检查项目是否存在
+const checkProjectExists = async () => {
   const projectId = route.params.id
   if (!projectId) return
   
   try {
     const response = await fetch(`/api/projects/${projectId}`)
     
-    if (response.status === 401) {
-      // 需要密码验证
-      const data = await response.json()
-      if (data.has_password) {
-        // 显示密码验证弹窗
-        showPasswordVerification(projectId)
-      }
-    } else if (response.status === 404) {
+    if (response.status === 404) {
       // 项目不存在，跳转到项目列表
       router.push('/projects')
     }
   } catch (error) {
-    console.error('Error checking project access:', error)
+    console.error('Error checking project:', error)
   }
 }
-
-// 显示密码验证弹窗
-const showPasswordVerification = (projectId) => {
-  // 创建密码验证弹窗
-  const modal = document.createElement('div')
-  modal.className = 'password-modal-overlay'
-  modal.innerHTML = `
-    <div class="password-modal-content">
-      <div class="password-modal-header">
-        <h3>🔒 Project Access Verification</h3>
-        <button class="close-btn" onclick="this.closest('.password-modal-overlay').remove()">×</button>
-      </div>
-      <div class="password-form">
-        <div class="form-group">
-          <label for="project-password">Please enter the project access password:</label>
-          <input 
-            id="project-password" 
-            type="password" 
-            placeholder="Enter password..."
-            class="password-input"
-          >
-          <div id="password-error" class="error-message" style="display: none;"></div>
-        </div>
-        <div class="form-actions">
-          <button onclick="this.closest('.password-modal-overlay').remove(); window.location.href='/projects'" class="cancel-btn">Cancel</button>
-          <button onclick="verifyProjectPassword('${projectId}')" class="submit-btn">Confirm</button>
-        </div>
-      </div>
-    </div>
-  `
-  
-  document.body.appendChild(modal)
-  
-  // 添加样式
-  const style = document.createElement('style')
-  style.textContent = `
-    .password-modal-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.5);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 9999;
-    }
-    .password-modal-content {
-      background: white;
-      border-radius: 12px;
-      padding: 24px;
-      max-width: 400px;
-      width: 90%;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-    }
-    .password-modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
-    }
-    .password-modal-header h3 {
-      margin: 0;
-      color: #374151;
-    }
-    .close-btn {
-      background: none;
-      border: none;
-      font-size: 24px;
-      cursor: pointer;
-      color: #9ca3af;
-    }
-    .password-input {
-      width: 100%;
-      padding: 12px;
-      border: 1px solid #d1d5db;
-      border-radius: 8px;
-      font-size: 14px;
-      margin-top: 8px;
-    }
-    .form-actions {
-      display: flex;
-      gap: 12px;
-      margin-top: 20px;
-    }
-    .cancel-btn, .submit-btn {
-      flex: 1;
-      padding: 12px;
-      border-radius: 8px;
-      border: none;
-      cursor: pointer;
-      font-size: 14px;
-    }
-    .cancel-btn {
-      background: #f3f4f6;
-      color: #374151;
-    }
-    .submit-btn {
-      background: #3b82f6;
-      color: white;
-    }
-    .error-message {
-      color: #ef4444;
-      font-size: 12px;
-      margin-top: 8px;
-    }
-  `
-  document.head.appendChild(style)
-  
-  // 聚焦到密码输入框
-  setTimeout(() => {
-    const input = modal.querySelector('#project-password')
-    if (input) input.focus()
-  }, 100)
-}
-
-// 验证项目密码
-const verifyProjectPassword = async (projectId) => {
-  const input = document.getElementById('project-password')
-  const errorDiv = document.getElementById('password-error')
-  const password = input.value.trim()
-  
-  if (!password) {
-    errorDiv.textContent = 'Please enter password'
-    errorDiv.style.display = 'block'
-    return
-  }
-  
-  try {
-    const response = await fetch(`/api/projects/${projectId}/verify-password`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password })
-    })
-    
-    const result = await response.json()
-    
-    if (response.ok && result.success) {
-      // 密码验证成功，移除弹窗
-      const modal = document.querySelector('.password-modal-overlay')
-      if (modal) modal.remove()
-    } else {
-      // 密码验证失败
-      errorDiv.textContent = result.message || 'Incorrect password, please try again'
-      errorDiv.style.display = 'block'
-      input.value = ''
-      input.focus()
-    }
-  } catch (error) {
-    console.error('Error verifying password:', error)
-    errorDiv.textContent = 'Verification failed, please try again'
-    errorDiv.style.display = 'block'
-  }
-}
-
-// 将验证函数添加到全局作用域
-window.verifyProjectPassword = verifyProjectPassword
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)

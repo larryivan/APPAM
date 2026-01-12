@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 mambaorg/micromamba:latest
+FROM mambaorg/micromamba:latest
 
 USER root
 
@@ -47,7 +47,7 @@ RUN micromamba create -n checkm -f /tmp/environments/checkm.yml && \
     micromamba clean --all --yes
 
 RUN micromamba create -n metawrap -f /tmp/environments/metawrap.yml && \
-    micromamba install -n metawrap --only-deps -c ursky metawrap-mg && \
+    micromamba install -n metawrap --only-deps -c ursky -c bioconda -c conda-forge metawrap-mg && \
     micromamba clean --all --yes
 
 RUN micromamba create -n prokka -f /tmp/environments/prokka.yml && \

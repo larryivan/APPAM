@@ -67,9 +67,6 @@
           <div class="project-info" @click="showProjectDetails(project)">
             <div class="project-header">
             <h3>{{ project.name }}</h3>
-              <span v-if="project.has_password" class="password-protected" title="This project requires password access">
-                🔒
-              </span>
             </div>
             <p class="project-meta">Creator: {{ project.creator || 'Unknown' }}</p>
             <p class="project-meta">Created: {{ formatDate(project.created_at) }}</p>
@@ -105,11 +102,6 @@
             <label for="description">Project Description</label>
             <textarea v-model="newProject.description" id="description" placeholder="Describe the project goals and content..."></textarea>
           </div>
-          <div class="form-group">
-            <label for="password">Project Password (Optional)</label>
-            <input v-model="newProject.password" id="password" type="password" placeholder="Set project password, leave empty for no password">
-            <small class="form-hint">Setting a password will require verification when accessing the project</small>
-          </div>
           <div class="form-actions">
             <button type="button" @click="closeCreateModal" class="cancel-btn">Cancel</button>
             <button type="submit" class="submit-btn">Create Project</button>
@@ -137,16 +129,6 @@
           <div class="form-group">
             <label for="edit-description">Project Description</label>
             <textarea v-model="editingProject.description" id="edit-description"></textarea>
-          </div>
-          <div class="form-group" v-if="editingProject.has_password">
-            <label for="edit-current-password">Current Password *</label>
-            <input v-model="editingProject.current_password" id="edit-current-password" type="password" placeholder="Enter current password to verify identity">
-            <small class="form-hint">Modifying password-protected project information requires current password verification</small>
-          </div>
-          <div class="form-group">
-            <label for="edit-password">Project Password</label>
-            <input v-model="editingProject.password" id="edit-password" type="password" placeholder="Modify project password, leave empty to keep unchanged">
-            <small class="form-hint">Leave empty to keep current password, enter new password to change</small>
           </div>
           <div class="form-actions">
             <button type="button" @click="closeEditModal" class="cancel-btn">Cancel</button>
@@ -179,9 +161,6 @@
           <div class="detail-item">
             <strong>Last Accessed:</strong> {{ formatDate(selectedProject?.last_accessed) }}
           </div>
-          <div class="detail-item">
-            <strong>Password Protected:</strong> {{ selectedProject?.has_password ? 'Yes' : 'No' }}
-          </div>
           <div v-if="selectedProject?.description" class="detail-item">
             <strong>Project Description:</strong> 
             <p class="description-text">{{ selectedProject.description }}</p>
@@ -194,65 +173,6 @@
       </div>
     </div>
 
-    <!-- 密码验证弹窗 -->
-    <div v-if="showPasswordModal" class="modal-overlay" @click="closePasswordModal">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
-          <h3>🔒 Enter Project Password</h3>
-          <button @click="closePasswordModal" class="close-btn">×</button>
-        </div>
-        <div class="password-form">
-          <div class="form-group">
-            <label for="verify-password">Please enter the access password for "{{ pendingProject?.name }}":</label>
-            <input 
-              v-model="verifyPassword" 
-              id="verify-password" 
-              type="password" 
-              placeholder="Enter password..."
-              @keyup.enter="submitPassword"
-              autofocus
-            >
-            <div v-if="passwordError" class="error-message">{{ passwordError }}</div>
-          </div>
-          <div class="form-actions">
-            <button @click="closePasswordModal" class="cancel-btn">Cancel</button>
-            <button @click="submitPassword" class="submit-btn" :disabled="!verifyPassword.trim()">
-              {{ isVerifying ? 'Verifying...' : 'Confirm' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 删除项目弹窗 -->
-    <div v-if="showDeletePasswordModal" class="modal-overlay" @click="closeDeletePasswordModal">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
-          <h3>🔒 Confirm Project Deletion</h3>
-          <button @click="closeDeletePasswordModal" class="close-btn">×</button>
-        </div>
-        <div class="password-form">
-          <div class="form-group">
-            <label for="delete-password">Please enter the access password for "{{ deletingProject?.name }}" to confirm deletion:</label>
-            <input 
-              v-model="deletePassword" 
-              id="delete-password" 
-              type="password" 
-              placeholder="Enter password..."
-              @keyup.enter="confirmDeleteProject"
-              autofocus
-            >
-            <div v-if="deletePasswordError" class="error-message">{{ deletePasswordError }}</div>
-          </div>
-          <div class="form-actions">
-            <button @click="closeDeletePasswordModal" class="cancel-btn">Cancel</button>
-            <button @click="confirmDeleteProject" class="submit-btn" :disabled="!deletePassword.trim()">
-              {{ isDeleting ? 'Deleting...' : 'Confirm Delete' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
     </div>
   </div>
 </template>
@@ -268,31 +188,16 @@ const router = useRouter();
 const showCreateModal = ref(false);
 const showEditModal = ref(false);
 const showDetailsModal = ref(false);
-const showPasswordModal = ref(false);
 
 // 项目数据
 const newProject = ref({
   name: '',
   creator: '',
-  description: '',
-  password: ''
+  description: ''
 });
 
 const editingProject = ref({});
 const selectedProject = ref(null);
-
-// 密码验证相关
-const pendingProject = ref(null);
-const verifyPassword = ref('');
-const passwordError = ref('');
-const isVerifying = ref(false);
-
-// 删除项目弹窗相关
-const showDeletePasswordModal = ref(false);
-const deletingProject = ref(null);
-const deletePassword = ref('');
-const deletePasswordError = ref('');
-const isDeleting = ref(false);
 
 // 搜索和排序状态
 const searchQuery = ref('');
@@ -395,10 +300,6 @@ const updateProject = async () => {
         projects.value[index] = updatedProject;
       }
       closeEditModal();
-    } else if (response.status === 401) {
-      // 密码验证失败
-      const errorData = await response.json();
-      alert(errorData.error || 'Current password is incorrect, please try again');
     } else {
       console.error('Failed to update project');
     }
@@ -410,15 +311,6 @@ const updateProject = async () => {
 const deleteProject = async (id) => {
   const project = projects.value.find(p => p.id === id);
   if (!project) return;
-  if (project.has_password) {
-    // 弹窗输入密码
-    deletingProject.value = project;
-    deletePassword.value = '';
-    deletePasswordError.value = '';
-    showDeletePasswordModal.value = true;
-    return;
-  }
-  // 无密码直接删除
   if (!confirm('Are you sure you want to delete this project and all related data?')) return;
   try {
     await fetch(`/api/projects/${id}`, { method: 'DELETE' });
@@ -428,58 +320,7 @@ const deleteProject = async (id) => {
   }
 };
 
-const confirmDeleteProject = async () => {
-  if (!deletingProject.value) return;
-  if (!deletePassword.value.trim()) {
-    deletePasswordError.value = 'Please enter password';
-    return;
-  }
-  isDeleting.value = true;
-  deletePasswordError.value = '';
-  try {
-    const response = await fetch(`/api/projects/${deletingProject.value.id}`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ current_password: deletePassword.value })
-    });
-    if (response.status === 204) {
-      // 删除成功
-      projects.value = projects.value.filter(p => p.id !== deletingProject.value.id);
-      showDeletePasswordModal.value = false;
-      deletingProject.value = null;
-      deletePassword.value = '';
-    } else if (response.status === 401) {
-      const data = await response.json();
-      deletePasswordError.value = data.error || 'Incorrect password, cannot delete project';
-    } else {
-      deletePasswordError.value = 'Delete failed';
-    }
-  } catch (e) {
-    deletePasswordError.value = 'Request failed';
-  } finally {
-    isDeleting.value = false;
-  }
-};
-
-const closeDeletePasswordModal = () => {
-  showDeletePasswordModal.value = false;
-  deletingProject.value = null;
-  deletePassword.value = '';
-  deletePasswordError.value = '';
-  isDeleting.value = false;
-};
-
 const openWorkspace = async (id) => {
-  const project = projects.value.find(p => p.id === id);
-  
-  // 如果项目有密码保护，显示密码验证弹窗
-  if (project && project.has_password) {
-    pendingProject.value = project;
-    showPasswordModal.value = true;
-    return;
-  }
-  
-  // 无密码保护，直接访问
   await accessProject(id);
 };
 
@@ -502,7 +343,7 @@ const accessProject = async (id) => {
 // 弹窗控制
 const closeCreateModal = () => {
   showCreateModal.value = false;
-  newProject.value = { name: '', creator: '', description: '', password: '' };
+  newProject.value = { name: '', creator: '', description: '' };
 };
 
 const closeEditModal = () => {
@@ -515,61 +356,10 @@ const closeDetailsModal = () => {
   selectedProject.value = null;
 };
 
-const closePasswordModal = () => {
-  showPasswordModal.value = false;
-  pendingProject.value = null;
-  verifyPassword.value = '';
-  passwordError.value = '';
-  isVerifying.value = false;
-};
-
-const submitPassword = async () => {
-  if (!verifyPassword.value.trim()) return;
-  
-  // 检查 pendingProject 是否存在
-  if (!pendingProject.value) {
-    passwordError.value = 'Project information lost, please try again';
-    return;
-  }
-  
-  isVerifying.value = true;
-  passwordError.value = '';
-  
-  // 保存项目ID，防止在closePasswordModal中被清空
-  const projectId = pendingProject.value.id;
-  
-  try {
-    const response = await fetch(`/api/projects/${projectId}/verify-password`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: verifyPassword.value })
-    });
-    
-    const result = await response.json();
-    
-    if (response.ok && result.success) {
-      // 密码验证成功，关闭弹窗并访问项目
-      closePasswordModal();
-      await accessProject(projectId);
-    } else {
-      // 密码验证失败
-      passwordError.value = result.message || 'Incorrect password, please try again';
-      verifyPassword.value = '';
-    }
-  } catch (error) {
-    console.error('Error verifying password:', error);
-    passwordError.value = 'Verification failed, please try again';
-  } finally {
-    isVerifying.value = false;
-  }
-};
-
 const openEditModal = (project) => {
   editingProject.value = { 
-    ...project, 
-    password: '', 
-    current_password: '' // 初始化当前密码字段
-  }; // Don't pre-fill password for security
+    ...project
+  };
   showEditModal.value = true;
   showDetailsModal.value = false;
 };
@@ -894,24 +684,6 @@ onMounted(fetchProjects);
 .project-header h3 {
   margin: 0;
   flex: 1;
-}
-
-.password-protected {
-  font-size: 1.2em;
-  color: #f59e0b;
-  margin-left: 8px;
-  cursor: help;
-}
-
-.password-form {
-  padding: 25px;
-}
-
-.error-message {
-  color: #dc2626;
-  font-size: 0.9em;
-  margin-top: 5px;
-  font-weight: 500;
 }
 
 .project-card.list .project-meta {
