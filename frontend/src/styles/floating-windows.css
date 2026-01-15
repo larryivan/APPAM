@@ -205,9 +205,8 @@
 }
 
 /* 按钮定位 */
-.chatbot-trigger { right: 88px; }
 .terminal-trigger { right: 24px; }
-.monitor-trigger { right: 152px; }
+.monitor-trigger { right: 88px; }
 
 /* 触摸设备优化 */
 @media (hover: none) and (pointer: coarse) {
@@ -267,18 +266,12 @@
   }
   
   /* 移动端按钮定位 */
-  .chatbot-trigger { right: 48px; }
   .terminal-trigger { right: 4px; }
-  .monitor-trigger { right: 92px; }
+  .monitor-trigger { right: 48px; }
 }
 
 /* 移动端安全区域 */
 @media (max-width: 768px) {
-  .chatbot-trigger {
-    bottom: max(20px, env(safe-area-inset-bottom));
-    right: max(48px, calc(48px + env(safe-area-inset-right)));
-  }
-  
   .terminal-trigger {
     bottom: max(20px, env(safe-area-inset-bottom));
     right: max(4px, calc(4px + env(safe-area-inset-right)));
@@ -286,7 +279,7 @@
   
   .monitor-trigger {
     bottom: max(20px, env(safe-area-inset-bottom));
-    right: max(92px, calc(92px + env(safe-area-inset-right)));
+    right: max(48px, calc(48px + env(safe-area-inset-right)));
   }
   
   .floating-window {

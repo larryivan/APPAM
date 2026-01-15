@@ -48,16 +48,18 @@
             <div class="form-header-actions">
               <div class="param-count">{{ tool.parameters.length }}</div>
               <button 
-                @click="openChatbotForParameterConfig" 
+                @click="openParameterSuggestions"
                 class="smart-fill-btn"
-                title="Configuring parameters via chatbot"
+                :class="{ loading: isParameterFilling }"
+                :disabled="isParameterFilling"
+                title="Generate AI parameter suggestions"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
                   <path d="M12 7v6"></path>
                   <path d="M9 10l3-3 3 3"></path>
                 </svg>
-                Config by AI
+                {{ isParameterFilling ? 'Thinking...' : 'Config by AI' }}
               </button>
 
             </div>
@@ -319,6 +321,68 @@
     v-model="tempFileSelection"
     @close="closeFilePicker"
   />
+
+  <div v-if="showSuggestionModal" class="parameter-suggestion-overlay" @click="closeSuggestionModal">
+    <div class="parameter-suggestion-card" @click.stop>
+      <header class="suggestion-header">
+        <div>
+          <h4>AI Parameter Suggestions</h4>
+          <p v-if="suggestionPayload?.summary">{{ suggestionPayload.summary }}</p>
+        </div>
+        <button class="suggestion-close" @click="closeSuggestionModal" title="Close">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </header>
+
+      <div v-if="suggestionPayload?.warnings?.length" class="suggestion-section warnings">
+        <strong>Notes</strong>
+        <ul>
+          <li v-for="warning in suggestionPayload.warnings" :key="warning">{{ warning }}</li>
+        </ul>
+      </div>
+
+      <div v-if="suggestionPayload?.missing_info?.length" class="suggestion-section missing-info">
+        <strong>Missing Info</strong>
+        <ul>
+          <li v-for="missing in suggestionPayload.missing_info" :key="missing">{{ missing }}</li>
+        </ul>
+      </div>
+
+      <div class="suggestion-list">
+        <div v-if="suggestionEntries.length === 0" class="suggestion-empty">
+          No suggestions were returned for this tool.
+        </div>
+
+        <label v-for="entry in suggestionEntries" :key="entry.name" class="suggestion-item">
+          <input
+            type="checkbox"
+            v-model="suggestionSelections[entry.name]"
+          />
+          <div class="suggestion-details">
+            <div class="suggestion-title">
+              <span class="param-name">{{ entry.name }}</span>
+              <span class="param-type">{{ entry.type }}</span>
+            </div>
+            <div class="suggestion-values">
+              <span>Current: <em>{{ entry.current }}</em></span>
+              <span>Suggested: <em>{{ entry.suggested }}</em></span>
+            </div>
+            <p v-if="entry.reasoning" class="suggestion-reasoning">{{ entry.reasoning }}</p>
+          </div>
+        </label>
+      </div>
+
+      <footer class="suggestion-actions">
+        <button class="secondary-btn" @click="closeSuggestionModal">Cancel</button>
+        <button class="primary-btn" @click="applyParameterSuggestions" :disabled="suggestionEntries.length === 0">
+          Apply Selected
+        </button>
+      </footer>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -330,7 +394,6 @@ const route = useRoute();
 const tool = ref(null);
 const formValues = ref({});
 const allLogs = ref([]); // 存储所有日志
-const logs = ref([]);    // 显示的日志（过滤后）
 const taskStatus = ref('not_found');
 const logsContainer = ref(null);
 const showVerboseLogs = ref(false); // 控制是否显示详细日志
@@ -339,8 +402,9 @@ const toolLibrary = ref({});
 // 参数填充相关状态
 const isParameterFilling = ref(false);
 
-// 聊天机器人集成状态
-const chatbotVisible = ref(false);
+const showSuggestionModal = ref(false);
+const suggestionPayload = ref(null);
+const suggestionSelections = ref({});
 
 // 计算属性 - 过滤后的日志
 const filteredLogs = computed(() => {
@@ -398,10 +462,17 @@ const fetchToolLibrary = async () => {
   }
 };
 
+const resetSuggestionState = () => {
+  showSuggestionModal.value = false;
+  suggestionPayload.value = null;
+  suggestionSelections.value = {};
+};
+
 const updateTool = () => {
   const toolName = route.params.tool;
   if (!toolName) {
     tool.value = null;
+    resetSuggestionState();
     return;
   }
   const foundTool = toolLibrary.value[toolName.toLowerCase()];
@@ -427,12 +498,13 @@ const updateTool = () => {
     
     // 重置工具状态和日志
     taskStatus.value = 'not_found';
-    logs.value = [];
     
     // 重新检查状态
     checkTaskStatus();
+    resetSuggestionState();
   } else {
     tool.value = null;
+    resetSuggestionState();
   }
 };
 
@@ -460,7 +532,6 @@ const removeFile = (paramName, index) => {
 const runTool = async () => {
   if (!tool.value) return;
   allLogs.value = []; // Clear previous logs
-  logs.value = [];
   
   // Close any existing connection before starting a new one
   if (eventSource) {
@@ -551,12 +622,12 @@ const getLogPrefix = (log) => {
 
 const getStatusText = () => {
   const statusMap = {
-    'running': '运行中',
-    'completed': '已完成',
-    'error': '错误',
-    'not_found': '就绪',
-    'idle': '等待中',
-    'stopped': '已停止'
+    'running': 'Running',
+    'completed': 'Completed',
+    'error': 'Error',
+    'not_found': 'Ready',
+    'idle': 'Idle',
+    'stopped': 'Stopped'
   };
   return statusMap[taskStatus.value] || 'Unknown';
 };
@@ -580,7 +651,6 @@ const getParamTypeDisplay = (param) => {
 
 const clearLogs = () => {
   allLogs.value = [];
-  logs.value = [];
 };
 
 const shouldFilterLog = (logData) => {
@@ -632,51 +702,55 @@ const refreshStatus = async () => {
   }
 };
 
-// 聊天机器人集成功能
-const openChatbotForParameterConfig = () => {
-  if (!tool.value) {
-    console.error('Tool not loaded');
-    return;
+const normalizeSuggestion = (suggestion) => {
+  if (suggestion && typeof suggestion === 'object' && !Array.isArray(suggestion) && 'value' in suggestion) {
+    return {
+      value: suggestion.value,
+      reasoning: suggestion.reasoning || ''
+    };
   }
-  
-  // 创建可序列化的工具上下文（避免Vue响应式对象）
-  const toolContext = {
-    tool_name: tool.value.tool_name,
-    description: tool.value.description,
-    parameters: tool.value.parameters.map(p => p.name),
-    current_values: JSON.parse(JSON.stringify(formValues.value)) // 深拷贝去除响应式
+  return {
+    value: suggestion,
+    reasoning: ''
   };
-  
-  // 创建可序列化的消息对象
-  const messageData = {
-    type: 'OPEN_CHATBOT_FOR_PARAMETER_CONFIG',
-    toolContext: toolContext,
-    suggestedMessage: `请帮我配置${tool.value.tool_name}的参数，我需要一些建议`,
-    autoSend: false // 不自动发送，只填入输入框
-  };
-  
-  try {
-    // 发送消息到父组件或全局事件总线
-    window.parent.postMessage(messageData, '*');
-    
-    // 也发送到当前窗口（如果聊天机器人在同一页面）
-    window.postMessage(messageData, '*');
-    
-    console.log('Parameter config message sent:', messageData);
-  } catch (error) {
-    console.error('Failed to send parameter config message:', error);
-    
-    // 备选方案：直接调用全局函数
-    if (window.openChatbotWithContext) {
-      window.openChatbotWithContext(toolContext, messageData.suggestedMessage);
-    }
-  }
 };
 
+const formatValue = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return '—';
+  }
+  if (Array.isArray(value)) {
+    return value.length ? value.join(', ') : '—';
+  }
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch (error) {
+      return String(value);
+    }
+  }
+  return String(value);
+};
 
+const suggestionEntries = computed(() => {
+  if (!suggestionPayload.value || !tool.value) return [];
+  const suggestions = suggestionPayload.value.suggestions || {};
+  return tool.value.parameters
+    .map(param => {
+      if (!suggestions.hasOwnProperty(param.name)) return null;
+      const normalized = normalizeSuggestion(suggestions[param.name]);
+      return {
+        name: param.name,
+        type: param.type,
+        current: formatValue(formValues.value[param.name]),
+        suggested: formatValue(normalized.value),
+        reasoning: normalized.reasoning
+      };
+    })
+    .filter(Boolean);
+});
 
-// 智能参数填充功能（保留兼容性）
-const requestParameterFill = async () => {
+const openParameterSuggestions = async () => {
   if (!tool.value) return;
   
   isParameterFilling.value = true;
@@ -715,16 +789,18 @@ const requestParameterFill = async () => {
     
     const result = await response.json();
     
-    if (result.success && result.suggestions) {
-      // 应用参数建议
-      Object.entries(result.suggestions).forEach(([paramName, suggestion]) => {
-        if (formValues.value.hasOwnProperty(paramName)) {
-          formValues.value[paramName] = suggestion.value;
-        }
-      });
-      
-      // 显示成功提示
-      showParameterFillSuccess(result.summary, result.warnings);
+    if (result.success) {
+      suggestionPayload.value = {
+        suggestions: result.suggestions || {},
+        summary: result.summary || '',
+        warnings: result.warnings || [],
+        missing_info: result.missing_info || []
+      };
+      suggestionSelections.value = Object.keys(suggestionPayload.value.suggestions).reduce((acc, key) => {
+        acc[key] = true;
+        return acc;
+      }, {});
+      showSuggestionModal.value = true;
     } else {
       throw new Error(result.error || '参数填充失败');
     }
@@ -737,121 +813,30 @@ const requestParameterFill = async () => {
   }
 };
 
-// 处理工具上下文请求
-const handleToolContextRequest = (event) => {
-  console.log('[PIPELINE TOOL] Processing tool context request');
-  console.log('[PIPELINE TOOL] Current tool loaded:', !!tool.value);
-  
-  if (!tool.value) {
-    console.log('[PIPELINE TOOL] Tool not loaded yet, cannot provide context');
+const closeSuggestionModal = () => {
+  resetSuggestionState();
+};
+
+const applyParameterSuggestions = () => {
+  if (!suggestionPayload.value) return;
+  let appliedCount = 0;
+  Object.entries(suggestionPayload.value.suggestions || {}).forEach(([paramName, suggestion]) => {
+    if (!suggestionSelections.value[paramName]) return;
+    if (Object.prototype.hasOwnProperty.call(formValues.value, paramName)) {
+      const normalized = normalizeSuggestion(suggestion);
+      formValues.value[paramName] = normalized.value;
+      appliedCount += 1;
+    }
+  });
+
+  if (appliedCount === 0) {
+    showParameterFillError('No suggestions were selected.');
     return;
   }
-  
-  const { toolName, projectId } = event.data;
-  console.log('[PIPELINE TOOL] Requested tool:', toolName);
-  console.log('[PIPELINE TOOL] Current tool:', tool.value.tool_name);
-  console.log('[PIPELINE TOOL] Project ID:', projectId);
-  
-  // 检查请求的工具是否匹配当前工具
-  if (toolName.toLowerCase() === tool.value.tool_name.toLowerCase()) {
-    console.log('[PIPELINE TOOL] Tool name matches, providing context');
-    
-    // 创建工具上下文
-    const toolContext = {
-      tool_name: tool.value.tool_name,
-      description: tool.value.description,
-      parameters: tool.value.parameters.map(p => p.name),
-      current_values: JSON.parse(JSON.stringify(formValues.value))
-    };
-    
-    console.log('[PIPELINE TOOL] Created tool context:', toolContext);
-    
-    // 发送工具上下文响应
-    const responseMessage = {
-      type: 'TOOL_CONTEXT_RESPONSE',
-      toolContext: toolContext,
-      projectId: projectId
-    };
-    
-    console.log('[PIPELINE TOOL] Sending response message:', responseMessage);
-    window.postMessage(responseMessage, '*');
-    
-    console.log('[PIPELINE TOOL] Tool context sent successfully');
-  } else {
-    console.log(`[PIPELINE TOOL] Tool name mismatch: requested ${toolName}, current ${tool.value.tool_name}`);
-  }
-};
 
-// Handle parameter application messages
-const handleParameterApplication = (event) => {
-  if (event.data.type === 'PARAMETER_APPLICATION') {
-    const { tool_name, parameters, summary } = event.data;
-    
-    console.log('Handling parameter application:', { tool_name, parameters, summary });
-    console.log('Current tool:', tool.value?.tool_name);
-    console.log('Current formValues keys:', Object.keys(formValues.value));
-    
-    // Check if it's the current tool
-    if (tool_name.toLowerCase() === tool.value?.tool_name.toLowerCase()) {
-      console.log('Tool name matches, applying parameters...');
-      
-      // Apply parameters to form
-      Object.entries(parameters).forEach(([paramName, paramData]) => {
-        console.log(`Processing parameter ${paramName}:`, paramData);
-        
-        if (formValues.value.hasOwnProperty(paramName)) {
-          // Support new parameter suggestion format {value: ..., reasoning: ...} and old direct value format
-          if (paramData && typeof paramData === 'object' && paramData.value !== undefined) {
-            console.log(`Setting ${paramName} to:`, paramData.value);
-            formValues.value[paramName] = paramData.value;
-          } else {
-            console.log(`Setting ${paramName} to:`, paramData);
-            formValues.value[paramName] = paramData;
-          }
-        } else {
-          console.log(`Parameter ${paramName} not found in formValues`);
-        }
-      });
-      
-      console.log('Final formValues:', formValues.value);
-      
-      // Show success message
-      showParameterFillSuccess(summary || 'Parameters applied from AI chat');
-    } else {
-      console.log('Tool name does not match, ignoring parameter application');
-    }
-  }
-};
-
-// Old parameter filling functionality (keeping for compatibility)
-const handleParameterFill = (event) => {
-  if (event.data.type === 'FILL_PARAMETERS') {
-    const { parameters, toolName } = event.data;
-    
-    // Check if it's the current tool
-    if (toolName.toLowerCase() === tool.value?.tool_name.toLowerCase()) {
-      // Fill parameters
-      Object.entries(parameters).forEach(([paramName, paramData]) => {
-        if (formValues.value.hasOwnProperty(paramName)) {
-          formValues.value[paramName] = paramData.value;
-        }
-      });
-      
-      // Show success message
-      showParameterFillSuccess();
-    }
-  } else if (event.data.type === 'REQUEST_CURRENT_PARAMETERS') {
-    // Respond to parameter status request
-    if (event.data.toolName.toLowerCase() === tool.value?.tool_name.toLowerCase()) {
-      // Send current parameter status to chatbot
-      event.source.postMessage({
-        type: 'CURRENT_PARAMETERS_RESPONSE',
-        toolName: tool.value.tool_name,
-        parameters: formValues.value,
-        toolInfo: tool.value
-      }, '*');
-    }
-  }
+  const summary = suggestionPayload.value.summary || `Applied ${appliedCount} suggestion(s).`;
+  showParameterFillSuccess(summary, suggestionPayload.value.warnings || []);
+  resetSuggestionState();
 };
 
 const showParameterFillSuccess = (summary = '', warnings = []) => {
@@ -920,23 +905,6 @@ const showParameterFillError = (errorMessage) => {
   }, 5000);
 };
 
-  // 统一消息处理器
-  const handleAllMessages = (event) => {
-    console.log('[PIPELINE TOOL] Received message:', event.data);
-    
-    // 处理工具上下文请求
-    if (event.data.type === 'REQUEST_TOOL_CONTEXT') {
-      console.log('[PIPELINE TOOL] Handling tool context request');
-      handleToolContextRequest(event);
-    }
-    
-    // 处理参数填充消息
-    handleParameterFill(event);
-    
-    // 处理参数应用消息
-    handleParameterApplication(event);
-  };
-
 onMounted(() => {
   fetchToolLibrary().then(() => {
     updateTool();
@@ -944,9 +912,6 @@ onMounted(() => {
     connectToLogStream();
     statusInterval = setInterval(checkTaskStatus, 2000);
   });
-  
-  // 监听来自chatbot的消息
-  window.addEventListener('message', handleAllMessages);
 });
 
 onUnmounted(() => {
@@ -957,9 +922,6 @@ onUnmounted(() => {
   if (statusInterval) {
     clearInterval(statusInterval);
   }
-  
-  // 移除事件监听器
-  window.removeEventListener('message', handleAllMessages);
 });
 
 // 监听工具变化，重置状态
@@ -985,7 +947,6 @@ watch(() => route.params.tool, (newTool, oldTool) => {
 watch(() => route.params.id, () => {
   taskStatus.value = 'not_found';
   allLogs.value = [];
-  logs.value = [];
   
   if (eventSource) {
     eventSource.close();
@@ -2000,6 +1961,211 @@ html, body {
     transform: translateX(0);
     opacity: 1;
   }
+}
+
+/* 参数建议弹窗 */
+.parameter-suggestion-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.parameter-suggestion-card {
+  width: min(720px, 92vw);
+  max-height: 80vh;
+  background: var(--surface-1);
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.suggestion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color-light);
+  background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.12), rgba(255, 255, 255, 0.9));
+}
+
+.suggestion-header h4 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.suggestion-header p {
+  margin: 6px 0 0;
+  color: var(--gray-600);
+  font-size: 0.85rem;
+}
+
+.suggestion-close {
+  border: none;
+  background: var(--surface-1);
+  color: var(--gray-500);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.suggestion-close:hover {
+  background: var(--surface-2);
+  color: var(--gray-800);
+}
+
+.suggestion-section {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.suggestion-section strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.8rem;
+  color: var(--gray-700);
+}
+
+.suggestion-section ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--gray-600);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.suggestion-list {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}
+
+.suggestion-empty {
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--gray-600);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.suggestion-item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color-light);
+  background: var(--surface-0);
+}
+
+.suggestion-item input[type="checkbox"] {
+  margin-top: 4px;
+}
+
+.suggestion-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.suggestion-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.param-name {
+  font-weight: 600;
+  color: var(--gray-900);
+}
+
+.param-type {
+  font-size: 0.7rem;
+  color: var(--gray-500);
+  background: var(--surface-2);
+  padding: 2px 6px;
+  border-radius: 999px;
+}
+
+.suggestion-values {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: var(--gray-700);
+}
+
+.suggestion-values em {
+  font-style: normal;
+  color: var(--gray-900);
+  font-weight: 500;
+}
+
+.suggestion-reasoning {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--gray-600);
+}
+
+.suggestion-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--border-color-light);
+  background: var(--surface-1);
+}
+
+.primary-btn,
+.secondary-btn {
+  border-radius: 8px;
+  font-size: 0.8rem;
+  padding: 8px 14px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.primary-btn {
+  background: var(--primary-600);
+  color: white;
+  border-color: var(--primary-600);
+}
+
+.primary-btn:hover:not(:disabled) {
+  background: var(--primary-700);
+  border-color: var(--primary-700);
+}
+
+.primary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.secondary-btn {
+  background: var(--surface-2);
+  color: var(--gray-700);
+  border-color: var(--border-color-light);
+}
+
+.secondary-btn:hover {
+  background: var(--surface-3, #eef2f7);
 }
 
 /* Flag开关样式 */

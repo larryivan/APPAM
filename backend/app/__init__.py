@@ -31,7 +31,6 @@ def create_app():
         return jsonify(tool_library)
 
     # --- Register Blueprints ---
-    from .api.chatbot.routes import chatbot_bp
     from .api.filemanager.routes import filemanager_bp
     from .api.projects.routes import projects_bp
     from .api.system.routes import system_bp
@@ -40,7 +39,6 @@ def create_app():
     from .api.tools.routes import tools_bp
     from .api.parameter_fill.routes import parameter_fill_bp
     
-    app.register_blueprint(chatbot_bp, url_prefix='/api/chatbot')
     app.register_blueprint(filemanager_bp, url_prefix='/api/filemanager')
     app.register_blueprint(projects_bp, url_prefix='/api/projects')
     app.register_blueprint(system_bp, url_prefix='/api/system')

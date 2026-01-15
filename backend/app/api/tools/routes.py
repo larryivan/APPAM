@@ -1,8 +1,10 @@
 import json
 import os
+import uuid
 from flask import Blueprint, jsonify, request
 from flask_socketio import emit
 from app import socketio
+from app.services.opencode_service import opencode_service
 
 tools_bp = Blueprint('tools', __name__)
 
@@ -15,6 +17,46 @@ def load_tool_library():
     except Exception as e:
         print(f"Error loading tool library: {e}")
         return []
+
+def _build_tool_suggestion_prompt(query: str, tools: list) -> str:
+    tool_summaries = [
+        {
+            "name": tool.get("tool_name"),
+            "description": tool.get("description", "")
+        }
+        for tool in tools
+    ]
+    return (
+        "You are a bioinformatics assistant. Return ONLY valid JSON:\n"
+        "{\n"
+        '  "has_recommendation": true/false,\n'
+        '  "recommended_tool": "tool_name",\n'
+        '  "confidence": 0.0,\n'
+        '  "reasoning": "...",\n'
+        '  "alternative_tools": ["tool1", "tool2"]\n'
+        "}\n"
+        "Only recommend a tool if the user explicitly asks for tool suggestions.\n"
+        "Do not include Markdown or extra text.\n\n"
+        f"User query: {query}\n"
+        f"Tools: {json.dumps(tool_summaries, ensure_ascii=False)}\n"
+    )
+
+def _map_tool_recommendation(result: dict, tools: list) -> dict:
+    if not result.get("has_recommendation"):
+        return {
+            "recommendation": None,
+            "query": result.get("query")
+        }
+
+    recommended_name = result.get("recommended_tool")
+    tool = next((t for t in tools if t.get("tool_name", "").lower() == str(recommended_name).lower()), None)
+
+    return {
+        "tool": tool,
+        "confidence": result.get("confidence", 0.0),
+        "reasoning": result.get("reasoning", ""),
+        "alternative_tools": result.get("alternative_tools", []),
+    }
 
 @tools_bp.route('/tools', methods=['GET'])
 def get_tools():
@@ -68,9 +110,14 @@ def suggest_tool():
                 'error': 'Query is required'
             }), 400
         
-        # 导入ai_service来获取工具建议
-        from app.services.ai_service import ai_service
-        suggestion = ai_service.get_tool_suggestion(query)
+        tools = load_tool_library()
+        prompt = _build_tool_suggestion_prompt(query, tools)
+        result = opencode_service.request_json(
+            message=prompt,
+            project_id=None,
+            app_session_id=f"tool_suggest_{uuid.uuid4().hex}",
+        )
+        suggestion = _map_tool_recommendation(result, tools)
         
         return jsonify({
             'success': True,
@@ -95,9 +142,14 @@ def handle_tool_suggestion_request(data):
             })
             return
         
-        # 导入ai_service来获取工具建议
-        from app.services.ai_service import ai_service
-        suggestion = ai_service.get_tool_suggestion(query)
+        tools = load_tool_library()
+        prompt = _build_tool_suggestion_prompt(query, tools)
+        result = opencode_service.request_json(
+            message=prompt,
+            project_id=None,
+            app_session_id=f"tool_suggest_{uuid.uuid4().hex}",
+        )
+        suggestion = _map_tool_recommendation(result, tools)
         
         emit('tool_suggestion_response', {
             'success': True,

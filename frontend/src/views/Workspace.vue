@@ -51,6 +51,14 @@
               </div>
               <span class="link-text">File Manager</span>
             </router-link>
+            <button class="nav-link nav-button" @click="openOpenCodeWindow">
+              <div class="link-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+              </div>
+              <span class="link-text">OpenCode</span>
+            </button>
           </div>
         </div>
         
@@ -183,6 +191,11 @@
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
           </svg>
         </router-link>
+        <button class="shortcut-link" title="OpenCode" @click="openOpenCodeWindow">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+        </button>
         <div class="shortcut-divider"></div>
         <button class="shortcut-link" title="Preprocessing" @click="quickToggle('preprocessing')">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -243,8 +256,8 @@
     <!-- 移动端遮罩层 -->
     <div v-if="!sidebarCollapsed && isMobile" class="mobile-overlay" @click="closeSidebar" @touchstart.passive="closeSidebar"></div>
 
-    <!-- AI助手组件 - 新的浮动按钮设计 -->
-    <Chatbot />
+    <!-- OpenCode console -->
+    <FloatingOpenCodeTerminal ref="openCodeRef" />
 
     <!-- 浮动系统监视器 -->
     <FloatingSystemMonitor />
@@ -256,10 +269,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import FloatingTerminal from '@/components/FloatingTerminal.vue'
-import Chatbot from '@/components/Chatbot.vue'
+import FloatingOpenCodeTerminal from '@/components/FloatingOpenCodeTerminal.vue'
 import FloatingSystemMonitor from '@/components/FloatingSystemMonitor.vue'
 
 const route = useRoute()
@@ -271,6 +284,7 @@ const isMobile = ref(false)
 const hasNotifications = ref(false)
 const sidebarAnimating = ref(false)
 const windowWidth = ref(window.innerWidth)
+const openCodeRef = ref(null)
 
 // 侧边栏展开状态
 const expandedSections = ref({
@@ -289,6 +303,13 @@ const magTools = ['CheckM', 'GTDB-Tk', 'PROKKA', 'RGI', 'antiSMASH']
 
 const getToolLink = (tool) => {
   return `/workspace/${route.params.id}/tool/${tool.toLowerCase()}`
+}
+
+const openOpenCodeWindow = () => {
+  openCodeRef.value?.openWindow?.()
+  if (isMobile.value) {
+    closeSidebar()
+  }
 }
 
 const toggleSidebar = () => {
@@ -651,6 +672,16 @@ onUnmounted(() => {
   border: 1px solid transparent;
 }
 
+.nav-button {
+  background: transparent;
+  border: 1px solid transparent;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  appearance: none;
+}
+
 .nav-link:hover {
   background: var(--surface-3);
   color: var(--gray-800);
@@ -932,10 +963,6 @@ onUnmounted(() => {
     box-shadow: 0 6px 20px rgba(var(--accent-rgb), 0.5), 0 4px 12px rgba(0, 0, 0, 0.15);
   }
 }
-
-/* AI助手组件样式由Chatbot.vue组件提供 */
-
-
 
 /* 响应式设计 */
 @media (max-width: 1200px) {

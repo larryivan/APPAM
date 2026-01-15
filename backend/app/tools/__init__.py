@@ -1,24 +1,16 @@
 from .tool_registry import ToolRegistry
-from .knowledge_tools import SearchKnowledgeBaseTool
 from .system_tools import GetSystemInfoTool
 from .project_tools import ListProjectFilesTool, ReadProjectFileTool, GetProjectStructureTool
-from .tool_recommendation import ToolRecommendationTool
-from .parameter_fill import ParameterFillTool
 from .parameter_apply import ParameterApplyTool
-from .smart_parameter_suggestion import SmartParameterSuggestionTool
 from .bio_file_analyzer import BioFileAnalyzerTool
 
 # List of all available tool classes
 _all_tool_classes = [
-    SearchKnowledgeBaseTool,
     GetSystemInfoTool,
     ListProjectFilesTool,
     ReadProjectFileTool,
     GetProjectStructureTool,
-    ToolRecommendationTool,
-    ParameterFillTool,
     ParameterApplyTool,
-    SmartParameterSuggestionTool,
     BioFileAnalyzerTool,
 ]
 

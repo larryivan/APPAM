@@ -1435,7 +1435,16 @@ const handleScroll = () => {
   // Now just an empty function, performs no operation
 }
 
+const isEditableTarget = (event) => {
+  const target = event.target
+  if (!target) return false
+  const tagName = target.tagName ? target.tagName.toLowerCase() : ''
+  if (['input', 'textarea', 'select'].includes(tagName)) return true
+  return Boolean(target.isContentEditable)
+}
+
 const handleKeyDown = (event) => {
+  if (isEditableTarget(event)) return
   // Keyboard shortcuts
   if (event.ctrlKey || event.metaKey) {
     switch (event.key) {

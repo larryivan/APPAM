@@ -1,13 +1,32 @@
 """
-Parameter fill API routes for intelligent parameter suggestion.
+Parameter fill API routes powered by OpenCode.
 """
 
 import json
-from flask import Blueprint, request, jsonify, session
+import uuid
+from flask import Blueprint, request, jsonify
 from flask_cors import cross_origin
-from app.tools import tool_registry
+from app.services.opencode_service import opencode_service
 
 parameter_fill_bp = Blueprint('parameter_fill', __name__)
+
+def _build_suggestion_prompt(tool_name: str, tool_parameters: dict, user_context: str) -> str:
+    return (
+        "You are a bioinformatics assistant. Return ONLY valid JSON with this schema:\n"
+        "{\n"
+        '  "suggestions": {\n'
+        '    "param_name": {"value": "...", "reasoning": "..."}\n'
+        "  },\n"
+        '  "summary": "...",\n'
+        '  "warnings": ["..."],\n'
+        '  "missing_info": ["..."]\n'
+        "}\n"
+        "Do not include Markdown, comments, or extra text.\n\n"
+        f"Tool: {tool_name}\n"
+        f"Parameters: {json.dumps(tool_parameters, ensure_ascii=False)}\n"
+        f"User context: {user_context or 'N/A'}\n"
+    )
+
 
 @parameter_fill_bp.route('/suggest', methods=['POST'])
 @cross_origin()
@@ -34,135 +53,19 @@ def suggest_parameters():
                 'error': 'tool_parameters is required'
             }), 400
         
-        # Execute parameter fill tool
-        tool_result = tool_registry.execute_tool(
-            'fill_parameters',
-            json.dumps({
-                'tool_name': tool_name,
-                'tool_parameters': tool_parameters,
-                'project_id': project_id,
-                'user_context': user_context
-            })
+        prompt = _build_suggestion_prompt(tool_name, tool_parameters, user_context)
+        result = opencode_service.request_json(
+            message=prompt,
+            project_id=project_id,
+            app_session_id=f"parameter_fill_{uuid.uuid4().hex}",
         )
-        
-        if not tool_result.is_success:
-            return jsonify({
-                'success': False,
-                'error': tool_result.content
-            }), 500
-        
-        # Return successful result
-        return jsonify({
-            'success': True,
-            'suggestions': tool_result.metadata.get('suggestions', {}),
-            'summary': tool_result.metadata.get('summary', ''),
-            'warnings': tool_result.metadata.get('warnings', []),
-            'missing_info': tool_result.metadata.get('missing_info', []),
-            'tool_name': tool_name
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': f'Server error: {str(e)}'
-        }), 500
 
-@parameter_fill_bp.route('/conversation', methods=['POST'])
-@cross_origin()
-def conversational_parameter_fill():
-    """Handle conversational parameter configuration."""
-    try:
-        data = request.json
-        
-        # Extract request data
-        tool_name = data.get('tool_name')
-        tool_parameters = data.get('tool_parameters', {})
-        current_values = data.get('current_values', {})
-        user_message = data.get('user_message', '')
-        conversation_history = data.get('conversation_history', [])
-        project_id = data.get('project_id')
-        
-        if not tool_name:
-            return jsonify({
-                'success': False,
-                'error': 'tool_name is required'
-            }), 400
-        
-        if not tool_parameters:
-            return jsonify({
-                'success': False,
-                'error': 'tool_parameters is required'
-            }), 400
-        
-        if not user_message:
-            return jsonify({
-                'success': False,
-                'error': 'user_message is required'
-            }), 400
-        
-        # Execute conversational parameter fill tool
-        tool_result = tool_registry.execute_tool(
-            'conversational_parameter_fill',
-            json.dumps({
-                'tool_name': tool_name,
-                'tool_parameters': tool_parameters,
-                'current_values': current_values,
-                'user_message': user_message,
-                'conversation_history': conversation_history,
-                'project_id': project_id
-            })
-        )
-        
-        if not tool_result.is_success:
-            return jsonify({
-                'success': False,
-                'error': tool_result.content
-            }), 500
-        
-        # Return successful result
         return jsonify({
             'success': True,
-            'message': tool_result.metadata.get('message', ''),
-            'parameter_suggestions': tool_result.metadata.get('parameter_suggestions', {}),
-            'questions': tool_result.metadata.get('questions', []),
-            'next_steps': tool_result.metadata.get('next_steps', []),
-            'ready_to_apply': tool_result.metadata.get('ready_to_apply', False),
-            'tool_name': tool_name
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': f'Server error: {str(e)}'
-        }), 500
-
-@parameter_fill_bp.route('/apply', methods=['POST'])
-@cross_origin()
-def apply_parameter_suggestions():
-    """Apply parameter suggestions to the tool form."""
-    try:
-        data = request.json
-        
-        tool_name = data.get('tool_name')
-        parameter_suggestions = data.get('parameter_suggestions', {})
-        
-        if not tool_name:
-            return jsonify({
-                'success': False,
-                'error': 'tool_name is required'
-            }), 400
-        
-        # Process parameter suggestions into a format suitable for form filling
-        applied_parameters = {}
-        for param_name, suggestion in parameter_suggestions.items():
-            if isinstance(suggestion, dict) and 'value' in suggestion:
-                applied_parameters[param_name] = suggestion['value']
-            else:
-                applied_parameters[param_name] = suggestion
-        
-        return jsonify({
-            'success': True,
-            'applied_parameters': applied_parameters,
+            'suggestions': result.get('suggestions', {}),
+            'summary': result.get('summary', ''),
+            'warnings': result.get('warnings', []),
+            'missing_info': result.get('missing_info', []),
             'tool_name': tool_name
         })
         
