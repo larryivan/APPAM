@@ -96,6 +96,8 @@ const terminalContainer = ref(null)
 let terminal = null
 let fitAddon = null
 let socket = null
+let resizeObserver = null
+let fitPending = false
 
 const sessionKey = ref('')
 const SESSION_STORAGE_PREFIX = 'opencode_terminal_session'
@@ -104,6 +106,46 @@ const storageKey = computed(() => {
   const projectKey = projectId.value || 'global'
   return `${SESSION_STORAGE_PREFIX}:${projectKey}`
 })
+
+const scheduleFit = (delay = 0) => {
+  if (!fitAddon || !terminal) return
+  if (fitPending) return
+  fitPending = true
+
+  const run = () => {
+    fitPending = false
+    if (!fitAddon || !terminal) return
+    fitAddon.fit()
+    if (socket) {
+      const { rows, cols } = terminal
+      socket.emit('terminal_resize', { rows, cols, session_key: sessionKey.value })
+    }
+  }
+
+  if (delay > 0) {
+    setTimeout(run, delay)
+  } else {
+    requestAnimationFrame(run)
+  }
+}
+
+const attachResizeObserver = () => {
+  if (!terminalContainer.value || typeof ResizeObserver === 'undefined') return
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+  }
+  resizeObserver = new ResizeObserver(() => {
+    scheduleFit()
+  })
+  resizeObserver.observe(terminalContainer.value)
+}
+
+const detachResizeObserver = () => {
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
+}
 
 const detectMobile = () => {
   const userAgent = navigator.userAgent.toLowerCase()
@@ -173,6 +215,8 @@ const openWindow = () => {
   nextTick(() => {
     initTerminal()
     connectSocket()
+    attachResizeObserver()
+    scheduleFit(140)
   })
 }
 
@@ -188,6 +232,7 @@ const closeWindow = () => {
     terminal = null
   }
 
+  detachResizeObserver()
   isOpen.value = false
   isFullscreen.value = false
 }
@@ -212,13 +257,7 @@ const toggleFullscreen = () => {
   isFullscreen.value = !isFullscreen.value
 
   if (fitAddon) {
-    setTimeout(() => {
-      fitAddon.fit()
-      if (socket && terminal) {
-        const { rows, cols } = terminal
-        socket.emit('terminal_resize', { rows, cols, session_key: sessionKey.value })
-      }
-    }, 100)
+    scheduleFit(120)
   }
 }
 
@@ -290,7 +329,7 @@ const initTerminal = () => {
   terminal.open(terminalContainer.value)
 
   setTimeout(() => {
-    fitAddon.fit()
+    scheduleFit()
     if (!isMobile.value) {
       terminal.focus()
     }
@@ -460,13 +499,7 @@ const handleResizeDrag = (e) => {
   windowPosition.value = { x: newX, y: newY }
 
   if (fitAddon && terminal) {
-    setTimeout(() => {
-      fitAddon.fit()
-      const { rows, cols } = terminal
-      if (socket) {
-        socket.emit('terminal_resize', { rows, cols, session_key: sessionKey.value })
-      }
-    }, 50)
+    scheduleFit(60)
   }
 }
 
@@ -479,13 +512,7 @@ const handleResize = () => {
   }
 
   if (fitAddon && isOpen.value) {
-    setTimeout(() => {
-      fitAddon.fit()
-      if (socket && terminal) {
-        const { rows, cols } = terminal
-        socket.emit('terminal_resize', { rows, cols, session_key: sessionKey.value })
-      }
-    }, 100)
+    scheduleFit(120)
   }
 }
 
@@ -510,6 +537,7 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   closeWindow()
+  detachResizeObserver()
 })
 </script>
 

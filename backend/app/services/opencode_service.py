@@ -248,7 +248,13 @@ class OpenCodeService:
         tool_context: Optional[dict] = None,
     ) -> dict:
         text = self.send_message(message, project_id, app_session_id, tool_context)
-        return self._parse_json(text)
+        try:
+            return self._parse_json(text)
+        except ValueError as exc:
+            snippet = text.strip()[:500]
+            if snippet:
+                raise ValueError(f"{exc}. Raw response: {snippet}") from exc
+            raise
 
 
 opencode_service = OpenCodeService()

@@ -256,6 +256,17 @@
     <!-- 移动端遮罩层 -->
     <div v-if="!sidebarCollapsed && isMobile" class="mobile-overlay" @click="closeSidebar" @touchstart.passive="closeSidebar"></div>
 
+    <!-- OpenCode floating button -->
+    <div class="opencode-trigger">
+      <button class="opencode-button" :class="{ active: isOpenCodeVisible }" @click="openOpenCodeWindow" title="OpenCode">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="8 6 2 12 8 18"></polyline>
+          <polyline points="16 6 22 12 16 18"></polyline>
+          <line x1="10" y1="4" x2="14" y2="20"></line>
+        </svg>
+      </button>
+    </div>
+
     <!-- OpenCode console -->
     <FloatingOpenCodeTerminal ref="openCodeRef" />
 
@@ -269,7 +280,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import FloatingTerminal from '@/components/FloatingTerminal.vue'
 import FloatingOpenCodeTerminal from '@/components/FloatingOpenCodeTerminal.vue'
@@ -285,6 +296,7 @@ const hasNotifications = ref(false)
 const sidebarAnimating = ref(false)
 const windowWidth = ref(window.innerWidth)
 const openCodeRef = ref(null)
+const isOpenCodeVisible = computed(() => Boolean(openCodeRef.value?.isOpen?.value))
 
 // 侧边栏展开状态
 const expandedSections = ref({
@@ -857,6 +869,46 @@ onUnmounted(() => {
   z-index: 150;
 }
 
+/* OpenCode floating button */
+.opencode-trigger {
+  position: fixed;
+  bottom: 24px;
+  right: 88px;
+  z-index: 1000;
+}
+
+.opencode-button {
+  background: var(--surface-1);
+  border: var(--border-width) solid rgba(var(--accent-rgb), 0.25);
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  color: var(--primary-600);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-base);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.opencode-button:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  background: var(--surface-2);
+}
+
+.opencode-button.active {
+  background: var(--primary-600);
+  color: white;
+  border-color: rgba(var(--accent-rgb), 0.4);
+  box-shadow: 0 10px 20px rgba(var(--accent-rgb), 0.25);
+}
+
+.opencode-button.active:hover {
+  background: var(--primary-700);
+}
+
 /* 精致的移动端侧边栏触发按钮 */
 .mobile-sidebar-trigger {
   position: fixed;
@@ -1115,6 +1167,16 @@ onUnmounted(() => {
     backdrop-filter: blur(4px);
     animation: fadeIn 0.3s ease-out;
   }
+
+  .opencode-trigger {
+    bottom: max(20px, env(safe-area-inset-bottom));
+    right: max(48px, calc(48px + env(safe-area-inset-right)));
+  }
+  
+  .opencode-button {
+    width: 44px;
+    height: 44px;
+  }
   
   @keyframes fadeIn {
     from {
@@ -1143,6 +1205,15 @@ onUnmounted(() => {
   
   .trigger-hint {
     font-size: 9px;
+  }
+
+  .opencode-trigger {
+    right: max(20px, calc(20px + env(safe-area-inset-right)));
+  }
+  
+  .opencode-button {
+    width: 48px;
+    height: 48px;
   }
   
   .workspace-sidebar.mobile .sidebar-controls {
@@ -1234,6 +1305,17 @@ onUnmounted(() => {
   
   .mobile-sidebar-trigger:active {
     transform: scale(0.95);
+  }
+
+  .opencode-button:hover {
+    transform: none;
+    box-shadow: var(--shadow-sm);
+    background: var(--surface-1);
+  }
+  
+  .opencode-button:active {
+    transform: scale(0.96);
+    transition-duration: 0.1s;
   }
 }
 </style>

@@ -4,6 +4,7 @@ Parameter fill API routes powered by OpenCode.
 
 import json
 import uuid
+import requests
 from flask import Blueprint, request, jsonify
 from flask_cors import cross_origin
 from app.services.opencode_service import opencode_service
@@ -54,11 +55,22 @@ def suggest_parameters():
             }), 400
         
         prompt = _build_suggestion_prompt(tool_name, tool_parameters, user_context)
-        result = opencode_service.request_json(
-            message=prompt,
-            project_id=project_id,
-            app_session_id=f"parameter_fill_{uuid.uuid4().hex}",
-        )
+        try:
+            result = opencode_service.request_json(
+                message=prompt,
+                project_id=project_id,
+                app_session_id=f"parameter_fill_{uuid.uuid4().hex}",
+            )
+        except requests.RequestException as exc:
+            return jsonify({
+                'success': False,
+                'error': f'OpenCode request failed: {str(exc)}'
+            }), 502
+        except ValueError as exc:
+            return jsonify({
+                'success': False,
+                'error': f'OpenCode response invalid: {str(exc)}'
+            }), 502
 
         return jsonify({
             'success': True,

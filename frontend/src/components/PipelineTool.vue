@@ -784,7 +784,16 @@ const openParameterSuggestions = async () => {
     });
     
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      let errorMessage = `HTTP error! status: ${response.status}`;
+      try {
+        const errorPayload = await response.json();
+        if (errorPayload && errorPayload.error) {
+          errorMessage = errorPayload.error;
+        }
+      } catch (error) {
+        // ignore JSON parsing errors for non-JSON responses
+      }
+      throw new Error(errorMessage);
     }
     
     const result = await response.json();

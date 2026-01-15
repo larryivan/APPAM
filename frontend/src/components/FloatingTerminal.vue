@@ -130,6 +130,48 @@ const terminalContainer = ref(null)
 let terminal = null
 let fitAddon = null
 let socket = null
+let resizeObserver = null
+let fitPending = false
+
+const scheduleFit = (delay = 0) => {
+  if (!fitAddon || !terminal) return
+  if (fitPending) return
+  fitPending = true
+
+  const run = () => {
+    fitPending = false
+    if (!fitAddon || !terminal) return
+    fitAddon.fit()
+    if (socket) {
+      const { rows, cols } = terminal
+      socket.emit('terminal_resize', { rows, cols })
+    }
+  }
+
+  if (delay > 0) {
+    setTimeout(run, delay)
+  } else {
+    requestAnimationFrame(run)
+  }
+}
+
+const attachResizeObserver = () => {
+  if (!terminalContainer.value || typeof ResizeObserver === 'undefined') return
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+  }
+  resizeObserver = new ResizeObserver(() => {
+    scheduleFit()
+  })
+  resizeObserver.observe(terminalContainer.value)
+}
+
+const detachResizeObserver = () => {
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
+}
 
 // 计算窗口样式
 const windowStyle = computed(() => {
@@ -166,6 +208,8 @@ const openTerminal = () => {
   nextTick(() => {
       initTerminal()
     connectSocket()
+    attachResizeObserver()
+    scheduleFit(140)
   })
   }
 }
@@ -190,7 +234,8 @@ const closeTerminal = () => {
     terminal.dispose()
     terminal = null
   }
-  
+
+  detachResizeObserver()
   isOpen.value = false
   isFullscreen.value = false
 }
@@ -203,13 +248,7 @@ const toggleFullscreen = () => {
   isFullscreen.value = !isFullscreen.value
   
   if (fitAddon) {
-    setTimeout(() => {
-      fitAddon.fit()
-      if (socket) {
-        const { rows, cols } = terminal
-        socket.emit('terminal_resize', { rows, cols })
-      }
-    }, 100)
+    scheduleFit(120)
   }
 }
 
@@ -291,7 +330,7 @@ const initTerminal = () => {
   
   // 延迟调整大小以确保DOM渲染完成
   setTimeout(() => {
-  fitAddon.fit()
+  scheduleFit()
   
     // 移动端自动聚焦可能导致软键盘弹出，延迟聚焦
     if (!isMobile.value) {
@@ -462,13 +501,7 @@ const handleResizeDrag = (e) => {
   
   // 调整终端大小
   if (fitAddon && terminal) {
-    setTimeout(() => {
-      fitAddon.fit()
-      const { rows, cols } = terminal
-      if (socket) {
-        socket.emit('terminal_resize', { rows, cols })
-      }
-    }, 50)
+    scheduleFit(60)
   }
 }
 
@@ -485,13 +518,7 @@ const handleResize = () => {
   
   // 调整终端大小
   if (fitAddon && isOpen.value) {
-    setTimeout(() => {
-      fitAddon.fit()
-      if (socket && terminal) {
-        const { rows, cols } = terminal
-        socket.emit('terminal_resize', { rows, cols })
-      }
-    }, 100)
+    scheduleFit(120)
   }
 }
 
@@ -504,6 +531,7 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   closeTerminal()
+  detachResizeObserver()
 })
 </script>
 
