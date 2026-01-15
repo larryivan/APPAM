@@ -83,13 +83,13 @@
     </main>
 
     <!-- 创建项目弹窗 -->
-    <div v-if="showCreateModal" class="modal-overlay" @click="closeCreateModal">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
+    <div v-if="showCreateModal" class="modal-overlay app-modal-viewport app-modal-backdrop" @click="closeCreateModal">
+      <div class="app-modal project-modal" @click.stop>
+        <div class="modal-header app-modal-header">
           <h3>Create New Project</h3>
-          <button @click="closeCreateModal" class="close-btn">×</button>
+          <button @click="closeCreateModal" class="close-btn app-modal-close">×</button>
         </div>
-        <form @submit.prevent="createProject" class="project-form">
+        <form @submit.prevent="createProject" class="project-form app-modal-body">
           <div class="form-group">
             <label for="name">Project Name *</label>
             <input v-model="newProject.name" id="name" type="text" placeholder="Enter project name..." required>
@@ -111,13 +111,13 @@
     </div>
 
     <!-- 编辑项目弹窗 -->
-    <div v-if="showEditModal" class="modal-overlay" @click="closeEditModal">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
+    <div v-if="showEditModal" class="modal-overlay app-modal-viewport app-modal-backdrop" @click="closeEditModal">
+      <div class="app-modal project-modal" @click.stop>
+        <div class="modal-header app-modal-header">
           <h3>Edit Project Information</h3>
-          <button @click="closeEditModal" class="close-btn">×</button>
+          <button @click="closeEditModal" class="close-btn app-modal-close">×</button>
         </div>
-        <form @submit.prevent="updateProject" class="project-form">
+        <form @submit.prevent="updateProject" class="project-form app-modal-body">
           <div class="form-group">
             <label for="edit-name">Project Name *</label>
             <input v-model="editingProject.name" id="edit-name" type="text" required>
@@ -139,13 +139,13 @@
     </div>
 
     <!-- 项目详情弹窗 -->
-    <div v-if="showDetailsModal" class="modal-overlay" @click="closeDetailsModal">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
+    <div v-if="showDetailsModal" class="modal-overlay app-modal-viewport app-modal-backdrop" @click="closeDetailsModal">
+      <div class="app-modal project-modal" @click.stop>
+        <div class="modal-header app-modal-header">
           <h3>Project Details</h3>
-          <button @click="closeDetailsModal" class="close-btn">×</button>
+          <button @click="closeDetailsModal" class="close-btn app-modal-close">×</button>
         </div>
-        <div class="project-details">
+        <div class="project-details app-modal-body">
           <div class="detail-item">
             <strong>Project Name:</strong> {{ selectedProject?.name }}
           </div>
@@ -396,7 +396,7 @@ onMounted(fetchProjects);
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
-  padding: var(--spacing-4);
+  padding: var(--spacing-6);
 }
 
 .page-header {
@@ -405,7 +405,7 @@ onMounted(fetchProjects);
   align-items: center;
   margin-bottom: var(--spacing-6);
   padding-bottom: var(--spacing-4);
-  border-bottom: var(--border-width) solid var(--border-color);
+  border-bottom: var(--border-width) solid var(--border-color-light);
 }
 
 .header-left {
@@ -417,16 +417,17 @@ onMounted(fetchProjects);
 .page-header h1 {
   font-size: var(--text-3xl);
   font-weight: var(--font-bold);
-  color: var(--gray-800);
+  color: var(--gray-900);
   margin: 0;
 }
 
 .project-count {
   color: var(--gray-600);
   font-size: var(--text-sm);
-  background: var(--gray-100);
+  background: var(--surface-2);
   padding: var(--spacing-1) var(--spacing-3);
   border-radius: var(--radius-xl);
+  border: var(--border-width) solid var(--border-color-light);
 }
 
 .create-btn {
@@ -442,7 +443,7 @@ onMounted(fetchProjects);
   display: flex;
   align-items: center;
   gap: var(--spacing-2);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 10px 20px rgba(var(--accent-rgb), 0.2);
 }
 
 .create-btn:hover {
@@ -462,9 +463,10 @@ onMounted(fetchProjects);
   align-items: center;
   margin-bottom: 24px;
   padding: 16px;
-  background: #f9fafb;
-  border-radius: 12px;
-  border: 1px solid #e5e7eb;
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color-light);
+  box-shadow: var(--shadow-xs);
 }
 
 .search-box {
@@ -477,24 +479,24 @@ onMounted(fetchProjects);
 .search-icon {
   position: absolute;
   left: 12px;
-  color: #9ca3af;
+  color: var(--gray-400);
   font-size: 0.9rem;
 }
 
 .search-input {
   width: 100%;
   padding: 10px 12px 10px 36px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-base);
   font-size: 0.9rem;
-  background: white;
+  background: var(--surface-1);
   transition: border-color 0.2s;
 }
 
 .search-input:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.16);
 }
 
 .clear-btn {
@@ -502,7 +504,7 @@ onMounted(fetchProjects);
   right: 8px;
   background: none;
   border: none;
-  color: #9ca3af;
+  color: var(--gray-400);
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
@@ -510,8 +512,8 @@ onMounted(fetchProjects);
 }
 
 .clear-btn:hover {
-  color: #6b7280;
-  background: #f3f4f6;
+  color: var(--gray-600);
+  background: var(--surface-2);
 }
 
 .sort-controls {
@@ -522,33 +524,33 @@ onMounted(fetchProjects);
 
 .sort-label {
   font-size: 0.85rem;
-  color: #6b7280;
+  color: var(--gray-600);
   font-weight: 500;
 }
 
 .sort-select {
   padding: 6px 10px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
   font-size: 0.85rem;
-  background: white;
+  background: var(--surface-1);
   cursor: pointer;
 }
 
 .sort-order-btn {
-  background: white;
-  border: 1px solid #d1d5db;
+  background: var(--surface-1);
+  border: 1px solid var(--border-color);
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 0.9rem;
-  color: #6b7280;
+  color: var(--gray-600);
   transition: all 0.2s;
 }
 
 .sort-order-btn:hover {
-  background: #f9fafb;
-  color: #374151;
+  background: var(--surface-2);
+  color: var(--gray-800);
 }
 
 .view-controls {
@@ -557,12 +559,12 @@ onMounted(fetchProjects);
 }
 
 .view-btn {
-  background: white;
-  border: 1px solid #d1d5db;
+  background: var(--surface-1);
+  border: 1px solid var(--border-color);
   padding: 8px 10px;
   cursor: pointer;
   font-size: 0.9rem;
-  color: #6b7280;
+  color: var(--gray-600);
   transition: all 0.2s;
 }
 
@@ -575,20 +577,20 @@ onMounted(fetchProjects);
 }
 
 .view-btn:hover {
-  background: #f9fafb;
+  background: var(--surface-2);
 }
 
 .view-btn.active {
-  background: #3b82f6;
+  background: var(--gradient-primary);
   color: white;
-  border-color: #3b82f6;
+  border-color: transparent;
 }
 
 /* 空状态样式 */
 .empty-state {
   text-align: center;
   padding: 60px 20px;
-  color: #6b7280;
+  color: var(--gray-600);
 }
 
 .empty-icon {
@@ -600,7 +602,7 @@ onMounted(fetchProjects);
 .empty-state h3 {
   margin: 0 0 8px 0;
   font-size: 1.2rem;
-  color: #374151;
+  color: var(--gray-800);
 }
 
 .empty-state p {
@@ -609,11 +611,11 @@ onMounted(fetchProjects);
 }
 
 .empty-create-btn {
-  background: #3b82f6;
+  background: var(--gradient-primary);
   color: white;
   border: none;
   padding: 10px 24px;
-  border-radius: 8px;
+  border-radius: var(--radius-base);
   cursor: pointer;
   font-weight: 500;
 }
@@ -633,16 +635,17 @@ onMounted(fetchProjects);
 
 /* 项目卡片基础样式 */
 .project-card {
-  background: white;
-  border-radius: 12px;
-  border: 1px solid #e5e7eb;
+  background: var(--surface-1);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color-light);
   transition: all 0.2s ease;
   cursor: pointer;
+  box-shadow: var(--shadow-xs);
 }
 
 .project-card:hover {
-  border-color: #3b82f6;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+  border-color: rgba(var(--accent-rgb), 0.28);
+  box-shadow: var(--shadow-base);
   transform: translateY(-2px);
 }
 
@@ -715,19 +718,19 @@ onMounted(fetchProjects);
   margin: 0 0 10px 0;
   font-size: 1.3em;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--gray-900);
 }
 
 .project-meta {
   margin: 5px 0;
   font-size: 0.85em;
-  color: #6b7280;
+  color: var(--gray-600);
 }
 
 .project-description {
   margin: 10px 0 0 0;
   font-size: 0.9em;
-  color: #4b5563;
+  color: var(--gray-600);
   font-style: italic;
   overflow: hidden;
   display: -webkit-box;
@@ -742,11 +745,11 @@ onMounted(fetchProjects);
 }
 
 .open-btn, .edit-btn {
-  background-color: #f3f4f6;
-  color: #374151;
-  border: 1px solid #e5e7eb;
+  background-color: var(--surface-2);
+  color: var(--gray-700);
+  border: 1px solid var(--border-color);
   padding: 8px 15px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-weight: 500;
   transition: background-color 0.2s;
@@ -754,7 +757,7 @@ onMounted(fetchProjects);
 }
 
 .open-btn:hover, .edit-btn:hover {
-  background-color: #e5e7eb;
+  background-color: var(--surface-3);
 }
 
 .delete-btn {
@@ -765,72 +768,20 @@ onMounted(fetchProjects);
   opacity: 0.6;
   transition: opacity 0.2s;
   padding: 8px;
+  color: var(--gray-500);
 }
 
 .delete-btn:hover {
   opacity: 1;
+  color: var(--gray-800);
 }
 
 /* 弹窗样式 */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-content {
-  background: white;
-  border-radius: 12px;
-  padding: 0;
+.project-modal {
   max-width: 500px;
   width: 90%;
   max-height: 80vh;
   overflow-y: auto;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px 25px;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.modal-header h3 {
-  margin: 0;
-  font-size: 1.3em;
-  font-weight: 600;
-  color: #1f2937;
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  font-size: 1.5em;
-  cursor: pointer;
-  color: #6b7280;
-  padding: 0;
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.close-btn:hover {
-  color: #374151;
-}
-
-.project-form {
-  padding: 25px;
 }
 
 .form-group {
@@ -841,25 +792,26 @@ onMounted(fetchProjects);
   display: block;
   margin-bottom: 5px;
   font-weight: 500;
-  color: #374151;
+  color: var(--gray-700);
 }
 
 .form-group input,
 .form-group textarea {
   width: 100%;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
   padding: 10px 12px;
   font-size: 1em;
   transition: border-color 0.2s;
   box-sizing: border-box;
+  background: var(--surface-1);
 }
 
 .form-group input:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #3a6ffb;
-  box-shadow: 0 0 0 3px rgba(58, 111, 251, 0.1);
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.16);
 }
 
 .form-group textarea {
@@ -871,7 +823,7 @@ onMounted(fetchProjects);
   display: block;
   margin-top: 5px;
   font-size: 0.8em;
-  color: #6b7280;
+  color: var(--gray-500);
   font-style: italic;
 }
 
@@ -883,53 +835,49 @@ onMounted(fetchProjects);
 }
 
 .cancel-btn {
-  background-color: #f3f4f6;
-  color: #374151;
-  border: 1px solid #d1d5db;
+  background-color: var(--surface-2);
+  color: var(--gray-700);
+  border: 1px solid var(--border-color);
   padding: 10px 20px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-weight: 500;
   transition: background-color 0.2s;
 }
 
 .cancel-btn:hover {
-  background-color: #e5e7eb;
+  background-color: var(--surface-3);
 }
 
 .submit-btn {
-  background-color: #3a6ffb;
+  background: var(--gradient-primary);
   color: white;
   border: none;
   padding: 10px 20px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-weight: 500;
   transition: background-color 0.2s;
 }
 
 .submit-btn:hover {
-  background-color: #255aee;
+  background: linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%);
 }
 
 /* 项目详情样式 */
-.project-details {
-  padding: 25px;
-}
-
 .detail-item {
   margin-bottom: 15px;
 }
 
 .detail-item strong {
-  color: #374151;
+  color: var(--gray-700);
   display: inline-block;
   min-width: 80px;
 }
 
 .description-text {
   margin-top: 5px;
-  color: #4b5563;
+  color: var(--gray-600);
   line-height: 1.5;
   white-space: pre-wrap;
 }
@@ -939,15 +887,15 @@ onMounted(fetchProjects);
   gap: 12px;
   margin-top: 25px;
   padding-top: 20px;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--border-color-light);
 }
 
 .primary-btn {
-  background-color: #3a6ffb;
+  background: var(--gradient-primary);
   color: white;
   border: none;
   padding: 10px 20px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-weight: 500;
   transition: background-color 0.2s;
@@ -955,15 +903,15 @@ onMounted(fetchProjects);
 }
 
 .primary-btn:hover {
-  background-color: #255aee;
+  background: linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%);
 }
 
 .secondary-btn {
-  background-color: #f3f4f6;
-  color: #374151;
-  border: 1px solid #d1d5db;
+  background-color: var(--surface-2);
+  color: var(--gray-700);
+  border: 1px solid var(--border-color);
   padding: 10px 20px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-weight: 500;
   transition: background-color 0.2s;
@@ -971,7 +919,7 @@ onMounted(fetchProjects);
 }
 
 .secondary-btn:hover {
-  background-color: #e5e7eb;
+  background-color: var(--surface-3);
 }
 
 /* 响应式设计 */
@@ -1046,7 +994,7 @@ onMounted(fetchProjects);
 
 @media (max-width: 480px) {
   .project-list-container {
-    padding: 12px;
+    padding: var(--spacing-3);
   }
   
   .project-count {
@@ -1054,7 +1002,7 @@ onMounted(fetchProjects);
   }
   
   .controls-bar {
-    padding: 12px;
+    padding: var(--spacing-3);
   }
   
   .search-input {

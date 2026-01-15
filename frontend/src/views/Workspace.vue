@@ -495,7 +495,7 @@ onUnmounted(() => {
   display: flex;
   height: 100%;
   width: 100%;
-  background: var(--gray-50, #f8fafc);
+  background: var(--surface-0, #f6f7fb);
   overflow: hidden;
   --sidebar-width: 280px;
   --sidebar-width-collapsed: 64px;
@@ -504,13 +504,13 @@ onUnmounted(() => {
 /* 现代化侧边栏 */
 .workspace-sidebar {
   width: var(--sidebar-width);
-  background: white;
-  border-right: 1px solid #e5e7eb;
+  background: var(--surface-1);
+  border-right: 1px solid var(--border-color);
   transition: width 0.3s ease, transform 0.3s ease;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-xs);
 }
 
 .workspace-sidebar.collapsed {
@@ -524,7 +524,7 @@ onUnmounted(() => {
   justify-content: space-between;
   padding: var(--spacing-3) var(--spacing-4);
   border-bottom: var(--border-width) solid var(--border-color-light);
-  background: var(--gray-50);
+  background: var(--surface-2);
   min-height: 56px;
   flex-shrink: 0;
 }
@@ -539,7 +539,7 @@ onUnmounted(() => {
   align-items: center;
   gap: var(--spacing-2);
   text-decoration: none;
-  color: var(--gray-700);
+  color: var(--gray-800);
   font-weight: var(--font-semibold);
   transition: all var(--transition-base);
   font-size: var(--text-base);
@@ -558,7 +558,7 @@ onUnmounted(() => {
 .sidebar-toggle-btn {
   width: 32px;
   height: 32px;
-  background: var(--gray-50);
+  background: var(--surface-1);
   border: var(--border-width) solid var(--border-color);
   border-radius: var(--radius-base);
   color: var(--gray-500);
@@ -570,8 +570,8 @@ onUnmounted(() => {
 }
 
 .sidebar-toggle-btn:hover {
-  background: var(--gray-100);
-  color: var(--gray-700);
+  background: var(--surface-2);
+  color: var(--gray-800);
   border-color: var(--border-color-dark);
   transform: scale(1.05);
 }
@@ -596,12 +596,12 @@ onUnmounted(() => {
   border-radius: var(--radius-md);
   transition: all var(--transition-base);
   user-select: none;
-  background: var(--gray-50);
+  background: var(--surface-2);
   margin-bottom: var(--spacing-1);
 }
 
 .section-header:hover {
-  background: var(--gray-100);
+  background: var(--surface-3);
   transform: translateX(2px);
 }
 
@@ -618,7 +618,7 @@ onUnmounted(() => {
   flex: 1;
   font-size: var(--text-sm);
   font-weight: var(--font-semibold);
-  color: var(--gray-700);
+  color: var(--gray-800);
 }
 
 .section-arrow {
@@ -643,27 +643,29 @@ onUnmounted(() => {
   gap: var(--spacing-3);
   padding: var(--spacing-3) var(--spacing-4);
   margin: var(--spacing-1) 0;
-  color: var(--gray-500);
+  color: var(--gray-600);
   text-decoration: none;
   border-radius: var(--radius-base);
   transition: all var(--transition-base);
   font-size: var(--text-sm);
+  border: 1px solid transparent;
 }
 
 .nav-link:hover {
-  background: var(--gray-100);
-  color: var(--gray-700);
+  background: var(--surface-3);
+  color: var(--gray-800);
   transform: translateX(4px);
 }
 
 .nav-link.router-link-active {
-  background: var(--gradient-primary);
-  color: white;
-  box-shadow: var(--shadow-md);
+  background: rgba(var(--accent-rgb), 0.14);
+  color: var(--primary-700);
+  box-shadow: none;
+  border-color: rgba(var(--accent-rgb), 0.2);
 }
 
 .nav-link.router-link-active .link-icon {
-  color: white;
+  color: var(--primary-700);
 }
 
 .link-icon {
@@ -704,19 +706,19 @@ onUnmounted(() => {
 }
 
 .shortcut-link:hover {
-  background: #f1f5f9;
-  color: #334155;
+  background: var(--surface-2);
+  color: var(--gray-800);
 }
 
 .shortcut-link.router-link-active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: rgba(var(--accent-rgb), 0.18);
+  color: var(--primary-700);
 }
 
 .shortcut-divider {
   width: 24px;
   height: 1px;
-  background: #e2e8f0;
+  background: var(--border-color-light);
   margin: 4px 0;
 }
 
@@ -724,7 +726,7 @@ onUnmounted(() => {
 .sidebar-footer {
   padding: var(--spacing-3);
   border-top: var(--border-width) solid var(--border-color);
-  background: var(--gray-50);
+  background: var(--surface-2);
 }
 
 .ai-sidebar-btn {
@@ -756,7 +758,7 @@ onUnmounted(() => {
 /* 主内容区 */
 .main-content {
   flex: 1;
-  background: var(--gray-50);
+  background: var(--surface-0);
   overflow: hidden;
   position: relative;
 }
@@ -764,7 +766,7 @@ onUnmounted(() => {
 .content-wrapper {
   height: 100%;
   overflow-y: auto;
-  background: white;
+  background: var(--surface-1);
   /* 优化滚动性能 */
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
@@ -772,7 +774,7 @@ onUnmounted(() => {
   will-change: scroll-position;
   /* 自定义滚动条样式 */
   scrollbar-width: thin;
-  scrollbar-color: var(--gray-400) var(--gray-100);
+  scrollbar-color: var(--gray-400) var(--surface-2);
 }
 
 .content-wrapper::-webkit-scrollbar {
@@ -780,7 +782,7 @@ onUnmounted(() => {
 }
 
 .content-wrapper::-webkit-scrollbar-track {
-  background: var(--gray-100);
+  background: var(--surface-2);
   border-radius: var(--radius-md);
 }
 
@@ -804,12 +806,12 @@ onUnmounted(() => {
 }
 
 .sidebar-content::-webkit-scrollbar-thumb {
-  background: #e2e8f0;
+  background: var(--gray-300);
   border-radius: 3px;
 }
 
 .sidebar-content::-webkit-scrollbar-thumb:hover {
-  background: #cbd5e1;
+  background: var(--gray-400);
 }
 
 /* 移动端遮罩层 */
@@ -831,10 +833,10 @@ onUnmounted(() => {
   left: 20px;
   width: 56px;
   height: 56px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--gradient-primary);
   border: none;
   border-radius: 16px;
-  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3), 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.3), 0 2px 8px rgba(0, 0, 0, 0.1);
   color: white;
   cursor: pointer;
   display: flex;
@@ -866,7 +868,7 @@ onUnmounted(() => {
 
 .mobile-sidebar-trigger:hover {
   transform: translateY(-2px) scale(1.05);
-  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4), 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8px 24px rgba(var(--accent-rgb), 0.4), 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .mobile-sidebar-trigger:active {
@@ -924,10 +926,10 @@ onUnmounted(() => {
 
 @keyframes glow {
   from {
-    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3), 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.3), 0 2px 8px rgba(0, 0, 0, 0.1);
   }
   to {
-    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5), 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 6px 20px rgba(var(--accent-rgb), 0.5), 0 4px 12px rgba(0, 0, 0, 0.15);
   }
 }
 
@@ -967,7 +969,7 @@ onUnmounted(() => {
     z-index: 200;
     transform: translateX(-100%);
     transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    background: linear-gradient(180deg, var(--surface-1) 0%, var(--surface-2) 100%);
     box-shadow: none;
     border-top-right-radius: 20px;
     border-bottom-right-radius: 20px;
@@ -990,7 +992,7 @@ onUnmounted(() => {
   
   /* 移动端侧边栏头部优化 */
   .workspace-sidebar.mobile .sidebar-controls {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: var(--gradient-primary);
     color: white;
     border-bottom: none;
     padding: 20px 20px 16px;
@@ -1033,36 +1035,36 @@ onUnmounted(() => {
   }
   
   .workspace-sidebar.mobile .nav-link:hover {
-    background: rgba(102, 126, 234, 0.1);
+    background: rgba(var(--accent-rgb), 0.08);
     transform: translateX(8px) scale(1.02);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+    box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.15);
   }
   
   .workspace-sidebar.mobile .nav-link.router-link-active {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+    background: rgba(var(--accent-rgb), 0.16);
+    box-shadow: 0 6px 20px rgba(var(--accent-rgb), 0.3);
     transform: translateX(6px);
   }
   
   .workspace-sidebar.mobile .section-header {
     margin: 8px 12px 4px;
     border-radius: 12px;
-    background: rgba(102, 126, 234, 0.05);
-    border: 1px solid rgba(102, 126, 234, 0.1);
+    background: rgba(var(--accent-rgb), 0.05);
+    border: 1px solid rgba(var(--accent-rgb), 0.12);
   }
   
   .workspace-sidebar.mobile .section-header:hover {
-    background: rgba(102, 126, 234, 0.1);
-    border-color: rgba(102, 126, 234, 0.2);
+    background: rgba(var(--accent-rgb), 0.12);
+    border-color: rgba(var(--accent-rgb), 0.2);
   }
   
   /* 移动端AI助手按钮 */
   .workspace-sidebar.mobile .ai-sidebar-btn {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: var(--gradient-primary);
     border-radius: 16px;
     padding: 16px;
     font-size: 16px;
-    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.3);
     margin: 12px;
   }
   

@@ -152,13 +152,14 @@
     </div>
 
     <!-- 日志查看模态框 -->
-    <div v-if="showLogsModal" class="modal-overlay" @click="closeLogsModal">
-      <div class="modal-content logs-modal" @click.stop>
-        <div class="modal-header">
-          <h3>{{ logsTitle }}</h3>
-          <button @click="closeLogsModal" class="close-btn">×</button>
-        </div>
-        <div class="logs-content">
+    <teleport to="body">
+      <div v-if="showLogsModal" class="modal-overlay app-modal-viewport app-modal-backdrop" @click="closeLogsModal">
+        <div class="modal-content logs-modal app-modal" @click.stop>
+          <div class="modal-header app-modal-header">
+            <h3>{{ logsTitle }}</h3>
+            <button @click="closeLogsModal" class="close-btn app-modal-close">×</button>
+          </div>
+          <div class="logs-content">
 
           
           <!-- 日志工具栏 -->
@@ -231,17 +232,18 @@
             </div>
           </div>
         </div>
-        <div class="modal-footer">
-          <button @click="exportLogs" class="export-btn">Export Logs</button>
-          <button @click="closeLogsModal" class="close-modal-btn">Close</button>
+          <div class="modal-footer app-modal-footer">
+            <button @click="exportLogs" class="export-btn">Export Logs</button>
+            <button @click="closeLogsModal" class="close-modal-btn">Close</button>
+          </div>
         </div>
       </div>
-    </div>
+    </teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import SystemPerformance from '@/components/SystemPerformance.vue'
 
@@ -275,6 +277,10 @@ const hasNewLogs = ref(false)
 const newLogsCount = ref(0)
 const lastScrollTop = ref(0)
 const selectedLogLine = ref(-1)
+
+const syncModalLock = (isOpen) => {
+  document.body.classList.toggle('modal-open', isOpen)
+}
 
 // 计算属性
 const filteredHistory = computed(() => {
@@ -356,6 +362,10 @@ const viewLogs = () => {
   
   connectToLogStream()
 }
+
+watch(showLogsModal, (isOpen) => {
+  syncModalLock(isOpen)
+})
 
 const connectToLogStream = () => {
   // 关闭现有连接
@@ -596,6 +606,7 @@ onUnmounted(() => {
   if (logsEventSource.value) {
     logsEventSource.value.close()
   }
+  syncModalLock(false)
 })
 </script>
 
@@ -953,79 +964,12 @@ onUnmounted(() => {
 }
 
 /* 日志模态框 */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  backdrop-filter: blur(4px);
-}
-
-.modal-content {
-  background: white;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xl);
+.logs-modal {
   width: 95vw;
   max-width: 1000px;
   max-height: 85vh;
-  display: flex;
-  flex-direction: column;
-  animation: modalSlideUp 0.3s ease-out;
-}
-
-@keyframes modalSlideUp {
-  from {
-    transform: scale(0.95);
-    opacity: 0;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-.logs-modal {
   height: 75vh;
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--spacing-4) var(--spacing-6);
-  border-bottom: var(--border-width) solid var(--border-color);
-}
-
-.modal-header h3 {
-  margin: 0;
-  color: var(--gray-800);
-  font-size: var(--text-lg);
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  font-size: var(--text-2xl);
-  color: var(--gray-400);
-  cursor: pointer;
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-md);
-}
-
-.close-btn:hover {
-  color: var(--gray-600);
-  background: var(--gray-100);
+  overflow: hidden;
 }
 
 .logs-content {
@@ -1078,7 +1022,7 @@ onUnmounted(() => {
   transform: translateZ(0);
   /* 自定义滚动条样式 */
   scrollbar-width: thin;
-  scrollbar-color: var(--gray-400) var(--gray-100);
+  scrollbar-color: var(--gray-400) var(--surface-2);
 }
 
 .logs-container::-webkit-scrollbar {
@@ -1086,7 +1030,7 @@ onUnmounted(() => {
 }
 
 .logs-container::-webkit-scrollbar-track {
-  background: var(--gray-100);
+  background: var(--surface-2);
   border-radius: var(--radius-sm);
 }
 
@@ -1293,18 +1237,10 @@ onUnmounted(() => {
   }
 }
 
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--spacing-3);
-  padding: var(--spacing-4) var(--spacing-6);
-  border-top: var(--border-width) solid var(--border-color);
-}
-
 .export-btn {
-  background: var(--gray-100);
+  background: var(--surface-1);
   color: var(--gray-700);
-  border: none;
+  border: var(--border-width) solid var(--border-color);
   padding: var(--spacing-2) var(--spacing-4);
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
@@ -1312,11 +1248,11 @@ onUnmounted(() => {
 }
 
 .export-btn:hover {
-  background: var(--gray-200);
+  background: var(--surface-3);
 }
 
 .close-modal-btn {
-  background: var(--primary-600);
+  background: var(--gradient-primary);
   color: white;
   border: none;
   padding: var(--spacing-2) var(--spacing-4);
@@ -1326,7 +1262,7 @@ onUnmounted(() => {
 }
 
 .close-modal-btn:hover {
-  background: var(--primary-700);
+  background: linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%);
 }
 
 /* 响应式设计 */
@@ -1372,7 +1308,7 @@ onUnmounted(() => {
     align-items: flex-start;
   }
   
-  .modal-content {
+  .logs-modal {
     width: 95vw;
     height: 90vh;
     margin: var(--spacing-4);

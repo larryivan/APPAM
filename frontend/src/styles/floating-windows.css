@@ -8,14 +8,14 @@
 }
 
 .floating-button {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--gradient-primary);
   border: none;
   border-radius: 50%;
   width: 48px;
   height: 48px;
   color: white;
   cursor: pointer;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 10px 20px rgba(var(--accent-rgb), 0.2);
   transition: all 0.3s ease;
   display: flex;
   align-items: center;
@@ -25,24 +25,24 @@
 
 .floating-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 14px 28px rgba(var(--accent-rgb), 0.24);
 }
 
 /* 浮动窗口基础样式 */
 .floating-window {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  background: var(--surface-1);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-color);
   animation: scaleIn 0.2s ease-out;
 }
 
 /* 窗口头部统一样式 */
 .window-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--gradient-primary);
   color: white;
   padding: 12px 16px;
   display: flex;
@@ -85,7 +85,7 @@
   color: white;
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;

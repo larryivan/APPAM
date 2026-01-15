@@ -1,8 +1,8 @@
 <!-- FilePreviewModal.vue - Enhanced file preview with editing capabilities -->
 <template>
-  <div v-if="showModal" class="modal-backdrop" @click.self="closeModal">
-    <div class="preview-modal">
-      <div class="preview-header">
+  <div v-if="showModal" class="modal-backdrop app-modal-viewport app-modal-backdrop" @click.self="closeModal">
+    <div class="preview-modal app-modal">
+      <div class="preview-header app-modal-header">
         <div class="header-left">
           <h4>{{ fileName }}</h4>
           <div class="file-info" v-if="previewData.mimetype">
@@ -46,10 +46,13 @@
             </button>
             <button 
               @click="closeModal" 
-              class="action-btn close-btn"
+              class="app-modal-close"
               title="Close"
             >
-              ✖️
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
             </button>
           </div>
         </div>
@@ -2053,46 +2056,14 @@ onUnmounted(() => {
 
 <style scoped>
 .modal-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.8);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-  padding: 20px;
+  padding: var(--spacing-4);
 }
 
 .preview-modal {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
   width: 90vw;
   height: 90vh;
   max-width: 1200px;
-  display: flex;
-  flex-direction: column;
   overflow: hidden;
-  transition: all 0.3s ease;
-}
-
-.preview-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px 24px;
-  border-bottom: 1px solid #e5e7eb;
-  background: #f9fafb;
-}
-
-.header-left h4 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #111827;
 }
 
 .file-info {
@@ -2102,12 +2073,12 @@ onUnmounted(() => {
 }
 
 .file-type, .file-size {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--surface-3);
+  color: var(--gray-600);
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
-  font-family: monospace;
+  font-family: var(--font-family-mono);
 }
 
 .header-actions {
@@ -2117,17 +2088,17 @@ onUnmounted(() => {
 
 .action-btn {
   padding: 8px 16px;
-  border: 1px solid #d1d5db;
-  background: white;
-  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--surface-1);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 14px;
   transition: all 0.2s;
 }
 
 .action-btn:hover:not(:disabled) {
-  background: #f3f4f6;
-  border-color: #9ca3af;
+  background: var(--surface-3);
+  border-color: var(--gray-400);
 }
 
 .action-btn:disabled {
@@ -2135,11 +2106,10 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
-.edit-btn { background: #eff6ff; color: #3b82f6; }
-.save-btn { background: #ecfdf5; color: #10b981; }
-.cancel-btn { background: #fef2f2; color: #ef4444; }
-.close-btn { background: #f3f4f6; color: #6b7280; }
-.download-btn { background: #fef3c7; color: #f59e0b; }
+.edit-btn { background: rgba(var(--accent-rgb), 0.12); color: var(--primary-500); }
+.save-btn { background: var(--success-50); color: var(--success-500); }
+.cancel-btn { background: var(--error-50); color: var(--error-500); }
+.download-btn { background: var(--warning-50); color: var(--warning-500); }
 
 .preview-content {
   flex: 1;
@@ -2159,14 +2129,14 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: #f9fafb;
-  border-bottom: 1px solid #e5e7eb;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-color-light);
 }
 
 .language-select {
   padding: 6px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
   font-size: 14px;
 }
 
@@ -2174,11 +2144,11 @@ onUnmounted(() => {
   display: flex;
   gap: 16px;
   font-size: 14px;
-  color: #6b7280;
+  color: var(--gray-600);
 }
 
 .unsaved-indicator {
-  color: #f59e0b;
+  color: var(--warning-500);
   font-weight: 500;
 }
 
@@ -2187,19 +2157,19 @@ onUnmounted(() => {
   padding: 16px;
   border: none;
   outline: none;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-family: var(--font-family-mono);
   font-size: 14px;
   line-height: 1.5;
   resize: none;
-  background: #fafafa;
+  background: var(--surface-2);
 }
 
 .edit-footer {
   padding: 8px 16px;
-  background: #f3f4f6;
-  border-top: 1px solid #e5e7eb;
+  background: var(--surface-3);
+  border-top: 1px solid var(--border-color-light);
   font-size: 12px;
-  color: #6b7280;
+  color: var(--gray-600);
 }
 
 .preview-container {
@@ -2223,16 +2193,16 @@ onUnmounted(() => {
 
 .zoom-btn {
   padding: 6px 12px;
-  border: 1px solid #d1d5db;
-  background: white;
-  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: var(--surface-1);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 14px;
 }
 
 .zoom-level {
   font-weight: 500;
-  color: #374151;
+  color: var(--gray-700);
 }
 
 .image-container {
@@ -2241,8 +2211,8 @@ onUnmounted(() => {
   display: flex;
   justify-content: center;
   align-items: center;
-  background: #f9fafb;
-  border-radius: 8px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
 }
 
 .preview-image {
@@ -2260,7 +2230,7 @@ onUnmounted(() => {
 .preview-tabs {
   display: flex;
   margin-bottom: 16px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border-color-light);
 }
 
 .tab-btn {
@@ -2269,25 +2239,25 @@ onUnmounted(() => {
   border: none;
   cursor: pointer;
   font-weight: 500;
-  color: #6b7280;
+  color: var(--gray-600);
   border-bottom: 2px solid transparent;
   transition: all 0.2s;
 }
 
 .tab-btn:hover {
-  color: #374151;
+  color: var(--gray-700);
 }
 
 .tab-btn.active {
-  color: #3b82f6;
-  border-bottom-color: #3b82f6;
+  color: var(--primary-500);
+  border-bottom-color: var(--primary-500);
 }
 
 .code-content {
-  background: #f8fafc;
+  background: var(--surface-2);
   padding: 16px;
-  border-radius: 8px;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-family-mono);
   font-size: 14px;
   line-height: 1.5;
   overflow-x: auto;
@@ -2313,12 +2283,12 @@ onUnmounted(() => {
 .csv-table th,
 .csv-table td {
   padding: 8px 12px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border-color-light);
   text-align: left;
 }
 
 .csv-table th {
-  background: #f9fafb;
+  background: var(--surface-2);
   font-weight: 600;
   position: sticky;
   top: 0;
@@ -2327,18 +2297,18 @@ onUnmounted(() => {
 .table-footer {
   padding: 12px;
   text-align: center;
-  color: #6b7280;
+  color: var(--gray-600);
   font-size: 14px;
-  background: #f9fafb;
-  border-top: 1px solid #e5e7eb;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border-color-light);
 }
 
 .chart-container {
   width: 100%;
   height: 500px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: white;
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
   padding: 10px;
   min-height: 400px;
   max-height: 600px;
@@ -2354,10 +2324,10 @@ onUnmounted(() => {
 
 .viz-btn {
   padding: 8px 16px;
-  background: #f8fafc;
-  color: #64748b;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--gray-600);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
@@ -2365,20 +2335,20 @@ onUnmounted(() => {
 }
 
 .viz-btn:hover {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
-  color: #475569;
+  background: var(--surface-3);
+  border-color: var(--border-color-dark);
+  color: var(--gray-700);
 }
 
 .viz-btn.active {
-  background: #3b82f6;
+  background: var(--primary-500);
   color: white;
-  border-color: #3b82f6;
+  border-color: var(--primary-500);
 }
 
 .viz-btn.active:hover {
-  background: #2563eb;
-  border-color: #2563eb;
+  background: var(--primary-600);
+  border-color: var(--primary-600);
 }
 
 /* 响应式设计 */
@@ -2420,7 +2390,7 @@ onUnmounted(() => {
   .viz-btn {
     padding: 5px 10px;
     font-size: 11px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
   }
   
   .visualization-container {
@@ -2462,32 +2432,32 @@ onUnmounted(() => {
   gap: 8px;
   margin-bottom: 16px;
   padding: 12px;
-  background: #f8fafc;
-  border-radius: 6px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
 }
 
 .format-badge {
-  background: #3b82f6;
+  background: var(--primary-500);
   color: white;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 600;
 }
 
 .count-info {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--surface-3);
+  color: var(--gray-600);
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
 }
 
 .size-info {
-  background: #e0e7ff;
-  color: #3730a3;
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--primary-700);
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 600;
 }
@@ -2496,9 +2466,9 @@ onUnmounted(() => {
 .large-file-warning {
   margin: 16px 0;
   padding: 20px;
-  background: #fef3cd;
-  border: 1px solid #fbbf24;
-  border-radius: 8px;
+  background: var(--warning-50);
+  border: 1px solid var(--warning-500);
+  border-radius: var(--radius-sm);
 }
 
 .warning-content {
@@ -2515,13 +2485,13 @@ onUnmounted(() => {
 
 .warning-text h4 {
   margin: 0 0 8px 0;
-  color: #92400e;
+  color: var(--warning-600);
   font-size: 16px;
 }
 
 .warning-text p {
   margin: 0;
-  color: #92400e;
+  color: var(--warning-600);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -2535,9 +2505,9 @@ onUnmounted(() => {
 
 .large-file-actions .action-btn {
   padding: 10px 16px;
-  border: 1px solid #d1d5db;
-  background: white;
-  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--surface-1);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 14px;
   transition: all 0.2s;
@@ -2547,8 +2517,8 @@ onUnmounted(() => {
 }
 
 .large-file-actions .action-btn:hover:not(:disabled) {
-  background: #f3f4f6;
-  border-color: #9ca3af;
+  background: var(--surface-3);
+  border-color: var(--gray-400);
 }
 
 .large-file-actions .action-btn:disabled {
@@ -2557,19 +2527,19 @@ onUnmounted(() => {
 }
 
 .large-file-actions .action-btn.primary {
-  background: #3b82f6;
-  border-color: #3b82f6;
+  background: var(--primary-500);
+  border-color: var(--primary-500);
   color: white;
 }
 
 .large-file-actions .action-btn.primary:hover:not(:disabled) {
-  background: #2563eb;
-  border-color: #2563eb;
+  background: var(--primary-600);
+  border-color: var(--primary-600);
 }
 
 .sampled-preview {
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
@@ -2578,12 +2548,12 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  background: #f8fafc;
-  border-bottom: 1px solid #e5e7eb;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-color-light);
 }
 
 .sample-tag {
-  background: #10b981;
+  background: var(--success-500);
   color: white;
   padding: 2px 6px;
   border-radius: 3px;
@@ -2593,7 +2563,7 @@ onUnmounted(() => {
 
 .sample-info {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--gray-600);
 }
 
 .bio-analysis-panel {
@@ -2606,9 +2576,9 @@ onUnmounted(() => {
   display: flex;
   gap: 2px;
   margin-bottom: 16px;
-  background: #f3f4f6;
+  background: var(--surface-3);
   padding: 4px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   flex-wrap: wrap;
 }
 
@@ -2618,21 +2588,21 @@ onUnmounted(() => {
   padding: 8px 12px;
   background: none;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 14px;
-  color: #6b7280;
+  color: var(--gray-600);
   transition: all 0.2s;
 }
 
 .tab-btn:hover {
-  background: #e5e7eb;
+  background: var(--border-color-light);
 }
 
 .tab-btn.active {
-  background: white;
-  color: #3b82f6;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  background: var(--surface-1);
+  color: var(--primary-500);
+  box-shadow: var(--shadow-xs);
 }
 
 .analysis-content {
@@ -2649,9 +2619,9 @@ onUnmounted(() => {
 }
 
 .stat-card {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-sm);
   padding: 16px;
   text-align: center;
 }
@@ -2659,14 +2629,14 @@ onUnmounted(() => {
 .stat-card h4 {
   margin: 0 0 8px 0;
   font-size: 14px;
-  color: #64748b;
+  color: var(--gray-600);
   font-weight: 500;
 }
 
 .stat-value {
   font-size: 24px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--gray-900);
   margin: 0;
 }
 
@@ -2682,8 +2652,8 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 12px;
-  background: #f8fafc;
-  border-radius: 6px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
 }
 
 .sequence-info {
@@ -2700,45 +2670,45 @@ onUnmounted(() => {
 
 .sequence-select {
   padding: 4px 8px;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
   font-size: 12px;
   max-width: 250px;
 }
 
 .format-btn {
   padding: 4px 8px;
-  background: #3b82f6;
+  background: var(--primary-500);
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 12px;
 }
 
 .sequence-display {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
 .sequence-header-info {
   padding: 12px;
-  background: #f9fafb;
-  border-bottom: 1px solid #e5e7eb;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-color-light);
 }
 
 .sequence-header-info h4 {
   margin: 0 0 8px 0;
   font-size: 16px;
-  color: #1f2937;
+  color: var(--gray-900);
 }
 
 .sequence-meta {
   display: flex;
   gap: 16px;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--gray-600);
 }
 
 .sequence-content {
@@ -2750,9 +2720,9 @@ onUnmounted(() => {
 }
 
 .sequence-text {
-  background: #f3f4f6;
+  background: var(--surface-3);
   padding: 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-family: 'Courier New', monospace;
   font-size: 12px;
   line-height: 1.4;
@@ -2771,9 +2741,9 @@ onUnmounted(() => {
 }
 
 .quality-text {
-  background: #f8fafc;
+  background: var(--surface-2);
   padding: 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-family: 'Courier New', monospace;
   font-size: 12px;
   margin-bottom: 8px;
@@ -2786,9 +2756,9 @@ onUnmounted(() => {
   gap: 1px;
   height: 60px;
   align-items: end;
-  background: #f8fafc;
+  background: var(--surface-2);
   padding: 4px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   overflow-x: auto;
 }
 
@@ -2810,12 +2780,12 @@ onUnmounted(() => {
 
 .base-count {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--gray-600);
 }
 
 .gc-content {
   font-size: 12px;
-  color: #3b82f6;
+  color: var(--primary-500);
   font-weight: 600;
 }
 
@@ -2824,29 +2794,29 @@ onUnmounted(() => {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
-  background: white;
-  border-radius: 6px;
+  background: var(--surface-1);
+  border-radius: var(--radius-sm);
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-xs);
 }
 
 .variants-table th, .features-table th, .regions-table th, .sam-table th {
-  background: #f8fafc;
+  background: var(--surface-2);
   padding: 8px;
   text-align: left;
   font-weight: 600;
-  color: #374151;
-  border-bottom: 1px solid #e5e7eb;
+  color: var(--gray-700);
+  border-bottom: 1px solid var(--border-color-light);
 }
 
 .variants-table td, .features-table td, .regions-table td, .sam-table td {
   padding: 6px 8px;
-  border-bottom: 1px solid #f3f4f6;
-  color: #6b7280;
+  border-bottom: 1px solid var(--surface-3);
+  color: var(--gray-600);
 }
 
 .variants-table tr:hover, .features-table tr:hover, .regions-table tr:hover, .sam-table tr:hover {
-  background: #f9fafb;
+  background: var(--surface-2);
 }
 
 .sequence-cell, .quality-cell {
@@ -2869,8 +2839,8 @@ onUnmounted(() => {
 .vcf-table, .annotation-table, .bed-table, .alignments-table {
   max-height: 400px;
   overflow-y: auto;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-sm);
 }
 
 /* 响应式设计 */

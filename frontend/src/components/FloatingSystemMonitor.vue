@@ -184,11 +184,11 @@ const toggleFullscreen = () => {
 
 const getStatusText = () => {
   const statusMap = {
-    normal: '正常',
-    warning: '警告',
-    critical: '严重'
+    normal: 'Normal',
+    warning: 'Warning',
+    critical: 'Critical'
   }
-  return statusMap[systemStatus.value] || '未知'
+  return statusMap[systemStatus.value] || 'Unknown'
 }
 
 // Drag functionality
@@ -408,15 +408,15 @@ onUnmounted(() => {
 }
 
 .monitor-button {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: none;
+  background: var(--surface-1);
+  border: var(--border-width) solid rgba(var(--accent-rgb), 0.25);
   border-radius: 50%;
   width: 48px;
   height: 48px;
-  color: white;
+  color: var(--primary-600);
   cursor: pointer;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-base);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -425,29 +425,31 @@ onUnmounted(() => {
 
 .monitor-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-md);
+  background: var(--surface-2);
 }
 
 /* Monitor window */
 .monitor-window {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  background: var(--surface-1);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid #e2e8f0;
+  border: var(--border-width) solid var(--border-color-light);
   animation: scaleIn 0.2s ease-out;
 }
 
 /* 头部 */
 .monitor-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.12) 0%, rgba(255, 255, 255, 0.96) 85%);
+  color: var(--gray-900);
   padding: 12px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  border-bottom: var(--border-width) solid var(--border-color-light);
   cursor: move;
   user-select: none;
 }
@@ -455,7 +457,8 @@ onUnmounted(() => {
 .header-info h3 {
   margin: 0 0 4px 0;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: var(--font-semibold);
+  font-family: var(--font-family-display);
 }
 
 .status-indicator {
@@ -463,7 +466,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  opacity: 0.9;
+  color: var(--gray-600);
 }
 
 .status-indicator .status-dot {
@@ -473,16 +476,16 @@ onUnmounted(() => {
 }
 
 .status-indicator .status-dot.normal {
-  background: #10b981;
+  background: var(--success-500);
 }
 
 .status-indicator .status-dot.warning {
-  background: #f59e0b;
+  background: var(--warning-500);
   animation: pulse 2s infinite;
 }
 
 .status-indicator .status-dot.critical {
-  background: #ef4444;
+  background: var(--error-500);
   animation: pulse 2s infinite;
 }
 
@@ -492,26 +495,31 @@ onUnmounted(() => {
 }
 
 .control-btn {
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  color: white;
+  background: var(--surface-1);
+  border: var(--border-width) solid var(--border-color-light);
+  color: var(--gray-600);
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: var(--shadow-xs);
 }
 
 .control-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-  transform: scale(1.05);
+  background: var(--surface-2);
+  color: var(--gray-800);
+  border-color: var(--border-color);
+  transform: translateY(-1px);
 }
 
 .close-btn:hover {
-  background: rgba(239, 68, 68, 0.9);
+  background: var(--error-50);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: var(--error-600);
 }
 
 /* 内容区域 */
@@ -628,7 +636,8 @@ onUnmounted(() => {
 @media (hover: none) and (pointer: coarse) {
   .monitor-button:hover {
     transform: none;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-sm);
+    background: var(--surface-1);
   }
   
   .monitor-button:active {
@@ -637,12 +646,14 @@ onUnmounted(() => {
   }
   
   .control-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--surface-1);
+    color: var(--gray-600);
+    border-color: var(--border-color-light);
     transform: none;
   }
   
   .control-btn:active {
-    transform: scale(0.9);
+    transform: scale(0.96);
     transition-duration: 0.1s;
   }
 }

@@ -92,6 +92,12 @@ const route = useRoute()
 const projectId = computed(() => route.params.id)
 const projectName = ref('APPAM')
 
+const getThemeValue = (variableName, fallback) => {
+  if (typeof window === 'undefined') return fallback
+  const value = getComputedStyle(document.documentElement).getPropertyValue(variableName)
+  return value ? value.trim() : fallback
+}
+
 // 窗口状态
 const isOpen = ref(false)
 const isFullscreen = ref(false)
@@ -224,32 +230,41 @@ const clearTerminal = () => {
 
 // 初始化终端
 const initTerminal = () => {
+  const darkBg = getThemeValue('--dark-bg', '#0b1220')
+  const textLight = getThemeValue('--text-light', '#e2e8f0')
+  const primary400 = getThemeValue('--primary-400', '#5f8cff')
+  const primary500 = getThemeValue('--primary-500', '#2563eb')
+  const success500 = getThemeValue('--success-500', '#16a34a')
+  const warning500 = getThemeValue('--warning-500', '#f59e0b')
+  const error500 = getThemeValue('--error-500', '#ef4444')
+  const secondaryColor = getThemeValue('--secondary-color', '#0ea5e9')
+  const gray700 = getThemeValue('--gray-700', '#374151')
+  const monoFont = getThemeValue('--font-family-mono', 'Menlo, Monaco, "Courier New", monospace')
+
   // 移动端优化配置
   const terminalConfig = {
     theme: {
-      background: '#1e1e1e',
-      foreground: '#d4d4d4',
-      cursor: '#aeafad',
-      black: '#000000',
-      red: '#cd3131',
-      green: '#0dbc79',
-      yellow: '#e5e510',
-      blue: '#2472c8',
-      magenta: '#bc3fbc',
-      cyan: '#11a8cd',
-      white: '#e5e5e5',
-      brightBlack: '#666666',
-      brightRed: '#f14c4c',
-      brightGreen: '#23d18b',
-      brightYellow: '#f5f543',
-      brightBlue: '#3b8eea',
-      brightMagenta: '#d670d6',
-      brightCyan: '#29b8db',
-      brightWhite: '#e5e5e5'
+      background: darkBg,
+      foreground: textLight,
+      cursor: primary400,
+      black: darkBg,
+      red: error500,
+      green: success500,
+      yellow: warning500,
+      blue: primary500,
+      magenta: primary400,
+      cyan: secondaryColor,
+      white: textLight,
+      brightBlack: gray700,
+      brightRed: error500,
+      brightGreen: success500,
+      brightYellow: warning500,
+      brightBlue: primary500,
+      brightMagenta: primary400,
+      brightCyan: secondaryColor,
+      brightWhite: textLight
     },
-    fontFamily: isMobile.value ? 
-      'SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, Monaco, "Courier New", monospace' :
-      'Menlo, Monaco, "Courier New", monospace',
+    fontFamily: monoFont,
     fontSize: isMobile.value ? 12 : 14,
     lineHeight: isMobile.value ? 1.4 : 1.2,
     cursorBlink: true,
@@ -502,15 +517,15 @@ onUnmounted(() => {
 }
 
 .terminal-button {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: none;
+  background: var(--surface-1);
+  border: var(--border-width) solid rgba(var(--accent-rgb), 0.25);
   border-radius: 50%;
   width: 48px;
   height: 48px;
-  color: white;
+  color: var(--primary-600);
   cursor: pointer;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-base);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -519,29 +534,31 @@ onUnmounted(() => {
 
 .terminal-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-md);
+  background: var(--surface-2);
 }
 
 /* 终端窗口 */
 .terminal-window {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  background: var(--surface-1);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid #e2e8f0;
+  border: var(--border-width) solid var(--border-color-light);
   animation: scaleIn 0.2s ease-out;
 }
 
 /* 标题栏 */
 .terminal-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.12) 0%, rgba(255, 255, 255, 0.96) 85%);
+  color: var(--gray-900);
   padding: 12px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  border-bottom: var(--border-width) solid var(--border-color-light);
   cursor: move;
   user-select: none;
 }
@@ -553,8 +570,9 @@ onUnmounted(() => {
 
 .terminal-title {
   font-size: 14px;
-  font-weight: 600;
-  margin: 0 0 4px 0;
+  font-weight: var(--font-semibold);
+  margin: 0;
+  font-family: var(--font-family-display);
 }
 
 .header-right {
@@ -563,46 +581,53 @@ onUnmounted(() => {
 }
 
 .control-btn {
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  color: white;
+  background: var(--surface-1);
+  border: var(--border-width) solid var(--border-color-light);
+  color: var(--gray-600);
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: var(--shadow-xs);
 }
 
 .control-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-  transform: scale(1.05);
+  background: var(--surface-2);
+  color: var(--gray-800);
+  border-color: var(--border-color);
+  transform: translateY(-1px);
 }
 
 .close-btn:hover {
-  background: rgba(239, 68, 68, 0.9);
+  background: var(--error-50);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: var(--error-600);
 }
 
 /* 终端主体 */
 .terminal-body {
   flex: 1;
   overflow: hidden;
-  background: #1e1e1e;
+  background: var(--dark-bg);
 }
 
 /* xterm.js 样式覆盖 */
 :deep(.xterm) {
   padding: var(--spacing-3, 12px);
+  color: var(--text-light);
+  font-family: var(--font-family-mono);
 }
 
 :deep(.xterm-viewport) {
-  background: #1e1e1e;
+  background: var(--dark-bg);
 }
 
 :deep(.xterm-screen) {
-  background: #1e1e1e;
+  background: var(--dark-bg);
 }
 
 /* 全屏状态下的特殊样式 */
@@ -748,33 +773,34 @@ onUnmounted(() => {
   padding: 16px 20px;
   cursor: default;
   user-select: none;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.12) 0%, rgba(255, 255, 255, 0.96) 85%);
+  border-bottom: var(--border-width) solid var(--border-color-light);
 }
 
 .terminal-header.mobile .terminal-title {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: var(--font-semibold);
 }
 
 .mobile-keyboard-btn,
 .mobile-clear-btn {
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--surface-1);
+  border: var(--border-width) solid var(--border-color-light);
   backdrop-filter: blur(10px);
 }
 
 .mobile-keyboard-btn:hover,
 .mobile-clear-btn:hover {
-  background: rgba(255, 255, 255, 0.25);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: var(--surface-2);
+  border-color: var(--border-color);
 }
 
 /* 触摸设备优化 */
 @media (hover: none) and (pointer: coarse) {
   .terminal-button:hover {
     transform: none;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-sm);
+    background: var(--surface-1);
   }
   
   .terminal-button:active {
@@ -783,12 +809,14 @@ onUnmounted(() => {
   }
   
   .control-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--surface-1);
+    color: var(--gray-600);
+    border-color: var(--border-color-light);
     transform: none;
   }
   
   .control-btn:active {
-    transform: scale(0.9);
+    transform: scale(0.96);
     transition-duration: 0.1s;
   }
 }

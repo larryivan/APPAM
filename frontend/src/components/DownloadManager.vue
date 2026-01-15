@@ -174,18 +174,18 @@
     </div>
 
     <!-- 添加URL模态框 -->
-    <div v-if="showAddUrlModal" class="modal-overlay" @click="showAddUrlModal = false">
-      <div class="modal" @click.stop>
-        <div class="modal-header">
+    <div v-if="showAddUrlModal" class="modal-overlay app-modal-viewport app-modal-backdrop" @click="showAddUrlModal = false">
+      <div class="app-modal download-modal" @click.stop>
+        <div class="modal-header app-modal-header">
           <h3>Add Download Link</h3>
-          <button @click="showAddUrlModal = false" class="close-btn">
+          <button @click="showAddUrlModal = false" class="close-btn app-modal-close">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"></line>
               <line x1="6" y1="6" x2="18" y2="18"></line>
             </svg>
           </button>
         </div>
-        <div class="modal-body">
+        <div class="modal-body app-modal-body">
           <div class="input-group">
             <label>Download Link</label>
             <input 
@@ -220,7 +220,7 @@
             </div>
           </div>
         </div>
-        <div class="modal-footer">
+        <div class="modal-footer app-modal-footer">
           <button @click="addDownload" class="btn-primary" :disabled="!newDownloadUrl.trim()">
             Start Download
           </button>
@@ -513,10 +513,10 @@ onUnmounted(() => {
   right: 24px;
   width: 480px;
   max-height: 600px;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  background: var(--surface-1);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
   z-index: 1000;
   transition: all 0.3s ease;
@@ -532,8 +532,8 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-color-light);
 }
 
 .header-left {
@@ -543,16 +543,16 @@ onUnmounted(() => {
 }
 
 .download-icon {
-  color: #3b82f6;
+  color: var(--primary-600);
 }
 
 .header-title {
   font-weight: 600;
-  color: #1e293b;
+  color: var(--gray-900);
 }
 
 .download-count {
-  background: #3b82f6;
+  background: var(--gradient-primary);
   color: white;
   padding: 2px 8px;
   border-radius: 12px;
@@ -569,9 +569,9 @@ onUnmounted(() => {
   background: none;
   border: none;
   padding: 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  color: #64748b;
+  color: var(--gray-600);
   transition: all 0.2s;
   display: flex;
   align-items: center;
@@ -579,22 +579,22 @@ onUnmounted(() => {
 }
 
 .control-btn:hover {
-  background: #f1f5f9;
-  color: #1e293b;
+  background: var(--surface-3);
+  color: var(--gray-900);
 }
 
 .add-btn {
-  background: #3b82f6;
+  background: var(--gradient-primary);
   color: white;
 }
 
 .add-btn:hover {
-  background: #2563eb;
+  background: linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%);
 }
 
-.close-btn:hover {
-  background: #fef2f2;
-  color: #dc2626;
+.download-header .close-btn:hover {
+  background: var(--error-50);
+  color: var(--error-600);
 }
 
 /* 内容区域 */
@@ -612,18 +612,18 @@ onUnmounted(() => {
 }
 
 .empty-icon {
-  color: #e2e8f0;
+  color: var(--gray-300);
 }
 
 .empty-text {
   font-size: 16px;
   font-weight: 500;
-  color: #64748b;
+  color: var(--gray-600);
 }
 
 .empty-subtext {
   font-size: 14px;
-  color: #94a3b8;
+  color: var(--gray-500);
 }
 
 /* 下载列表 */
@@ -632,27 +632,28 @@ onUnmounted(() => {
 }
 
 .download-item {
-  background: #fefefe;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-md);
   padding: 12px;
   margin-bottom: 8px;
   transition: all 0.2s;
+  box-shadow: var(--shadow-xs);
 }
 
 .download-item:hover {
-  border-color: #cbd5e1;
-  box-shadow: 0 2px 4px rgb(0 0 0 / 0.05);
+  border-color: var(--border-color-dark);
+  box-shadow: var(--shadow-sm);
 }
 
 .download-item.error {
-  border-color: #fca5a5;
-  background: #fef2f2;
+  border-color: rgba(239, 68, 68, 0.35);
+  background: var(--error-50);
 }
 
 .download-item.completed {
-  border-color: #86efac;
-  background: #f0fdf4;
+  border-color: rgba(34, 197, 94, 0.35);
+  background: var(--success-50);
 }
 
 /* 文件信息 */
@@ -664,7 +665,7 @@ onUnmounted(() => {
 }
 
 .file-icon {
-  color: #64748b;
+  color: var(--gray-600);
   flex-shrink: 0;
 }
 
@@ -675,7 +676,7 @@ onUnmounted(() => {
 
 .file-name {
   font-weight: 500;
-  color: #1e293b;
+  color: var(--gray-900);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -686,7 +687,7 @@ onUnmounted(() => {
   display: flex;
   gap: 12px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--gray-600);
 }
 
 /* 进度条 */
@@ -703,17 +704,17 @@ onUnmounted(() => {
 }
 
 .progress-text {
-  color: #64748b;
+  color: var(--gray-600);
 }
 
 .progress-percent {
-  color: #1e293b;
+  color: var(--gray-900);
   font-weight: 500;
 }
 
 .progress-bar {
   height: 6px;
-  background: #f1f5f9;
+  background: var(--surface-3);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -725,19 +726,19 @@ onUnmounted(() => {
 }
 
 .progress-fill.downloading {
-  background: #3b82f6;
+  background: var(--primary-500);
 }
 
 .progress-fill.paused {
-  background: #f59e0b;
+  background: var(--warning-500);
 }
 
 .progress-fill.completed {
-  background: #10b981;
+  background: var(--success-500);
 }
 
 .progress-fill.error {
-  background: #ef4444;
+  background: var(--error-500);
 }
 
 /* 操作按钮 */
@@ -749,11 +750,11 @@ onUnmounted(() => {
 
 .action-btn {
   background: none;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-color);
   padding: 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  color: #64748b;
+  color: var(--gray-600);
   transition: all 0.2s;
   display: flex;
   align-items: center;
@@ -761,81 +762,35 @@ onUnmounted(() => {
 }
 
 .action-btn:hover {
-  background: #f8fafc;
-  border-color: #cbd5e1;
+  background: var(--surface-2);
+  border-color: var(--border-color-dark);
 }
 
 .pause-btn:hover, .resume-btn:hover {
-  border-color: #3b82f6;
-  color: #3b82f6;
+  border-color: var(--primary-500);
+  color: var(--primary-600);
 }
 
 .retry-btn:hover {
-  border-color: #f59e0b;
-  color: #f59e0b;
+  border-color: var(--warning-500);
+  color: var(--warning-600);
 }
 
 .open-btn:hover {
-  border-color: #10b981;
-  color: #10b981;
+  border-color: var(--success-500);
+  color: var(--success-600);
 }
 
 .remove-btn:hover {
-  border-color: #ef4444;
-  color: #ef4444;
+  border-color: var(--error-500);
+  color: var(--error-600);
 }
 
 /* 模态框 */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 2000;
-}
-
-.modal {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+.download-modal {
   width: 90%;
   max-width: 480px;
   overflow: hidden;
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px 24px;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.modal-header h3 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  padding: 6px;
-  cursor: pointer;
-  color: #64748b;
-  border-radius: 6px;
-  transition: all 0.2s;
-}
-
-.modal-body {
-  padding: 24px;
 }
 
 .input-group {
@@ -846,23 +801,24 @@ onUnmounted(() => {
   display: block;
   margin-bottom: 6px;
   font-weight: 500;
-  color: #374151;
+  color: var(--gray-700);
 }
 
 .url-input, .filename-input {
   width: 100%;
   padding: 12px 16px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
   font-size: 14px;
   transition: all 0.2s;
   box-sizing: border-box;
+  background: var(--surface-1);
 }
 
 .url-input:focus, .filename-input:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.16);
 }
 
 .download-options {
@@ -875,7 +831,7 @@ onUnmounted(() => {
   gap: 8px;
   cursor: pointer;
   font-size: 14px;
-  color: #374151;
+  color: var(--gray-700);
 }
 
 .checkbox-label input[type="checkbox"] {
@@ -887,26 +843,17 @@ onUnmounted(() => {
 }
 
 .url-help small, .options-help small {
-  color: #64748b;
+  color: var(--gray-600);
   font-size: 12px;
   line-height: 1.4;
 }
 
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 16px 24px;
-  border-top: 1px solid #e2e8f0;
-  background: #f8fafc;
-}
-
 .btn-primary {
-  background: #3b82f6;
+  background: var(--gradient-primary);
   color: white;
   border: none;
   padding: 10px 20px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
@@ -914,7 +861,7 @@ onUnmounted(() => {
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #2563eb;
+  background: linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%);
 }
 
 .btn-primary:disabled {
@@ -923,11 +870,11 @@ onUnmounted(() => {
 }
 
 .btn-cancel {
-  background: white;
-  color: #475569;
-  border: 1px solid #e2e8f0;
+  background: var(--surface-1);
+  color: var(--gray-700);
+  border: 1px solid var(--border-color);
   padding: 10px 20px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
@@ -935,7 +882,7 @@ onUnmounted(() => {
 }
 
 .btn-cancel:hover {
-  background: #f8fafc;
+  background: var(--surface-2);
 }
 
 /* 自定义滚动条 */
@@ -944,16 +891,16 @@ onUnmounted(() => {
 }
 
 .download-content::-webkit-scrollbar-track {
-  background: #f8fafc;
+  background: var(--surface-2);
 }
 
 .download-content::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: var(--gray-300);
   border-radius: 3px;
 }
 
 .download-content::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: var(--gray-400);
 }
 
 /* 响应式设计 */

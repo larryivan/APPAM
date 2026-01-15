@@ -167,16 +167,16 @@ watch(() => route.fullPath, handleRouteChange);
 
 <style scoped>
 .topbar {
-  background: white;
-  border-bottom: var(--border-width) solid var(--border-color);
+  background: rgba(255, 255, 255, 0.82);
+  border-bottom: var(--border-width) solid var(--border-color-light);
   padding: 0 var(--spacing-4);
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: var(--z-fixed); /* 确保topbar在最上层 */
-  box-shadow: var(--shadow-sm);
-  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-xs);
+  backdrop-filter: blur(12px);
 }
 
 .topbar-content {
@@ -212,7 +212,8 @@ watch(() => route.fullPath, handleRouteChange);
   font-weight: var(--font-bold);
   color: var(--gray-800);
   margin: 0;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
+  font-family: var(--font-family-display);
   white-space: nowrap;
 }
 
@@ -238,15 +239,15 @@ watch(() => route.fullPath, handleRouteChange);
 }
 
 .nav-item:hover {
-  background: var(--gray-100);
-  color: var(--gray-800);
+  background: var(--surface-2);
+  color: var(--gray-900);
   transform: translateY(-1px);
 }
 
 .nav-item.active {
-  background: var(--primary-500);
-  color: white;
-  box-shadow: var(--shadow-sm);
+  background: rgba(var(--accent-rgb), 0.14);
+  color: var(--primary-700);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.2);
 }
 
 .nav-item.active::before {
@@ -257,7 +258,7 @@ watch(() => route.fullPath, handleRouteChange);
   transform: translateX(-50%);
   width: 4px;
   height: 4px;
-  background: white;
+  background: var(--primary-600);
   border-radius: var(--radius-full);
 }
 
@@ -329,9 +330,9 @@ watch(() => route.fullPath, handleRouteChange);
   top: var(--header-height);
   left: 0;
   right: 0;
-  background: white;
+  background: var(--surface-1);
   border-bottom: var(--border-width) solid var(--border-color);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-md);
   transform: translateY(-100%);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.3s ease;
   z-index: 1025; /* 低于topbar的z-index (1030) */
@@ -374,18 +375,18 @@ watch(() => route.fullPath, handleRouteChange);
 }
 
 .mobile-nav-item:hover {
-  background: var(--gray-50);
+  background: var(--surface-2);
   color: var(--gray-900);
-  border-color: var(--gray-200);
+  border-color: var(--border-color);
   transform: translateX(4px);
 }
 
 .mobile-nav-item.active {
-  background: var(--primary-500);
-  color: white;
-  border-color: var(--primary-600);
+  background: rgba(var(--accent-rgb), 0.16);
+  color: var(--primary-700);
+  border-color: rgba(var(--accent-rgb), 0.3);
   font-weight: var(--font-semibold);
-  box-shadow: var(--shadow-md);
+  box-shadow: none;
 }
 
 .mobile-nav-item.active::before {
@@ -407,7 +408,7 @@ watch(() => route.fullPath, handleRouteChange);
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(15, 23, 42, 0.45);
   z-index: 999;
   opacity: 0;
   visibility: hidden;
@@ -584,14 +585,14 @@ watch(() => route.fullPath, handleRouteChange);
     top: var(--header-height);
     left: 0;
     right: 0;
-    background: white;
+    background: var(--surface-1);
     z-index: 1025; /* 低于topbar */
     transform: translateY(-100%);
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.3s ease;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     max-height: calc(100vh - var(--header-height));
-    box-shadow: var(--shadow-lg);
+    box-shadow: var(--shadow-md);
     visibility: hidden;
     pointer-events: none;
   }
@@ -609,7 +610,7 @@ watch(() => route.fullPath, handleRouteChange);
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(15, 23, 42, 0.45);
     z-index: 1020; /* 低于topbar但高于其他内容 */
     opacity: 0;
     visibility: hidden;
