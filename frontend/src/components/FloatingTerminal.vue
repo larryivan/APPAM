@@ -132,10 +132,14 @@ let fitAddon = null
 let socket = null
 let resizeObserver = null
 let fitPending = false
+let fitQueued = false
 
 const scheduleFit = (delay = 0) => {
   if (!fitAddon || !terminal) return
-  if (fitPending) return
+  if (fitPending) {
+    fitQueued = true
+    return
+  }
   fitPending = true
 
   const run = () => {
@@ -145,6 +149,10 @@ const scheduleFit = (delay = 0) => {
     if (socket) {
       const { rows, cols } = terminal
       socket.emit('terminal_resize', { rows, cols })
+    }
+    if (fitQueued) {
+      fitQueued = false
+      scheduleFit(0)
     }
   }
 
@@ -236,6 +244,8 @@ const closeTerminal = () => {
   }
 
   detachResizeObserver()
+  fitPending = false
+  fitQueued = false
   isOpen.value = false
   isFullscreen.value = false
 }
@@ -353,6 +363,7 @@ const connectSocket = () => {
   socket.on('terminal_connected', (data) => {
     console.log('Terminal connected:', data)
     // 移除冗余的提示信息，让用户直接使用终端
+    scheduleFit(80)
   })
   
   socket.on('terminal_output', (data) => {

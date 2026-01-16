@@ -84,7 +84,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['upload-complete', 'upload-error'])
+const emit = defineEmits(['upload-start', 'upload-complete', 'upload-error', 'upload-cancelled'])
 
 const isDragOver = ref(false)
 const isUploading = ref(false)
@@ -137,6 +137,7 @@ const handleFileSelect = (e) => {
 
 const startUpload = (files) => {
   isUploading.value = true
+  emit('upload-start')
   uploadQueue.value = files.map((file, index) => ({
     id: Date.now() + index,
     file,
@@ -215,6 +216,7 @@ const cancelUpload = () => {
   setTimeout(() => {
     isUploading.value = false
     uploadQueue.value = []
+    emit('upload-cancelled')
   }, 1000)
 }
 

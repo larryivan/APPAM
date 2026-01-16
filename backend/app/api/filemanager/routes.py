@@ -3,6 +3,7 @@ from app.services import file_manager as services
 from app.services import download_manager
 import os
 import shutil
+from urllib.parse import quote
 
 filemanager_bp = Blueprint('filemanager_bp', __name__)
 
@@ -109,7 +110,8 @@ def preview_file(project_id):
         result = services.preview_file(project_id, path)
         if result['type'] == 'image':
             # Return JSON with image URL instead of raw image
-            result['url'] = f"/api/filemanager/{project_id}/image?path={path}"
+            encoded_path = quote(path or '', safe='')
+            result['url'] = f"/api/filemanager/{project_id}/image?path={encoded_path}"
             return jsonify(result)
         else:
             return jsonify(result)
@@ -131,6 +133,27 @@ def serve_image(project_id):
             return jsonify({'error': 'Not an image file'}), 400
     except FileNotFoundError as e:
         return jsonify({'error': str(e)}), 404
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@filemanager_bp.route('/<project_id>/download', methods=['GET'])
+def download_file(project_id):
+    try:
+        path = request.args.get('path')
+        if not path:
+            return jsonify({'error': 'Missing path'}), 400
+
+        abs_path = services.get_project_path(project_id, path)
+        if not os.path.exists(abs_path) or os.path.isdir(abs_path):
+            return jsonify({'error': 'File not found'}), 404
+
+        return send_from_directory(
+            os.path.dirname(abs_path),
+            os.path.basename(abs_path),
+            as_attachment=True
+        )
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     except Exception as e:

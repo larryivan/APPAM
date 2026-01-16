@@ -690,7 +690,8 @@ onUnmounted(() => {
   width: 100%;
   text-align: left;
   cursor: pointer;
-  font: inherit;
+  font-family: inherit;
+  font-weight: inherit;
   appearance: none;
 }
 

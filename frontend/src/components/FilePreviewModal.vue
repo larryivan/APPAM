@@ -769,7 +769,8 @@ const resetModal = () => {
 const loadFileHead = async () => {
   loadingHead.value = true
   try {
-    const response = await fetch(`/api/filemanager/${props.projectId}/preview-head?path=${props.filePath}&lines=1000`)
+    const encodedPath = encodeURIComponent(props.filePath || '')
+    const response = await fetch(`/api/filemanager/${props.projectId}/preview-head?path=${encodedPath}&lines=1000`)
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
@@ -789,7 +790,8 @@ const loadFileHead = async () => {
 const loadFileSample = async () => {
   loadingSample.value = true
   try {
-    const response = await fetch(`/api/filemanager/${props.projectId}/preview-sample?path=${props.filePath}&samples=100`)
+    const encodedPath = encodeURIComponent(props.filePath || '')
+    const response = await fetch(`/api/filemanager/${props.projectId}/preview-sample?path=${encodedPath}&samples=100`)
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
@@ -1260,9 +1262,9 @@ const updateEditInfo = () => {
 }
 
 const handleEditorKeydown = (event) => {
-  if (event.ctrlKey && event.key === 's') {
+  if ((event.ctrlKey || event.metaKey) && event.key === 's') {
     event.preventDefault()
-    saveEdit()
+    saveFile()
   }
 }
 
@@ -2176,6 +2178,29 @@ onUnmounted(() => {
   flex: 1;
   overflow: auto;
   padding: 16px;
+}
+
+.html-preview,
+.markdown-preview {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.html-render-container,
+.markdown-render,
+.markdown-source,
+.html-source {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.html-iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
 }
 
 .image-preview {

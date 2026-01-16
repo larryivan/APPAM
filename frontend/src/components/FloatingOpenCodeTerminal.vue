@@ -98,6 +98,7 @@ let fitAddon = null
 let socket = null
 let resizeObserver = null
 let fitPending = false
+let fitQueued = false
 
 const sessionKey = ref('')
 const SESSION_STORAGE_PREFIX = 'opencode_terminal_session'
@@ -109,7 +110,10 @@ const storageKey = computed(() => {
 
 const scheduleFit = (delay = 0) => {
   if (!fitAddon || !terminal) return
-  if (fitPending) return
+  if (fitPending) {
+    fitQueued = true
+    return
+  }
   fitPending = true
 
   const run = () => {
@@ -119,6 +123,10 @@ const scheduleFit = (delay = 0) => {
     if (socket) {
       const { rows, cols } = terminal
       socket.emit('terminal_resize', { rows, cols, session_key: sessionKey.value })
+    }
+    if (fitQueued) {
+      fitQueued = false
+      scheduleFit(0)
     }
   }
 
@@ -233,6 +241,8 @@ const closeWindow = () => {
   }
 
   detachResizeObserver()
+  fitPending = false
+  fitQueued = false
   isOpen.value = false
   isFullscreen.value = false
 }
@@ -352,7 +362,7 @@ const connectSocket = () => {
   })
 
   socket.on('terminal_connected', () => {
-    // No-op: OpenCode handles its own UI inside the terminal.
+    scheduleFit(80)
   })
 
   socket.on('terminal_output', (data) => {

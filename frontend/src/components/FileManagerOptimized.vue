@@ -3,6 +3,10 @@
        @contextmenu="showContextMenu" 
        @click="hideContextMenu"
        @keydown="handleKeyDown"
+       @dragenter="handleContainerDragEnter"
+       @dragleave="handleContainerDragLeave"
+       @dragover="handleContainerDragOver"
+       @drop="handleContainerDrop"
        tabindex="0">
     
     <!-- Modern header navigation -->
@@ -146,6 +150,13 @@
             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
           </svg>
         </button>
+        <button v-if="viewMode === 'grid'" @click="toggleSelectAllAction" class="action-btn" :title="isAllSelected ? 'Clear selection' : 'Select all'">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <polyline points="9 12 12 15 17 10"></polyline>
+          </svg>
+          <span>{{ isAllSelected ? 'Clear' : 'Select' }}</span>
+        </button>
         <button @click="showDownloadManager = true" class="action-btn download-btn" title="Download Manager">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -239,6 +250,13 @@
               <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
             </svg>
           </button>
+          <button @click="downloadSelected" class="mini-btn" title="Download selected">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+          </button>
           <button @click="deleteSelected" class="mini-btn danger" title="Delete (Delete)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="3 6 5 6 21 6"></polyline>
@@ -292,8 +310,10 @@
       v-if="showUploadArea"
       :project-id="projectId"
       :current-path="currentPath"
+      @upload-start="handleUploadStart"
       @upload-complete="handleUploadComplete"
       @upload-error="handleUploadError"
+      @upload-cancelled="handleUploadCancelled"
     />
 
     <!-- File Content Area -->
@@ -509,6 +529,13 @@
             </svg>
             Refresh
           </button>
+          <button v-if="filteredItems.length > 0" @click="toggleSelectAllAction(); showMobileMenu = false" class="mobile-menu-item">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <polyline points="9 12 12 15 17 10"></polyline>
+            </svg>
+            {{ isAllSelected ? 'Clear Selection' : 'Select All' }}
+          </button>
           <button @click="showDownloadManager = true; showMobileMenu = false" class="mobile-menu-item">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -542,6 +569,14 @@
             </svg>
             Paste ({{ clipboard.length }} items)
           </button>
+          <button v-if="selectedItems.length > 0" @click="downloadSelected(); showMobileMenu = false" class="mobile-menu-item">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Download Selected
+          </button>
           <button v-if="selectedItems.length > 0" @click="deleteSelected(); showMobileMenu = false" class="mobile-menu-item danger">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="3 6 5 6 21 6"></polyline>
@@ -566,6 +601,9 @@
       </div>
       <div class="context-item" @click="pasteItems" v-if="clipboard.length > 0 && clipboardOperation">
         <span class="icon">📋</span> Paste ({{ clipboardOperation === 'copy' ? 'Copy' : 'Move' }} {{ clipboard.length }} items)
+      </div>
+      <div class="context-item" @click="downloadSelected" v-if="selectedItems.length > 0">
+        <span class="icon">📥</span> Download
       </div>
       <hr v-if="selectedItems.length > 0" class="context-divider">
       <div class="context-item" @click="showRenameModal = true" v-if="selectedItems.length === 1">
@@ -700,6 +738,7 @@ const currentPath = ref('/')
 const selectedItems = ref([])
 const isLoading = ref(false)
 const focusedItem = ref(null)
+const selectionAnchor = ref(null)
 const isSearchFocused = ref(false)
 
 // Mobile/Touch support
@@ -737,6 +776,8 @@ const contextMenu = ref({
 
 // Upload
 const showUploadArea = ref(false)
+const isUploadActive = ref(false)
+const uploadDragCounter = ref(0)
 const uploadingFiles = ref([])
 const uploadError = ref(null)
 
@@ -773,8 +814,6 @@ const restoreScrollPosition = () => {
 // Modals
 const showNewFolderModal = ref(false)
 const newFolderName = ref('')
-const showFetchUrlModal = ref(false)
-const fetchUrl = ref('')
 const showRenameModal = ref(false)
 const newRenameName = ref('')
 
@@ -857,12 +896,32 @@ const breadcrumbs = computed(() => {
   })
 })
 
-const isAllSelected = computed(() => 
-  filteredItems.value.length > 0 && selectedItems.value.length === filteredItems.value.length
-)
+const isAllSelected = computed(() => {
+  if (filteredItems.value.length === 0) return false
+  const selectedNames = new Set(selectedItems.value.map(item => item.name))
+  return filteredItems.value.every(item => selectedNames.has(item.name))
+})
 
 const canGoBack = computed(() => historyIndex.value > 0)
 const canGoForward = computed(() => historyIndex.value < navigationHistory.value.length - 1)
+
+const reconcileSelection = () => {
+  if (selectedItems.value.length === 0) return
+
+  const itemMap = new Map(items.value.map(item => [item.name, item]))
+  const nextSelection = selectedItems.value
+    .map(item => itemMap.get(item.name))
+    .filter(Boolean)
+
+  selectedItems.value = nextSelection
+
+  if (selectionAnchor.value && !itemMap.has(selectionAnchor.value)) {
+    selectionAnchor.value = nextSelection.length ? nextSelection[nextSelection.length - 1].name : null
+  }
+  if (focusedItem.value && !itemMap.has(focusedItem.value)) {
+    focusedItem.value = nextSelection.length ? nextSelection[nextSelection.length - 1].name : null
+  }
+}
 
 // Methods
 const fetchItems = async () => {
@@ -871,7 +930,8 @@ const fetchItems = async () => {
   
   isLoading.value = true
   try {
-    const response = await fetch(`/api/filemanager/${projectId.value}/list?path=${currentPath.value}`)
+    const encodedPath = encodeURIComponent(currentPath.value || '/')
+    const response = await fetch(`/api/filemanager/${projectId.value}/list?path=${encodedPath}`)
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
@@ -884,6 +944,7 @@ const fetchItems = async () => {
       ...item,
       thumbnail: generateThumbnail(item)
     }))
+    reconcileSelection()
     
     // Restore scroll position (delayed to ensure DOM update completion)
     setTimeout(() => {
@@ -902,7 +963,8 @@ const generateThumbnail = (item) => {
   
   const ext = getFileExtension(item.name).toLowerCase()
   if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext)) {
-    return `/api/filemanager/${projectId.value}/thumbnail?path=${currentPath.value}/${item.name}&size=128`
+    const filePath = `${currentPath.value === '/' ? '' : currentPath.value}/${item.name}`
+    return `/api/filemanager/${projectId.value}/thumbnail?path=${encodeURIComponent(filePath)}&size=128`
   }
   return null
 }
@@ -925,7 +987,7 @@ const navigateTo = (path) => {
   historyIndex.value = navigationHistory.value.length - 1
   
   currentPath.value = path
-  selectedItems.value = []
+  clearSelection()
   
   // Reset scroll position (new directory should start from top)
   savedScrollPosition.value = 0
@@ -945,7 +1007,7 @@ const goBack = () => {
   if (canGoBack.value) {
     historyIndex.value--
     currentPath.value = navigationHistory.value[historyIndex.value]
-    selectedItems.value = []
+    clearSelection()
     fetchItems()
   }
 }
@@ -954,7 +1016,7 @@ const goForward = () => {
   if (canGoForward.value) {
     historyIndex.value++
     currentPath.value = navigationHistory.value[historyIndex.value]
-    selectedItems.value = []
+    clearSelection()
     fetchItems()
   }
 }
@@ -985,23 +1047,29 @@ const handleSearch = () => {
 }
 
 const selectItem = (item, event) => {
-  if (event.ctrlKey || event.metaKey) {
-    // Multi-select
-    toggleSelectItem(item)
-  } else if (event.shiftKey && selectedItems.value.length > 0) {
-    // Range select
-    const lastSelected = selectedItems.value[selectedItems.value.length - 1]
-    const startIndex = filteredItems.value.findIndex(i => i.name === lastSelected.name)
-    const endIndex = filteredItems.value.findIndex(i => i.name === item.name)
-    const start = Math.min(startIndex, endIndex)
-    const end = Math.max(startIndex, endIndex)
-    
-    selectedItems.value = filteredItems.value.slice(start, end + 1)
-  } else {
-    // Single select
-    selectedItems.value = [item]
+  if (event.shiftKey) {
+    const anchorName = selectionAnchor.value
+      || (selectedItems.value.length ? selectedItems.value[selectedItems.value.length - 1].name : null)
+    if (anchorName) {
+      const anchorIndex = filteredItems.value.findIndex(i => i.name === anchorName)
+      const currentIndex = filteredItems.value.findIndex(i => i.name === item.name)
+      if (anchorIndex !== -1 && currentIndex !== -1) {
+        const start = Math.min(anchorIndex, currentIndex)
+        const end = Math.max(anchorIndex, currentIndex)
+        selectedItems.value = filteredItems.value.slice(start, end + 1)
+        focusedItem.value = item.name
+        return
+      }
+    }
   }
-  
+
+  if (event.ctrlKey || event.metaKey) {
+    toggleSelectItem(item)
+    return
+  }
+
+  selectedItems.value = [item]
+  selectionAnchor.value = item.name
   focusedItem.value = item.name
 }
 
@@ -1009,8 +1077,20 @@ const toggleSelectItem = (item) => {
   const index = selectedItems.value.findIndex(i => i.name === item.name)
   if (index > -1) {
     selectedItems.value.splice(index, 1)
+    if (selectionAnchor.value === item.name) {
+      selectionAnchor.value = selectedItems.value.length
+        ? selectedItems.value[selectedItems.value.length - 1].name
+        : null
+    }
+    if (selectedItems.value.length === 0) {
+      focusedItem.value = null
+    } else if (selectionAnchor.value) {
+      focusedItem.value = selectionAnchor.value
+    }
   } else {
     selectedItems.value.push(item)
+    selectionAnchor.value = item.name
+    focusedItem.value = item.name
   }
 }
 
@@ -1025,9 +1105,28 @@ const isCutItem = (item) => {
 const toggleSelectAll = (event) => {
   if (event.target.checked) {
     selectedItems.value = [...filteredItems.value]
+    selectionAnchor.value = selectedItems.value.length ? selectedItems.value[0].name : null
+    focusedItem.value = selectionAnchor.value
   } else {
-    selectedItems.value = []
+    clearSelection()
   }
+}
+
+const toggleSelectAllAction = () => {
+  if (filteredItems.value.length === 0) return
+  if (isAllSelected.value) {
+    clearSelection()
+  } else {
+    selectedItems.value = [...filteredItems.value]
+    selectionAnchor.value = selectedItems.value.length ? selectedItems.value[0].name : null
+    focusedItem.value = selectionAnchor.value
+  }
+}
+
+const clearSelection = () => {
+  selectedItems.value = []
+  selectionAnchor.value = null
+  focusedItem.value = null
 }
 
 const copySelected = () => {
@@ -1116,7 +1215,7 @@ const deleteSelected = async () => {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
     
-    selectedItems.value = []
+    clearSelection()
     fetchItems()
   } catch (error) {
     console.error('Error deleting items:', error)
@@ -1127,6 +1226,7 @@ const deleteSelected = async () => {
 }
 
 const downloadSelected = async () => {
+  if (selectedItems.value.length === 0) return
   isLoading.value = true
   try {
     const paths = selectedItems.value.map(item => 
@@ -1208,40 +1308,11 @@ const renameItem = async () => {
     
     showRenameModal.value = false
     newRenameName.value = ''
-    selectedItems.value = []
+    clearSelection()
     fetchItems()
   } catch (error) {
     console.error('Error renaming item:', error)
     alert(`Failed to rename item: ${error.message}`)
-  } finally {
-    isLoading.value = false
-  }
-}
-
-const fetchFile = async () => {
-  if (!fetchUrl.value.trim()) return
-  
-  isLoading.value = true
-  try {
-    const response = await fetch(`/api/filemanager/${projectId.value}/fetch-url`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        url: fetchUrl.value, 
-        path: currentPath.value === '/' ? '' : currentPath.value 
-      })
-    })
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-    
-    showFetchUrlModal.value = false
-    fetchUrl.value = ''
-    fetchItems()
-  } catch (error) {
-    console.error('Error fetching file:', error)
-    alert(`Failed to fetch file from URL: ${error.message}`)
   } finally {
     isLoading.value = false
   }
@@ -1255,7 +1326,8 @@ const previewItem = async (item) => {
   
   isLoading.value = true
   try {
-    const response = await fetch(`/api/filemanager/${projectId.value}/preview?path=${previewFilePath.value}`)
+    const encodedPath = encodeURIComponent(previewFilePath.value || '')
+    const response = await fetch(`/api/filemanager/${projectId.value}/preview?path=${encodedPath}`)
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
@@ -1322,7 +1394,7 @@ const handlePreviewSave = ({ path, content }) => {
 const handlePreviewDownload = ({ fileName, filePath }) => {
   // Implement download functionality
   const link = document.createElement('a')
-  link.href = `/api/filemanager/${projectId.value}/download?path=${filePath}`
+  link.href = `/api/filemanager/${projectId.value}/download?path=${encodeURIComponent(filePath || '')}`
   link.download = fileName
   link.click()
 }
@@ -1378,7 +1450,47 @@ const uploadFileInChunks = async (file, fileIndex) => {
   }
 }
 
+const isFileDrag = (event) => {
+  const types = event.dataTransfer?.types
+  return types ? Array.from(types).includes('Files') : false
+}
+
+const handleContainerDragEnter = (event) => {
+  if (!isFileDrag(event)) return
+  event.preventDefault()
+  uploadDragCounter.value += 1
+  showUploadArea.value = true
+}
+
+const handleContainerDragLeave = (event) => {
+  if (!showUploadArea.value) return
+  event.preventDefault()
+  uploadDragCounter.value = Math.max(0, uploadDragCounter.value - 1)
+  if (uploadDragCounter.value === 0 && !isUploadActive.value) {
+    showUploadArea.value = false
+  }
+}
+
+const handleContainerDragOver = (event) => {
+  if (!isFileDrag(event)) return
+  event.preventDefault()
+}
+
+const handleContainerDrop = (event) => {
+  if (!isFileDrag(event)) return
+  event.preventDefault()
+  uploadDragCounter.value = 0
+  showUploadArea.value = true
+}
+
+const handleUploadStart = () => {
+  isUploadActive.value = true
+  showUploadArea.value = true
+}
+
 const handleUploadComplete = () => {
+  isUploadActive.value = false
+  uploadDragCounter.value = 0
   showUploadArea.value = false
   fetchItems()
 }
@@ -1386,6 +1498,12 @@ const handleUploadComplete = () => {
 const handleUploadError = (error) => {
   console.error('Upload error:', error)
   alert(`Upload failed: ${error.message}`)
+}
+
+const handleUploadCancelled = () => {
+  isUploadActive.value = false
+  uploadDragCounter.value = 0
+  showUploadArea.value = false
 }
 
 const handleFileDownloaded = (filename) => {
@@ -1408,6 +1526,11 @@ const showContextMenu = (event) => {
 
 const showItemContextMenu = (item, event) => {
   event.preventDefault()
+  if (!isSelected(item)) {
+    selectedItems.value = [item]
+    selectionAnchor.value = item.name
+    focusedItem.value = item.name
+  }
   contextMenu.value = {
     show: true,
     x: event.clientX,
@@ -1446,8 +1569,14 @@ const isEditableTarget = (event) => {
 const handleKeyDown = (event) => {
   if (isEditableTarget(event)) return
   // Keyboard shortcuts
-  if (event.ctrlKey || event.metaKey) {
-    switch (event.key) {
+  const isAccel = event.ctrlKey || event.metaKey
+  if (isAccel && event.shiftKey && event.key.toLowerCase() === 'n') {
+    event.preventDefault()
+    showNewFolderModal.value = true
+    return
+  }
+  if (isAccel) {
+    switch (event.key.toLowerCase()) {
       case 'c':
         event.preventDefault()
         copySelected()
@@ -1463,6 +1592,8 @@ const handleKeyDown = (event) => {
       case 'a':
         event.preventDefault()
         selectedItems.value = [...filteredItems.value]
+        selectionAnchor.value = selectedItems.value.length ? selectedItems.value[0].name : null
+        focusedItem.value = selectionAnchor.value
         break
       case 'u':
         event.preventDefault()
@@ -1471,13 +1602,6 @@ const handleKeyDown = (event) => {
       case 'd':
         event.preventDefault()
         downloadSelected()
-        break
-    }
-  } else if (event.ctrlKey && event.shiftKey) {
-    switch (event.key) {
-      case 'N':
-        event.preventDefault()
-        showNewFolderModal.value = true
         break
     }
   } else if (event.altKey) {
@@ -1766,7 +1890,6 @@ onUnmounted(() => {
 })
 
 // Watchers
-watch(currentPath, fetchItems)
 </script>
 
 <style scoped>
@@ -2691,6 +2814,12 @@ watch(currentPath, fetchItems)
   padding: 16px 18px;
   font-size: 16px; /* Prevent iOS zoom */
   border-radius: 12px;
+}
+
+.modal-hint {
+  margin-top: 8px;
+  color: var(--gray-500);
+  font-size: 12px;
 }
 
 .btn-primary {

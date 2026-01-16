@@ -353,7 +353,7 @@ const pollDownloadProgress = async (taskId) => {
     
     if (task.status === 'completed') {
       emit('file-downloaded', task.filename)
-    } else if (task.status === 'downloading' || task.status === 'paused') {
+    } else if (task.status === 'downloading' || task.status === 'paused' || task.status === 'preparing') {
       setTimeout(() => pollDownloadProgress(taskId), 1000)
     }
     
@@ -496,9 +496,42 @@ const getProgressText = (task) => {
   }
 }
 
+const loadExistingDownloads = async () => {
+  try {
+    const response = await fetch(`/api/filemanager/${props.projectId}/downloads`)
+    if (!response.ok) return
+
+    const data = await response.json()
+    const tasks = (data.downloads || [])
+      .map(task => ({
+        id: task.task_id || task.id,
+        url: task.url,
+        filename: task.filename,
+        status: task.status || 'preparing',
+        progress: task.progress || 0,
+        downloadedSize: task.downloaded_size || 0,
+        totalSize: task.total_size || 0,
+        speed: task.speed || 0,
+        timeRemaining: task.time_remaining ?? null,
+        error: task.error || null
+      }))
+      .filter(task => task.id)
+
+    downloadTasks.value = tasks
+
+    tasks.forEach(task => {
+      if (task.status !== 'completed' && task.status !== 'error') {
+        pollDownloadProgress(task.id)
+      }
+    })
+  } catch (error) {
+    console.error('Failed to load downloads:', error)
+  }
+}
+
 // Lifecycle
 onMounted(() => {
-  // Can restore download tasks from local storage
+  loadExistingDownloads()
 })
 
 onUnmounted(() => {

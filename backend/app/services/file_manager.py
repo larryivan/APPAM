@@ -675,7 +675,44 @@ def preview_file(project_id, path):
         # Check if it's a bioinformatics file
         bio_format = get_file_format(file_ext)
         is_bio_file = bio_format is not None
-        
+        is_html = file_ext in {'.html', '.htm'}
+        is_markdown = file_ext in {'.md', '.markdown'}
+
+        # Allow full preview for HTML and Markdown files
+        if is_html:
+            try:
+                with open(abs_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                return {
+                    'type': 'html',
+                    'content': content,
+                    'language': 'html',
+                    'mimetype': 'text/html',
+                    'editable': True
+                }
+            except UnicodeDecodeError:
+                return {
+                    'type': 'binary',
+                    'content': 'HTML file appears to be binary. Cannot preview.'
+                }
+
+        if is_markdown:
+            try:
+                with open(abs_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                return {
+                    'type': 'markdown',
+                    'content': content,
+                    'language': 'markdown',
+                    'mimetype': 'text/markdown',
+                    'editable': True
+                }
+            except UnicodeDecodeError:
+                return {
+                    'type': 'binary',
+                    'content': 'Markdown file appears to be binary. Cannot preview.'
+                }
+
         # Handle large files
         if file_size > MAX_PREVIEW_SIZE:
             if is_bio_file:
@@ -785,42 +822,6 @@ def preview_file(project_id, path):
                     'content': 'CSV file appears to be binary. Cannot preview.'
                 }
         
-        # Handle HTML files
-        if file_ext in {'.html', '.htm'}:
-            try:
-                with open(abs_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                return {
-                    'type': 'html',
-                    'content': content,
-                    'language': 'html',
-                    'mimetype': 'text/html',
-                    'editable': True
-                }
-            except UnicodeDecodeError:
-                return {
-                    'type': 'binary',
-                    'content': 'HTML file appears to be binary. Cannot preview.'
-                }
-        
-        # Handle Markdown files
-        if file_ext in {'.md', '.markdown'}:
-            try:
-                with open(abs_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                return {
-                    'type': 'markdown',
-                    'content': content,
-                    'language': 'markdown',
-                    'mimetype': 'text/markdown',
-                    'editable': True
-                }
-            except UnicodeDecodeError:
-                return {
-                    'type': 'binary',
-                    'content': 'Markdown file appears to be binary. Cannot preview.'
-                }
-        
         # Handle text/code files
         if file_ext in TEXT_EXTENSIONS or (mimetype and mimetype.startswith('text/')):
             try:
@@ -870,22 +871,22 @@ def preview_file(project_id, path):
             }
         
         # Default: try to read as text
-            try:
-                with open(abs_path, 'r', encoding='utf-8') as f:
-                    content = f.read(1024 * 50)
-                return {
-                    'type': 'text',
-                    'content': content,
-                    'mimetype': mimetype or 'text/plain',
-                    'language': 'text'
-                }
-            except UnicodeDecodeError:
-                return {
-                    'type': 'binary',
-                    'content': f'Cannot preview this file type ({mimetype or "unknown"}). File appears to be binary.',
-                    'mimetype': mimetype,
-                    'size': file_size
-                }
+        try:
+            with open(abs_path, 'r', encoding='utf-8') as f:
+                content = f.read(1024 * 50)
+            return {
+                'type': 'text',
+                'content': content,
+                'mimetype': mimetype or 'text/plain',
+                'language': 'text'
+            }
+        except UnicodeDecodeError:
+            return {
+                'type': 'binary',
+                'content': f'Cannot preview this file type ({mimetype or "unknown"}). File appears to be binary.',
+                'mimetype': mimetype,
+                'size': file_size
+            }
     
     except Exception as e:
         return {'type': 'error', 'content': str(e)}
