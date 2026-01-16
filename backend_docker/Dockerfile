@@ -14,8 +14,15 @@ RUN apt-get update && apt-get install -y \
 
 USER mambauser
 
+# Build from repo root:
+# docker build -f backend_docker/Dockerfile -t appam-backend .
+
+# Install OpenCode CLI
+RUN curl -fsSL https://opencode.ai/install | bash
+ENV PATH="/home/mambauser/.opencode/bin:${PATH}"
+
 # Copy environment definitions
-COPY --chown=mambauser:mambauser environments /tmp/environments
+COPY --chown=mambauser:mambauser backend_docker/environments /tmp/environments
 
 # Create environments
 # We do this one by one to avoid OOM or timeout issues during build and easier debugging
@@ -65,8 +72,38 @@ RUN micromamba create -n gtdbtk -f /tmp/environments/gtdbtk.yml && \
 RUN micromamba create -n antismash -f /tmp/environments/antismash.yml && \
     micromamba clean --all --yes
 
+# Copy backend code
+WORKDIR /app
+COPY --chown=mambauser:mambauser backend /app/backend
+RUN mkdir -p /app/backend/projects
+
+USER root
+COPY backend_docker/tool-wrapper.sh /usr/local/bin/appam-tool
+RUN chmod +x /usr/local/bin/appam-tool && \
+    for name in \
+      fastqc multiqc adapterremoval AdapterRemoval bwa bowtie2 samtools bedtools pmdtools pmdtools.py \
+      pydamage krakenuniq krona ktImportText ktImportTaxonomy megahit spades spades.py quast quast.py \
+      freebayes bcftools metabat2 maxbin2 run_MaxBin.pl concoct gunc checkm metawrap metawrap-mg \
+      prokka rgi abricate gtdb-tk gtdbtk antismash; do \
+        ln -sf /usr/local/bin/appam-tool /usr/local/bin/$name; \
+    done
+RUN mkdir -p /databases && chown -R mambauser:mambauser /databases
+USER mambauser
+
+# Install backend dependencies
+RUN micromamba create -n backend -y python=3.12 pip && \
+    micromamba run -n backend pip install --no-cache-dir -r /app/backend/requirements.txt && \
+    micromamba clean --all --yes
+
 # Set default shell to bash
 SHELL ["/bin/bash", "-c"]
 
-# Instructions for the user or default command
-CMD ["/bin/bash"]
+# Runtime settings
+WORKDIR /app/backend
+ENV PYTHONUNBUFFERED=1
+ENV FLASK_PORT=8666
+VOLUME ["/app/backend/projects", "/databases"]
+EXPOSE 8666
+
+# Start backend service
+CMD ["micromamba", "run", "-n", "backend", "python", "run.py"]
