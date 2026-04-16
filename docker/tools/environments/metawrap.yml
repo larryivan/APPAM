@@ -1,8 +1,13 @@
 name: metawrap
 channels:
-  - ursky
   - bioconda
   - conda-forge
-dependencies: []
-  # Dependencies installed via command line in Dockerfile to support --only-deps
-  # - metawrap-mg==1.3.2
+dependencies:
+  # APPAM-SMK only uses metaWRAP binning and bin_refinement.
+  # Installing the old monolithic ursky::metawrap-mg=1.3.2 now tends to
+  # pull optional modules such as classify/quant bins and hits an unsatisfiable
+  # boost/taxator/salmon dependency chain on current channels.
+  - python=2.7.15
+  - biopython=1.72
+  - metawrap-binning=1.3.0
+  - metawrap-refinement=1.3.0

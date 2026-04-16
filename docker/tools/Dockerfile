@@ -62,7 +62,7 @@ RUN retry-bash "micromamba create -y -n freebayes -f /opt/appam/docker/tools/env
 RUN retry-bash "micromamba create -y -n bcftools -f /opt/appam/docker/tools/environments/bcftools.yml && micromamba clean --all --yes"
 RUN retry-bash "micromamba create -y -n binning -f /opt/appam/docker/tools/environments/binning.yml && micromamba clean --all --yes"
 RUN retry-bash "micromamba create -y -n checkm -f /opt/appam/docker/tools/environments/checkm.yml && micromamba clean --all --yes"
-RUN retry-bash "micromamba create -y -n metawrap -f /opt/appam/docker/tools/environments/metawrap.yml && micromamba install -y -n metawrap --only-deps -c ursky -c bioconda -c conda-forge metawrap-mg=1.3.2 && micromamba clean --all --yes"
+RUN retry-bash "micromamba create -y -n metawrap -f /opt/appam/docker/tools/environments/metawrap.yml && micromamba clean --all --yes"
 RUN retry-bash "micromamba create -y -n prokka -f /opt/appam/docker/tools/environments/prokka.yml && micromamba clean --all --yes"
 RUN retry-bash "micromamba create -y -n rgi -f /opt/appam/docker/tools/environments/rgi.yml && micromamba clean --all --yes"
 RUN retry-bash "micromamba create -y -n abricate -f /opt/appam/docker/tools/environments/abricate.yml && micromamba clean --all --yes"
