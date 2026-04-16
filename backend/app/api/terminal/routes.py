@@ -5,10 +5,13 @@ import select
 import struct
 import fcntl
 import termios
+import shlex
 from collections import deque
-from flask import Blueprint, request
+from flask import Blueprint, request, session as flask_session
 from flask_socketio import emit, join_room, leave_room
 from app import socketio
+from app.auth import get_project_for_user, session_user
+from app.paths import OPENCODE_ASSETS_ROOT
 import logging
 
 terminal_bp = Blueprint('terminal', __name__)
@@ -18,19 +21,31 @@ logger = logging.getLogger(__name__)
 terminal_sessions = {}
 client_sessions = {}
 
-BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-DEFAULT_OPENCODE_AGENTS_PATH = os.path.join(BACKEND_DIR, "opencode", "AGENTS.md")
-DEFAULT_OPENCODE_SYSTEM_PROMPT_PATH = os.path.join(BACKEND_DIR, "opencode", "system_prompt.txt")
+DEFAULT_OPENCODE_AGENTS_PATH = str(OPENCODE_ASSETS_ROOT / "AGENTS.md")
+DEFAULT_OPENCODE_SYSTEM_PROMPT_PATH = str(OPENCODE_ASSETS_ROOT / "system_prompt.txt")
 
 class TerminalSession:
-    def __init__(self, session_key, project_path, keep_alive=False, extra_env=None):
+    def __init__(
+        self,
+        session_key,
+        project_path,
+        keep_alive=False,
+        extra_env=None,
+        preset="shell",
+        buffer_output=True,
+        launch_command=None,
+    ):
         self.session_key = session_key
         self.project_path = project_path
         self.keep_alive = keep_alive
         self.extra_env = extra_env or {}
+        self.preset = preset or "shell"
+        self.buffer_output = buffer_output
+        self.launch_command = launch_command or []
         self.process = None
         self.fd = None
         self.pid = None
+        self.closed = False
         self.clients = set()
         self.reading = False
         self.output_chunks = deque()
@@ -61,12 +76,17 @@ class TerminalSession:
                 else:
                     logger.warning(f"Project path does not exist: {self.project_path}")
                 
+                if self.launch_command:
+                    executable = self.launch_command[0]
+                    os.execvpe(executable, self.launch_command, env)
+
                 # 启动 shell
                 shell = os.environ.get('SHELL', '/bin/bash')
                 os.execvpe(shell, [shell], env)
             else:  # 父进程
                 # 设置非阻塞模式
                 fcntl.fcntl(self.fd, fcntl.F_SETFL, os.O_NONBLOCK)
+                self.closed = False
                 logger.info(f"Terminal session {self.session_key} started with PID {self.pid}")
                 
         except Exception as e:
@@ -84,27 +104,38 @@ class TerminalSession:
                 
     def write(self, data):
         """写入数据到终端"""
-        if self.fd:
+        if self.fd and not self.closed:
             try:
                 os.write(self.fd, data.encode())
+                return True
             except Exception as e:
                 logger.error(f"Failed to write to terminal: {e}")
-                
+                self.closed = True
+        return False
+
     def read(self):
         """从终端读取数据"""
-        if self.fd:
+        if self.fd and not self.closed:
             try:
                 # 检查是否有数据可读
                 if self.fd in select.select([self.fd], [], [], 0)[0]:
                     data = os.read(self.fd, 1024)
-                    return data.decode('utf-8', errors='replace')
+                    if not data:
+                        self.closed = True
+                        return None, True
+                    return data.decode('utf-8', errors='replace'), False
+            except OSError:
+                self.closed = True
+                return None, True
             except Exception as e:
                 logger.error(f"Failed to read from terminal: {e}")
-        return None
+                self.closed = True
+                return None, True
+        return None, self.closed
 
     def append_output(self, data):
         """缓存终端输出以支持会话重连回放"""
-        if not data or self.buffer_limit <= 0:
+        if not self.buffer_output or not data or self.buffer_limit <= 0:
             return
         self.output_chunks.append(data)
         self.output_size += len(data)
@@ -114,22 +145,25 @@ class TerminalSession:
 
     def get_output_buffer(self):
         """获取当前缓存的输出内容"""
-        if not self.output_chunks:
+        if not self.buffer_output or not self.output_chunks:
             return ""
         return "".join(self.output_chunks)
         
     def close(self):
         """关闭终端会话"""
+        self.closed = True
         if self.fd:
             try:
                 os.close(self.fd)
             except:
                 pass
+            self.fd = None
         if self.pid:
             try:
                 os.kill(self.pid, 9)
             except:
                 pass
+            self.pid = None
         logger.info(f"Terminal session {self.session_key} closed")
 
     @property
@@ -143,7 +177,7 @@ class TerminalSession:
         self.clients.discard(client_id)
 
     def should_close(self):
-        return not self.keep_alive and not self.clients
+        return self.closed or (not self.keep_alive and not self.clients)
 
 
 def _resolve_terminal_command(preset, initial_command):
@@ -154,13 +188,32 @@ def _resolve_terminal_command(preset, initial_command):
     return ""
 
 
+def _parse_terminal_command(command):
+    if not command:
+        return []
+    try:
+        return shlex.split(command)
+    except ValueError:
+        logger.warning("Failed to parse terminal command %r; falling back to raw token", command)
+        return [command]
+
+
+def _build_launch_command(preset, command):
+    if not command:
+        return []
+    if preset == "opencode":
+        shell = os.environ.get('SHELL', '/bin/bash')
+        return [shell, '-lc', command]
+    return _parse_terminal_command(command)
+
+
 def _resolve_opencode_path(value, fallback):
     candidate = value or fallback
     if not candidate:
         return ""
     if os.path.isabs(candidate):
         return candidate
-    return os.path.join(BACKEND_DIR, candidate)
+    return str(OPENCODE_ASSETS_ROOT.parent / candidate)
 
 
 def _load_text(path):
@@ -263,45 +316,64 @@ def handle_terminal_connect(data):
     session_id = request.sid
     project_id = data.get('project_id')
     session_key = data.get('session_key') or session_id
-    keep_alive = bool(data.get('keep_alive', False))
-    preset = data.get('preset')
+    preset = data.get('preset') or 'shell'
+    supports_resume = preset != "opencode"
+    keep_alive = bool(data.get('keep_alive', False)) and supports_resume
     initial_command = _resolve_terminal_command(preset, data.get('initial_command'))
+    launch_command = _build_launch_command(preset, initial_command)
     
+    if not flask_session.get('user_id'):
+        emit('terminal_error', {'error': 'Authentication required'})
+        return
+
+    user = session_user()
+    if not user:
+        emit('terminal_error', {'error': 'Authentication required'})
+        return
+
     if not project_id:
         emit('terminal_error', {'error': 'Project ID is required'})
         return
-        
-    # 获取项目路径 - 修复路径计算
-    # routes.py -> terminal -> api -> app -> backend
+
+    project = get_project_for_user(project_id, user=user, min_role='editor')
+    if not project:
+        emit('terminal_error', {'error': 'Project not found or write access denied'})
+        return
+
     project_path = os.path.join(BACKEND_DIR, 'projects', project_id)
     
     logger.info(f"Calculated backend_dir: {BACKEND_DIR}")
     logger.info(f"Calculated project_path: {project_path}")
     
-    # 确保项目目录存在
     if not os.path.exists(project_path):
-        logger.warning(f"Project directory does not exist: {project_path}")
-        # 如果项目目录不存在，使用backend目录作为默认
-        project_path = BACKEND_DIR
+        emit('terminal_error', {'error': 'Project directory does not exist'})
+        return
     
     try:
         # 创建或复用终端会话
         session = terminal_sessions.get(session_key)
         is_new = False
+        if session and (session.closed or session.project_path != project_path or session.preset != preset or not supports_resume):
+            session.close()
+            terminal_sessions.pop(session_key, None)
+            session = None
+
         if not session:
             extra_env = _build_opencode_env() if preset == "opencode" else {}
-            session = TerminalSession(session_key, project_path, keep_alive=keep_alive, extra_env=extra_env)
+            session = TerminalSession(
+                session_key,
+                project_path,
+                keep_alive=keep_alive,
+                extra_env=extra_env,
+                preset=preset,
+                buffer_output=supports_resume,
+                launch_command=launch_command,
+            )
             session.start()
             terminal_sessions[session_key] = session
             is_new = True
         else:
             session.keep_alive = session.keep_alive or keep_alive
-            if session.project_path != project_path:
-                logger.warning(
-                    f"Terminal session {session_key} reused with different path: "
-                    f"{session.project_path} -> {project_path}"
-                )
-                session.project_path = project_path
 
         session.add_client(session_id)
         client_sessions[session_id] = session_key
@@ -312,6 +384,7 @@ def handle_terminal_connect(data):
             'session_key': session_key,
             'project_path': project_path,
             'project_id': project_id,
+            'preset': preset,
             'reused': not is_new
         })
         logger.info(f"Terminal connected for session {session_key}, project path: {project_path}")
@@ -320,8 +393,12 @@ def handle_terminal_connect(data):
         if buffered_output:
             emit('terminal_output', {'output': buffered_output})
 
-        if is_new and initial_command:
-            session.write(initial_command + "\n")
+        if is_new and initial_command and not launch_command:
+            if not session.write(initial_command + "\n"):
+                emit('terminal_error', {'error': 'Failed to start terminal command'})
+                session.close()
+                terminal_sessions.pop(session_key, None)
+                return
 
         if not session.reading:
             session.reading = True
@@ -335,13 +412,19 @@ def handle_terminal_connect(data):
 @socketio.on('terminal_input')
 def handle_terminal_input(data):
     """处理终端输入"""
+    if not flask_session.get('user_id'):
+        emit('terminal_error', {'error': 'Authentication required'})
+        return
     session_id = request.sid
     session_key = data.get('session_key') or client_sessions.get(session_id) or session_id
     session = terminal_sessions.get(session_key)
     
     if session:
         command = data.get('input', '')
-        session.write(command)
+        if not session.write(command):
+            session.close()
+            terminal_sessions.pop(session_key, None)
+            emit('terminal_error', {'error': 'Terminal session ended'})
     else:
         emit('terminal_error', {'error': 'Terminal session not found'})
 
@@ -349,11 +432,14 @@ def handle_terminal_input(data):
 @socketio.on('terminal_resize')
 def handle_terminal_resize(data):
     """处理终端大小调整"""
+    if not flask_session.get('user_id'):
+        emit('terminal_error', {'error': 'Authentication required'})
+        return
     session_id = request.sid
     session_key = data.get('session_key') or client_sessions.get(session_id) or session_id
     session = terminal_sessions.get(session_key)
     
-    if session:
+    if session and not session.closed:
         rows = data.get('rows', 24)
         cols = data.get('cols', 80)
         session.resize(rows, cols)
@@ -389,16 +475,21 @@ def read_terminal_output(session_id):
 
     while session and session_id in terminal_sessions:
         try:
-            output = session.read()
+            output, reached_eof = session.read()
             if output:
                 session.append_output(output)
                 socketio.emit('terminal_output', {'output': output}, room=session.room)
+            elif reached_eof:
+                socketio.emit('terminal_exit', {'session_key': session_id, 'preset': session.preset}, room=session.room)
+                session.close()
+                terminal_sessions.pop(session_id, None)
+                break
             else:
-                # 短暂休眠避免CPU占用过高
                 socketio.sleep(0.01)
         except Exception as e:
             logger.error(f"Error reading terminal output: {e}")
             break
+        session = terminal_sessions.get(session_id)
             
     logger.info(f"Terminal output reader stopped for session {session_id}")
 

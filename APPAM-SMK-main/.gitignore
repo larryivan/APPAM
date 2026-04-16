@@ -1,0 +1,72 @@
+# editor
+.vscode/
+.idea/
+.cursor/
+.claude/
+.superset/
+.DS_Store
+
+# agents
+CLAUDE.md
+AGENTS.md
+
+# outputs / runs
+results/
+work/
+logs/
+tmp/
+temp/
+reports/
+runs/
+.snakemake/
+*.snakemake.log
+.cache/
+.nextflow/
+.nfwork/
+.nxf/
+*.log
+
+# data
+data/
+raw_data/
+fastq/
+raw/
+*.fastq
+*.fastq.gz
+*.fq.gz
+
+# common bioinformatics artifacts
+*.bam
+*.bai
+*.cram
+*.crai
+*.sam
+*.vcf
+*.vcf.gz
+*.tbi
+*.g.vcf.gz
+*.bed
+*.bed.gz
+*.gtf
+*.gff
+*.fasta
+*.fa
+*.fna
+*.fai
+*.dict
+*.idx
+
+# config secrets
+.env
+config.local.yaml
+*.local.yaml
+TODO.local.md
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.env
+*.egg-info/
+.pytest_cache/
+.mypy_cache/

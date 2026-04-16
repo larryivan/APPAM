@@ -12,7 +12,7 @@ class ToolManager {
       const response = await fetch('/api/tools');
       const data = await response.json();
       if (data.success) {
-        this.tools = data.tools;
+        this.tools = data.tools || [];
       }
     } catch (error) {
       console.error('Error loading tools:', error);
@@ -21,7 +21,8 @@ class ToolManager {
 
   getToolByName(name) {
     return this.tools.find(tool => 
-      tool.tool_name.toLowerCase() === name.toLowerCase()
+      tool.tool_name.toLowerCase() === name.toLowerCase() ||
+      tool.id === name.toLowerCase()
     );
   }
 
@@ -49,7 +50,7 @@ class ToolManager {
   getToolCategories() {
     const categories = {};
     this.tools.forEach(tool => {
-      const category = this.categorize(tool);
+      const category = tool.section_title || this.categorize(tool);
       if (!categories[category]) {
         categories[category] = [];
       }

@@ -1,0 +1,74 @@
+name: paleoproteomics
+channels:
+  - bioconda
+  - conda-forge
+  - ursky
+  - defaults
+
+dependencies:
+  - python=3.11
+  - pip
+  - git
+  - dotnet-runtime=8.0.15
+  - snakemake=9.16.0
+  - cmake=4.2.3
+  - ninja=1.13.2
+  - eigen=3.4.0
+  - xerces-c=3.3.0
+  - libsvm=336
+
+  - coin-or-cbc=2.10.12
+  - coin-or-cgl=0.60.9
+  - coin-or-clp=1.17.10
+  - coin-or-osi=0.108.11
+  - coin-or-utils=2.11.12
+
+  - libxml2
+  - zlib
+  - bzip2
+  - openssl
+  - ca-certificates
+  - libcurl
+  - libdeflate
+  - libsqlite
+  - readline
+  - ncurses
+  - tk
+
+  - libgcc-ng
+  - libstdcxx-ng
+  - libgomp
+  - libopenblas
+  - libblas
+  - libcblas
+  - liblapack
+  - liblapacke
+
+  - qt6-main
+  - dbus
+  - cairo
+  - fontconfig
+  - freetype
+  - harfbuzz
+  - icu
+  - libdrm
+  - libegl
+  - libgl
+  - libglvnd
+  - libglx
+  - libpciaccess
+  - libcups
+  - libxcb
+  - libxkbcommon
+  - wayland
+  - xcb-util
+  - xcb-util-cursor
+  - xcb-util-image
+  - xcb-util-keysyms
+  - xcb-util-renderutil
+  - xcb-util-wm
+  - xorg-libxcomposite
+  - xorg-libxdamage
+  - xorg-libxfixes
+  - xorg-libxrandr
+  - xorg-libxxf86vm

@@ -7,15 +7,16 @@ from urllib.parse import urlparse
 import requests
 
 from .file_manager import get_project_path
+from ..paths import BACKEND_ROOT
 
 
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+BASE_DIR = str(BACKEND_ROOT)
 DEFAULT_SKILL_FILENAMES = ("SKILL.md", "skill.md")
 
 
 class OpenCodeService:
     def __init__(self) -> None:
-        self.base_url = os.getenv("OPENCODE_BASE_URL", "http://127.0.0.1:4096").rstrip("/")
+        self.base_url = os.getenv("OPENCODE_BASE_URL", "http://127.0.0.1:19455").rstrip("/")
         self.agent = os.getenv("OPENCODE_AGENT", "build")
         self.provider_id = os.getenv("OPENCODE_PROVIDER_ID")
         self.model_id = os.getenv("OPENCODE_MODEL_ID")

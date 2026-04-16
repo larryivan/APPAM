@@ -1,22 +1,12 @@
 import json
-import os
 import uuid
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, session
 from flask_socketio import emit
 from app import socketio
 from app.services.opencode_service import opencode_service
+from app.services.tool_library import get_tool_definition, get_tool_library, get_tool_library_map, get_tool_sections
 
 tools_bp = Blueprint('tools', __name__)
-
-def load_tool_library():
-    """加载工具库"""
-    try:
-        tool_library_path = os.path.join(os.path.dirname(__file__), '../../../tool_library.json')
-        with open(tool_library_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"Error loading tool library: {e}")
-        return []
 
 def _build_tool_suggestion_prompt(query: str, tools: list) -> str:
     tool_summaries = [
@@ -62,10 +52,12 @@ def _map_tool_recommendation(result: dict, tools: list) -> dict:
 def get_tools():
     """获取所有工具列表"""
     try:
-        tools = load_tool_library()
+        tools = get_tool_library()
         return jsonify({
             'success': True,
             'tools': tools,
+            'tools_by_key': get_tool_library_map(),
+            'sections': get_tool_sections(),
             'count': len(tools)
         })
     except Exception as e:
@@ -78,8 +70,7 @@ def get_tools():
 def get_tool(tool_name):
     """获取特定工具信息"""
     try:
-        tools = load_tool_library()
-        tool = next((t for t in tools if t['tool_name'].lower() == tool_name.lower()), None)
+        tool = get_tool_definition(tool_name)
         
         if tool:
             return jsonify({
@@ -110,7 +101,7 @@ def suggest_tool():
                 'error': 'Query is required'
             }), 400
         
-        tools = load_tool_library()
+        tools = get_tool_library()
         prompt = _build_tool_suggestion_prompt(query, tools)
         result = opencode_service.request_json(
             message=prompt,
@@ -133,6 +124,12 @@ def suggest_tool():
 def handle_tool_suggestion_request(data):
     """处理工具建议请求"""
     try:
+        if not session.get('user_id'):
+            emit('tool_suggestion_response', {
+                'success': False,
+                'error': 'Authentication required'
+            })
+            return
         query = data.get('query', '')
         
         if not query:
@@ -142,7 +139,7 @@ def handle_tool_suggestion_request(data):
             })
             return
         
-        tools = load_tool_library()
+        tools = get_tool_library()
         prompt = _build_tool_suggestion_prompt(query, tools)
         result = opencode_service.request_json(
             message=prompt,

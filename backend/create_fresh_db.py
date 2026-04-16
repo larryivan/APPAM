@@ -2,8 +2,8 @@
 """
 Create a brand-new SQLite database for APPAM.
 
-This script creates the projects and process_history tables without
-any password-related columns.
+This script creates the projects, process_history, and jobs tables
+without any password-related columns.
 """
 
 import argparse
@@ -34,6 +34,24 @@ CREATE TABLE IF NOT EXISTS process_history (
     exit_code INTEGER,
     error_message TEXT,
     logs TEXT,
+    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS jobs (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    command TEXT NOT NULL,
+    status TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    started_at TIMESTAMP,
+    finished_at TIMESTAMP,
+    duration REAL,
+    exit_code INTEGER,
+    error_message TEXT,
+    log_path TEXT,
+    output_path TEXT,
+    cancel_requested INTEGER DEFAULT 0,
     FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 """

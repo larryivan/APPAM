@@ -1,0 +1,26 @@
+# Snakemake ≥8 
+executor: slurm
+
+jobs: 200   
+use-conda: true
+conda-frontend: mamba          
+keep-going: true
+latency-wait: 60
+rerun-incomplete: true
+printshellcmds: true
+default-resources:
+  - threads=16
+  - mem_mb=64000          
+  - runtime=360           
+
+resources:
+  mem_mb=256000        
+
+executor_settings:
+  status_cmd: >
+    squeue --clusters=all --noheader --format=%i,%T,%T -j {jobid}
+  status_real_time: true
+  slurm:
+    output: "logs/slurm/{rule}.{jobid}.out"
+    error: "logs/slurm/{rule}.{jobid}.err"
+    job-name: "smk-{rule}-{jobid}"

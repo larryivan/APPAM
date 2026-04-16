@@ -1,10 +1,10 @@
 <template>
   <div class="topbar">
     <div class="topbar-content">
-      <div class="logo-section">
+      <router-link to="/" class="logo-section">
         <img src="/assets/logo.svg" alt="APPAM Logo" />
         <h1 class="logo-title">APPAM</h1>
-      </div>
+      </router-link>
       
       <!-- Desktop Navigation -->
       <nav class="nav-section desktop-nav">
@@ -14,10 +14,30 @@
         <router-link to="/documentation" class="nav-item" :class="{ active: isActive('/documentation') }">
           <span>Documentation</span>
         </router-link>
-        <router-link to="/projects" class="nav-item" :class="{ active: isActive('/projects') }">
+        <router-link v-if="authState.user" to="/projects" class="nav-item" :class="{ active: isActive('/projects') }">
           <span>Projects</span>
         </router-link>
+        <router-link v-if="authState.user" to="/settings" class="nav-item" :class="{ active: isActive('/settings') }">
+          <span>Settings</span>
+        </router-link>
+        <router-link v-if="authState.user?.role === 'admin'" to="/admin/users" class="nav-item" :class="{ active: isActive('/admin/users') }">
+          <span>Admin</span>
+        </router-link>
+        <router-link v-if="authState.user?.role === 'admin'" to="/admin/worker" class="nav-item" :class="{ active: isActive('/admin/worker') }">
+          <span>Worker</span>
+        </router-link>
       </nav>
+
+      <div class="auth-actions desktop-auth">
+        <template v-if="authState.user">
+          <div class="user-badge-wrap">
+            <span class="user-badge">{{ authDisplayName }}</span>
+            <span class="role-badge">{{ authRoleLabel }}</span>
+          </div>
+          <button class="auth-btn secondary" type="button" @click="handleLogout">Logout</button>
+        </template>
+        <router-link v-else to="/login" class="auth-btn primary">Login</router-link>
+      </div>
 
       <!-- Mobile hamburger menu button -->
       <button 
@@ -64,6 +84,7 @@
           <span>Documentation</span>
         </router-link>
         <router-link 
+          v-if="authState.user"
           to="/projects" 
           class="mobile-nav-item" 
           :class="{ active: isActive('/projects') }"
@@ -72,6 +93,55 @@
         >
           <span>Projects</span>
         </router-link>
+        <router-link
+          v-if="authState.user"
+          to="/settings"
+          class="mobile-nav-item"
+          :class="{ active: isActive('/settings') }"
+          @click="closeMobileMenu"
+          role="menuitem"
+        >
+          <span>Settings</span>
+        </router-link>
+        <router-link
+          v-if="authState.user?.role === 'admin'"
+          to="/admin/users"
+          class="mobile-nav-item"
+          :class="{ active: isActive('/admin/users') }"
+          @click="closeMobileMenu"
+          role="menuitem"
+        >
+          <span>Admin</span>
+        </router-link>
+        <router-link
+          v-if="authState.user?.role === 'admin'"
+          to="/admin/worker"
+          class="mobile-nav-item"
+          :class="{ active: isActive('/admin/worker') }"
+          @click="closeMobileMenu"
+          role="menuitem"
+        >
+          <span>Worker</span>
+        </router-link>
+        <router-link
+          v-if="!authState.user"
+          to="/login"
+          class="mobile-nav-item"
+          :class="{ active: isActive('/login') }"
+          @click="closeMobileMenu"
+          role="menuitem"
+        >
+          <span>Login</span>
+        </router-link>
+        <button
+          v-else
+          class="mobile-nav-item mobile-action-btn"
+          type="button"
+          @click="handleLogout"
+          role="menuitem"
+        >
+          <span>Logout</span>
+        </button>
       </div>
     </nav>
 
@@ -85,11 +155,15 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { authState, logout } from '../lib/auth'
 
 const route = useRoute();
+const router = useRouter();
 const showMobileMenu = ref(false);
+const authDisplayName = computed(() => authState.user?.display_name || authState.user?.username || 'User')
+const authRoleLabel = computed(() => authState.user?.role === 'admin' ? 'Admin' : 'User')
 
 const isActive = (path) => {
   if (path === '/') {
@@ -123,6 +197,12 @@ const closeMobileMenu = () => {
   document.body.style.position = '';
   document.body.style.width = '';
 };
+
+const handleLogout = async () => {
+  await logout()
+  closeMobileMenu()
+  router.replace('/login')
+}
 
 // Listen to window resize changes, automatically close mobile menu when on desktop
 const handleResize = () => {
@@ -182,10 +262,15 @@ watch(() => route.fullPath, handleRouteChange);
 .topbar-content {
   max-width: 1200px;
   margin: 0 auto;
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
+  gap: var(--spacing-4);
   height: var(--header-height);
+}
+
+.topbar-content > * {
+  min-width: 0;
 }
 
 .logo-section {
@@ -194,6 +279,9 @@ watch(() => route.fullPath, handleRouteChange);
   gap: var(--spacing-3);
   z-index: 1031; /* 确保在移动菜单之上 */
   position: relative;
+  flex: 0 0 auto;
+  min-width: 0;
+  text-decoration: none;
 }
 
 .logo-section img {
@@ -222,6 +310,85 @@ watch(() => route.fullPath, handleRouteChange);
   display: flex;
   align-items: center;
   gap: var(--spacing-2);
+  width: 100%;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.desktop-auth {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  justify-content: flex-end;
+  max-width: min(36vw, 320px);
+}
+
+.auth-actions {
+  margin-left: 0;
+}
+
+.user-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.8rem;
+  border-radius: var(--radius-full);
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--primary-700);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-badge-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--radius-full);
+  background: var(--surface-2);
+  color: var(--gray-600);
+  font-size: 0.78rem;
+  font-weight: var(--font-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.auth-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 88px;
+  padding: 0.65rem 0.95rem;
+  border-radius: var(--radius-base);
+  border: 0;
+  text-decoration: none;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.auth-btn.primary {
+  background: var(--gradient-primary);
+  color: white;
+  box-shadow: var(--shadow-sm);
+}
+
+.auth-btn.secondary {
+  background: var(--surface-1);
+  color: var(--gray-700);
+  border: var(--border-width) solid var(--border-color);
 }
 
 .nav-item {
@@ -372,6 +539,14 @@ watch(() => route.fullPath, handleRouteChange);
   min-height: 48px;
   position: relative;
   touch-action: manipulation; /* 改善触摸体验 */
+}
+
+.mobile-action-btn {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  text-align: left;
 }
 
 .mobile-nav-item:hover {
@@ -526,6 +701,36 @@ watch(() => route.fullPath, handleRouteChange);
   .logo-title {
     font-size: var(--text-lg);
   }
+
+  .desktop-auth {
+    gap: var(--spacing-2);
+    max-width: 220px;
+  }
+
+  .auth-btn {
+    min-width: 74px;
+    padding: 0.55rem 0.8rem;
+  }
+}
+
+@media (max-width: 1180px) {
+  .role-badge {
+    display: none;
+  }
+}
+
+@media (max-width: 980px) {
+  .topbar-content {
+    gap: var(--spacing-3);
+  }
+
+  .desktop-nav {
+    justify-content: flex-start;
+  }
+
+  .user-badge-wrap {
+    display: none;
+  }
 }
 
 /* 移动端 (最大 767px) */
@@ -569,6 +774,10 @@ watch(() => route.fullPath, handleRouteChange);
   
   /* 隐藏桌面导航，显示移动菜单按钮 */
   .desktop-nav {
+    display: none;
+  }
+
+  .desktop-auth {
     display: none;
   }
   

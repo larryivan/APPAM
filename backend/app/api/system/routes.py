@@ -1,4 +1,6 @@
 from flask import Blueprint, jsonify, request
+from app.auth import admin_required
+from app.services.local_executor import get_worker_status
 from app.services.system_info import system_info_service
 import traceback
 
@@ -37,6 +39,23 @@ def get_system_info():
     
     except Exception as e:
         print(f"Error getting system info: {e}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@system_bp.route('/worker', methods=['GET'])
+@admin_required
+def get_worker_runtime_status():
+    try:
+        return jsonify({
+            'success': True,
+            'data': get_worker_status(),
+        })
+    except Exception as e:
+        print(f"Error getting worker status: {e}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,

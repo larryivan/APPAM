@@ -18,7 +18,7 @@ case "$cmd" in
   krakenuniq|krona|ktImportText|ktImportTaxonomy)
     env="taxonomy"
     ;;
-  megahit|spades|spades.py|quast|quast.py)
+  megahit|spades|spades.py|quast|quast.py|seqkit)
     env="assembly"
     ;;
   freebayes)
@@ -30,7 +30,7 @@ case "$cmd" in
   metabat2|maxbin2|run_MaxBin.pl|concoct|gunc)
     env="binning"
     ;;
-  checkm)
+  checkm|checkm2)
     env="checkm"
     ;;
   metawrap|metawrap-mg)
@@ -62,6 +62,7 @@ case "$cmd" in
   pmdtools) target="pmdtools.py" ;;
   spades) target="spades.py" ;;
   quast) target="quast.py" ;;
+  checkm2) target="checkm2" ;;
   krona) target="ktImportText" ;;
   maxbin2) target="run_MaxBin.pl" ;;
   gtdb-tk) target="gtdbtk" ;;

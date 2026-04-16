@@ -1,5 +1,5 @@
 <template>
-  <div class="workspace-layout">
+  <div class="workspace-layout" :class="{ 'workflow-focus': isWorkflowRoute }">
     <!-- 左侧工具栏 -->
     <nav class="workspace-sidebar" :class="{ collapsed: sidebarCollapsed, mobile: isMobile, animating: sidebarAnimating }">
       <!-- 顶部控制栏 -->
@@ -62,117 +62,78 @@
           </div>
         </div>
         
-        <!-- 预处理板块 -->
-        <div class="nav-section">
-          <div class="section-header" @click="toggleSection('preprocessing')">
+        <div
+          v-for="section in toolSections"
+          :key="section.id"
+          class="nav-section"
+        >
+          <div class="section-header" @click="toggleSection(section.id)">
             <div class="section-icon">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg v-if="section.icon === 'reads'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                 <polyline points="14 2 14 8 20 8"></polyline>
                 <line x1="12" y1="18" x2="12" y2="12"></line>
                 <line x1="9" y1="15" x2="15" y2="15"></line>
               </svg>
-            </div>
-            <span class="section-title">Preprocessing</span>
-            <svg class="section-arrow" :class="{ rotated: !expandedSections.preprocessing }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </div>
-          <div class="section-content" v-show="expandedSections.preprocessing">
-            <router-link v-for="tool in preprocessingTools" :key="tool" :to="getToolLink(tool)" class="nav-link">
-              <div class="link-icon">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="3"></circle>
-                  <path d="M12 1v6m0 6v6m11-11h-6m-6 0H1"></path>
-                </svg>
-              </div>
-              <span class="link-text">{{ tool }}</span>
-            </router-link>
-          </div>
-        </div>
-        
-        <!-- 序列分析板块 -->
-        <div class="nav-section">
-          <div class="section-header" @click="toggleSection('analysis')">
-            <div class="section-icon">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="20" x2="18" y2="10"></line>
-                <line x1="12" y1="20" x2="12" y2="4"></line>
-                <line x1="6" y1="20" x2="6" y2="14"></line>
+              <svg v-else-if="section.icon === 'taxonomy'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
               </svg>
-            </div>
-            <span class="section-title">Sequence Analysis</span>
-            <svg class="section-arrow" :class="{ rotated: !expandedSections.analysis }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </div>
-          <div class="section-content" v-show="expandedSections.analysis">
-            <router-link v-for="tool in analysisTools" :key="tool" :to="getToolLink(tool)" class="nav-link">
-              <div class="link-icon">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-                </svg>
-              </div>
-              <span class="link-text">{{ tool }}</span>
-            </router-link>
-          </div>
-        </div>
-        
-        <!-- 组装与分箱板块 -->
-        <div class="nav-section">
-          <div class="section-header" @click="toggleSection('assembly')">
-            <div class="section-icon">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg v-else-if="section.icon === 'assembly'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="3" width="7" height="7"></rect>
                 <rect x="14" y="3" width="7" height="7"></rect>
                 <rect x="14" y="14" width="7" height="7"></rect>
                 <rect x="3" y="14" width="7" height="7"></rect>
               </svg>
-            </div>
-            <span class="section-title">Assembly & Binning</span>
-            <svg class="section-arrow" :class="{ rotated: !expandedSections.assembly }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </div>
-          <div class="section-content" v-show="expandedSections.assembly">
-            <router-link v-for="tool in assemblyTools" :key="tool" :to="getToolLink(tool)" class="nav-link">
-              <div class="link-icon">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-                  <polyline points="2 17 12 22 22 17"></polyline>
-                  <polyline points="2 12 12 17 22 12"></polyline>
-                </svg>
-              </div>
-              <span class="link-text">{{ tool }}</span>
-            </router-link>
-          </div>
-        </div>
-        
-        <!-- MAG分析板块 -->
-        <div class="nav-section">
-          <div class="section-header" @click="toggleSection('mag')">
-            <div class="section-icon">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg v-else-if="section.icon === 'binning'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
                 <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
                 <line x1="12" y1="22.08" x2="12" y2="12"></line>
               </svg>
+              <svg v-else-if="section.icon === 'annotation'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M8 12h8"></path>
+                <path d="M12 8v8"></path>
+              </svg>
+              <svg v-else-if="section.icon === 'proteomics'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M6 3h12"></path>
+                <path d="M9 3v6l-4 7a3 3 0 0 0 2.62 4.5h8.76A3 3 0 0 0 19 16l-4-7V3"></path>
+                <path d="M8 14h8"></path>
+              </svg>
+              <svg v-else-if="section.icon === 'workflow'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="6" height="6" rx="1"></rect>
+                <rect x="15" y="4" width="6" height="6" rx="1"></rect>
+                <rect x="9" y="14" width="6" height="6" rx="1"></rect>
+                <path d="M9 7h6"></path>
+                <path d="M12 10v4"></path>
+              </svg>
+              <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 12h18"></path>
+                <path d="M12 3v18"></path>
+              </svg>
             </div>
-            <span class="section-title">MAG Analysis</span>
-            <svg class="section-arrow" :class="{ rotated: !expandedSections.mag }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <span class="section-title">{{ section.title }}</span>
+            <svg class="section-arrow" :class="{ rotated: !expandedSections[section.id] }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="6 9 12 15 18 9"></polyline>
             </svg>
           </div>
-          <div class="section-content" v-show="expandedSections.mag">
-            <router-link v-for="tool in magTools" :key="tool" :to="getToolLink(tool)" class="nav-link">
+          <div class="section-content" v-show="expandedSections[section.id]">
+            <router-link
+              v-for="tool in section.tools"
+              :key="tool.id"
+              :to="getToolLink(tool)"
+              class="nav-link"
+            >
               <div class="link-icon">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <path d="M8 12h8"></path>
-                  <path d="M12 8v8"></path>
+                <svg v-if="tool.kind === 'workflow'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M12 1v6m0 6v6m11-11h-6m-6 0H1"></path>
                 </svg>
               </div>
-              <span class="link-text">{{ tool }}</span>
+              <span class="link-text">{{ tool.tool_name }}</span>
+              <span v-if="tool.kind === 'workflow'" class="link-badge">WF</span>
             </router-link>
           </div>
         </div>
@@ -197,30 +158,43 @@
           </svg>
         </button>
         <div class="shortcut-divider"></div>
-        <button class="shortcut-link" title="Preprocessing" @click="quickToggle('preprocessing')">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <button
+          v-for="section in toolSections"
+          :key="section.id"
+          class="shortcut-link"
+          :title="section.title"
+          @click="quickToggle(section.id)"
+        >
+          <svg v-if="section.icon === 'reads'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
             <polyline points="14 2 14 8 20 8"></polyline>
           </svg>
-        </button>
-        <button class="shortcut-link" title="Sequence Analysis" @click="quickToggle('analysis')">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="20" x2="18" y2="10"></line>
-            <line x1="12" y1="20" x2="12" y2="4"></line>
-            <line x1="6" y1="20" x2="6" y2="14"></line>
+          <svg v-else-if="section.icon === 'taxonomy'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
           </svg>
-        </button>
-        <button class="shortcut-link" title="Assembly & Binning" @click="quickToggle('assembly')">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg v-else-if="section.icon === 'assembly'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="3" width="7" height="7"></rect>
             <rect x="14" y="3" width="7" height="7"></rect>
             <rect x="14" y="14" width="7" height="7"></rect>
             <rect x="3" y="14" width="7" height="7"></rect>
           </svg>
-        </button>
-        <button class="shortcut-link" title="MAG Analysis" @click="quickToggle('mag')">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg v-else-if="section.icon === 'binning'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+          </svg>
+          <svg v-else-if="section.icon === 'proteomics'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 3h12"></path>
+            <path d="M9 3v6l-4 7a3 3 0 0 0 2.62 4.5h8.76A3 3 0 0 0 19 16l-4-7V3"></path>
+          </svg>
+          <svg v-else-if="section.icon === 'workflow'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="4" width="6" height="6" rx="1"></rect>
+            <rect x="15" y="4" width="6" height="6" rx="1"></rect>
+            <rect x="9" y="14" width="6" height="6" rx="1"></rect>
+            <path d="M9 7h6"></path>
+            <path d="M12 10v4"></path>
+          </svg>
+          <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12h18"></path>
+            <path d="M12 3v18"></path>
           </svg>
         </button>
       </div>
@@ -248,7 +222,7 @@
         <div v-if="hasNotifications" class="notification-dot"></div>
       </button>
       
-      <div class="content-wrapper">
+      <div class="content-wrapper" :class="{ 'workflow-content-wrapper': isWorkflowRoute }">
         <router-view />
       </div>
     </main>
@@ -280,7 +254,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import FloatingTerminal from '@/components/FloatingTerminal.vue'
 import FloatingOpenCodeTerminal from '@/components/FloatingOpenCodeTerminal.vue'
@@ -294,27 +268,55 @@ const sidebarCollapsed = ref(false)
 const isMobile = ref(false)
 const hasNotifications = ref(false)
 const sidebarAnimating = ref(false)
-const windowWidth = ref(window.innerWidth)
 const openCodeRef = ref(null)
 const isOpenCodeVisible = computed(() => Boolean(openCodeRef.value?.isOpen?.value))
+const toolSections = ref([])
+const isWorkflowRoute = computed(() => route.name === 'WorkflowView')
 
 // 侧边栏展开状态
 const expandedSections = ref({
   workspace: true,
-  preprocessing: true,
-  analysis: true,
-  assembly: true,
-  mag: true
 })
 
-// 工具分组
-const preprocessingTools = ['FastQC', 'MultiQC', 'AdapterRemoval']
-const analysisTools = ['bwa', 'PMDtools', 'bedtools', 'KrakenUniq', 'Krona']
-const assemblyTools = ['MEGAHIT', 'SPAdes', 'QUAST', 'Bowtie2', 'Samtools', 'PyDamage', 'MetaBAT2', 'MaxBin2']
-const magTools = ['CheckM', 'GTDB-Tk', 'PROKKA', 'RGI', 'antiSMASH']
-
 const getToolLink = (tool) => {
-  return `/workspace/${route.params.id}/tool/${tool.toLowerCase()}`
+  if (tool.kind === 'workflow') {
+    const workflowId = tool.execution?.workflow_id || tool.id
+    return `/workspace/${route.params.id}/workflow/${workflowId}`
+  }
+  return `/workspace/${route.params.id}/tool/${tool.id}`
+}
+
+const mergeExpandedSections = (savedState = {}) => {
+  const nextState = {
+    workspace: savedState.workspace ?? true,
+  }
+  toolSections.value.forEach((section) => {
+    nextState[section.id] = savedState[section.id] ?? true
+  })
+  expandedSections.value = nextState
+}
+
+const loadToolSections = async () => {
+  try {
+    const response = await fetch('/api/tools')
+    const payload = await response.json()
+    if (!response.ok || !payload.success) {
+      throw new Error(payload.error || 'Failed to load tools')
+    }
+    toolSections.value = payload.sections || []
+    let savedState = {}
+    const savedRaw = localStorage.getItem('sidebarExpandedSections')
+    if (savedRaw) {
+      try {
+        savedState = JSON.parse(savedRaw)
+      } catch (error) {
+        console.error('Failed to parse saved sidebar state:', error)
+      }
+    }
+    mergeExpandedSections(savedState)
+  } catch (error) {
+    console.error('Failed to load tool sections:', error)
+  }
 }
 
 const openOpenCodeWindow = () => {
@@ -325,7 +327,6 @@ const openOpenCodeWindow = () => {
 }
 
 const toggleSidebar = () => {
-  console.log('toggleSidebar called', { isMobile: isMobile.value, sidebarCollapsed: sidebarCollapsed.value })
   sidebarAnimating.value = true
   sidebarCollapsed.value = !sidebarCollapsed.value
   
@@ -337,12 +338,6 @@ const toggleSidebar = () => {
 
 // 处理菜单按钮点击
 const handleMenuButtonClick = (event) => {
-  console.log('Menu button clicked!', {
-    event: event,
-    isMobile: isMobile.value,
-    sidebarCollapsed: sidebarCollapsed.value,
-    target: event.target
-  })
   event.preventDefault()
   event.stopPropagation()
   toggleSidebar()
@@ -370,24 +365,7 @@ const toggleSection = (section) => {
 
 const quickToggle = (section) => {
   sidebarCollapsed.value = false
-  setTimeout(() => {
-    expandedSections.value[section] = true
-    // 滚动到对应部分
-    const element = document.querySelector(`.nav-section:has(.section-title:contains("${getSectionTitle(section)}"))`);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, 300)
-}
-
-const getSectionTitle = (section) => {
-  const titles = {
-    preprocessing: 'Preprocessing',
-    analysis: 'Sequence Analysis',
-    assembly: 'Assembly & Binning',
-    mag: 'MAG Analysis'
-  }
-  return titles[section] || ''
+  expandedSections.value[section] = true
 }
 
 
@@ -444,23 +422,12 @@ const detectMobile = () => {
 
 // 窗口尺寸变化时自适应
 const handleResize = () => {
-  const wasMobile = isMobile.value
-  windowWidth.value = window.innerWidth
   isMobile.value = detectMobile()
-  
-  console.log('检测设备状态:', {
-    innerWidth: window.innerWidth,
-    userAgent: navigator.userAgent.toLowerCase(),
-    isMobile: isMobile.value,
-    wasMobile: wasMobile
-  })
-  
+
   if (isMobile.value) {
     sidebarCollapsed.value = true
-    // 设置随机通知状态用于演示
-    hasNotifications.value = Math.random() > 0.7
+    hasNotifications.value = false
   } else {
-    // 桌面端自动展开侧边栏
     sidebarCollapsed.value = false
     hasNotifications.value = false
   }
@@ -468,6 +435,7 @@ const handleResize = () => {
 
 onMounted(async () => {
   handleResize()
+  await loadToolSections()
   window.addEventListener('resize', handleResize)
   
   // 添加触摸事件监听器
@@ -475,16 +443,6 @@ onMounted(async () => {
     document.addEventListener('touchstart', handleTouchStart, { passive: true })
     document.addEventListener('touchmove', handleTouchMove, { passive: false })
     document.addEventListener('touchend', handleTouchEnd, { passive: true })
-  }
-  
-  // 从localStorage恢复展开状态
-  const savedState = localStorage.getItem('sidebarExpandedSections')
-  if (savedState) {
-    try {
-      expandedSections.value = JSON.parse(savedState)
-    } catch (e) {
-      console.error('Failed to parse saved state:', e)
-    }
   }
   
   // 检查项目是否存在
@@ -507,6 +465,19 @@ const checkProjectExists = async () => {
     console.error('Error checking project:', error)
   }
 }
+
+watch(expandedSections, (value) => {
+  localStorage.setItem('sidebarExpandedSections', JSON.stringify(value))
+}, { deep: true })
+
+watch(
+  () => route.name,
+  () => {
+    if (isMobile.value) {
+      sidebarCollapsed.value = true
+    }
+  },
+)
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
@@ -534,6 +505,11 @@ onUnmounted(() => {
   --sidebar-width-collapsed: 64px;
 }
 
+.workspace-layout.workflow-focus {
+  --sidebar-width-collapsed: 72px;
+  background: #eff3f8;
+}
+
 /* 现代化侧边栏 */
 .workspace-sidebar {
   width: var(--sidebar-width);
@@ -548,6 +524,11 @@ onUnmounted(() => {
 
 .workspace-sidebar.collapsed {
   width: var(--sidebar-width-collapsed);
+}
+
+.workspace-layout.workflow-focus .workspace-sidebar {
+  background: rgba(255, 255, 255, 0.84);
+  backdrop-filter: blur(10px);
 }
 
 /* 顶部控制栏 */
@@ -722,7 +703,23 @@ onUnmounted(() => {
 }
 
 .link-text {
+  flex: 1;
   font-weight: var(--font-medium);
+}
+
+.link-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--primary-700);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 /* 折叠状态的快捷方式 */
@@ -819,6 +816,10 @@ onUnmounted(() => {
   /* 自定义滚动条样式 */
   scrollbar-width: thin;
   scrollbar-color: var(--gray-400) var(--surface-2);
+}
+
+.content-wrapper.workflow-content-wrapper {
+  background: #f4f7fb;
 }
 
 .content-wrapper::-webkit-scrollbar {

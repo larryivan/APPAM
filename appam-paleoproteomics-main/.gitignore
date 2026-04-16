@@ -1,0 +1,119 @@
+# editor
+.vscode/
+.idea/
+.cursor/
+.claude/
+.DS_Store
+
+# agents
+CLAUDE.md
+AGENTS.md
+
+# logs / temp
+*.log
+logs/
+*.out
+*.err
+tmp/
+temp/
+*.tmp
+*.bak
+.cache/
+docs/
+.worktrees/
+.snakemake/
+.snakemake-cache/
+.snakemake-home/
+.snakemake-tmp/
+
+# outputs
+work/
+reports/
+runs/
+tests/
+test/
+
+# ignore everything under results
+results/**
+
+# keep only top-level result directories
+!results/simulations/
+!results/detection/
+!results/benchmark/
+!results/logs/
+
+# ignore everything inside those top-level directories
+results/simulations/**
+results/detection/**
+results/benchmark/**
+results/logs/**
+
+# keep placeholder files only
+!results/simulations/.gitkeep
+!results/detection/.gitkeep
+!results/benchmark/.gitkeep
+!results/logs/.gitkeep
+
+# bioinformatics files
+*.sam
+*.bam
+*.bai
+*.cram
+*.crai
+*.vcf
+*.vcf.gz
+*.bcf
+*.tbi
+*.csi
+*.bed
+*.bed.gz
+*.gtf
+*.gff
+*.gff3
+*.fa
+*.fasta
+*.fna
+*.faa
+*.fastq
+*.fq
+*.fastq.gz
+*.fq.gz
+*.fai
+*.dict
+
+# local config
+.env
+.env.*
+*.local.*
+*.local.yaml
+*.local.yml
+TODO.local.md
+
+# python
+__pycache__/
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# R
+.Rhistory
+.RData
+.Rproj.user/
+
+# archives
+*.tar
+*.tar.gz
+*.tgz
+*.gz
+*.zip
+*.7z
+
+# SLURM
+slurm-*.out
+slurm-*.err
+slurm/
+docker/Dockerfile.backup

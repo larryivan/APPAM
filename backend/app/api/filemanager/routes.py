@@ -1,4 +1,5 @@
-from flask import Blueprint, request, jsonify, send_from_directory, Response
+from flask import Blueprint, request, jsonify, send_from_directory, Response, g
+from app.auth import get_project_for_user
 from app.services import file_manager as services
 from app.services import download_manager
 import os
@@ -6,6 +7,35 @@ import shutil
 from urllib.parse import quote
 
 filemanager_bp = Blueprint('filemanager_bp', __name__)
+
+EDITOR_FILEMANAGER_ENDPOINTS = {
+    'filemanager_bp.upload_chunk',
+    'filemanager_bp.make_directory',
+    'filemanager_bp.rename_item',
+    'filemanager_bp.delete_items',
+    'filemanager_bp.fetch_from_url',
+    'filemanager_bp.save_file',
+    'filemanager_bp.copy_items',
+    'filemanager_bp.cut_items',
+}
+
+
+@filemanager_bp.url_value_preprocessor
+def pull_project_id(endpoint, values):
+    g.filemanager_project_id = values.get('project_id') if values else None
+
+
+@filemanager_bp.before_request
+def ensure_project_access():
+    project_id = getattr(g, 'filemanager_project_id', None)
+    if not project_id:
+        return None
+    min_role = 'editor' if request.endpoint in EDITOR_FILEMANAGER_ENDPOINTS else 'viewer'
+    project = get_project_for_user(project_id, min_role=min_role)
+    if not project:
+        message = 'Project not found' if min_role == 'viewer' else 'Project not found or write access denied'
+        return jsonify({'error': message}), 404
+    g.current_project = project
 
 @filemanager_bp.route('/<project_id>/list', methods=['GET'])
 def list_files(project_id):

@@ -6,8 +6,8 @@
           <h1>欢迎使用 APPAM</h1>
           <p class="hero-subtitle">一个强大的项目管理和分析平台</p>
           <div class="hero-buttons">
-            <router-link to="/projects" class="btn btn-primary">
-              查看项目
+            <router-link :to="authState.user ? '/projects' : '/login'" class="btn btn-primary">
+              {{ authState.user ? '进入项目' : '登录 APPAM' }}
             </router-link>
             <router-link to="/documentation" class="btn btn-secondary">
               查看文档
@@ -46,7 +46,7 @@
 </template>
 
 <script setup>
-// No script needed for this static page
+import { authState } from '../lib/auth'
 </script>
 
 <style scoped>

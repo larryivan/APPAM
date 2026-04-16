@@ -1,154 +1,156 @@
 <template>
-  <div class="file-picker-container app-modal-viewport" v-if="isOpen">
-    <div class="file-picker-overlay app-modal-backdrop" @click="close"></div>
-    <div class="file-picker-modal app-modal">
-      <header class="picker-header app-modal-header">
-        <h3>{{ selectDirectories ? 'Select Directory' : (multiple ? 'Select Files' : 'Select File') }}</h3>
-        <button @click="close" class="close-btn app-modal-close">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </header>
+  <Teleport to="body">
+    <div class="file-picker-container app-modal-viewport" v-if="isOpen">
+      <div class="file-picker-overlay app-modal-backdrop" @click="close"></div>
+      <div class="file-picker-modal app-modal">
+        <header class="picker-header app-modal-header">
+          <h3>{{ selectDirectories ? 'Select Directory' : (multiple ? 'Select Files' : 'Select File') }}</h3>
+          <button @click="close" class="close-btn app-modal-close">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </header>
 
-      <div class="picker-breadcrumbs">
-        <button @click="navigateTo('/')" class="breadcrumb-item">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-          </svg>
-          Project Root
-        </button>
-        <template v-for="(crumb, index) in breadcrumbs" :key="index">
-          <span class="separator">/</span>
-          <button @click="navigateTo(crumb.path)" class="breadcrumb-item">{{ crumb.name }}</button>
-        </template>
-        <button 
-          v-if="currentPath !== '/'" 
-          @click="goUp" 
-          class="up-button" 
-          title="Go to parent directory"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="17 11 12 6 7 11"></polyline>
-            <polyline points="17 18 12 13 7 18"></polyline>
-          </svg>
-          Parent
-        </button>
-        <button 
-          v-if="selectDirectories" 
-          @click="selectCurrentDirectory" 
-          class="select-current-dir-button" 
-          :class="{ 'is-selected': isCurrentDirectorySelected }"
-          :title="isCurrentDirectorySelected ? 'Deselect current directory' : 'Select current directory'"
-        >
-          <svg v-if="!isCurrentDirectorySelected" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-            <polyline points="22 4 12 14.01 9 11.01"></polyline>
-          </svg>
-          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="20 6 9 17 4 12"></polyline>
-          </svg>
-          {{ isCurrentDirectorySelected ? 'Directory Selected' : 'Select This Directory' }}
-        </button>
-      </div>
-
-      <div class="picker-body">
-        <div v-if="loading" class="loading">
-          <div class="spinner"></div>
-          <span>Loading...</span>
-        </div>
-
-        <div v-else-if="filteredFiles.length === 0" class="empty">
-          <p v-if="files.length === 0">This directory is empty</p>
-          <div v-else>
-            <p v-if="selectDirectories">No subdirectories in this directory</p>
-            <p v-else>No files matching the criteria in this directory</p>
-            <p class="hint" v-if="extensions.length > 0 && !selectDirectories">Supported file types: {{ extensions.join(', ') }}</p>
-            <p class="hint">Current directory: {{ currentPath }}</p>
-            <div class="interaction-hints">
-              <p class="hint">💡 Double-click directories to navigate deeper</p>
-              <p class="hint" v-if="selectDirectories">📁 Click directories to select, or use "Select This Directory" button above</p>
-              <p class="hint" v-else>📄 Click files to select</p>
-            </div>
-            <details class="debug-info">
-              <summary>Debug Info ({{ files.length }} items)</summary>
-              <ul>
-                <li v-for="file in files.slice(0, 10)" :key="file.name">
-                  {{ file.name }} - {{ file.is_dir ? 'Directory' : 'File' }} {{ file.extension }}
-                </li>
-                <li v-if="files.length > 10">... {{ files.length - 10 }} more items</li>
-              </ul>
-            </details>
-          </div>
-        </div>
-
-        <div v-else class="file-list">
-          <div 
-            v-for="file in filteredFiles" 
-            :key="file.name"
-            class="file-item"
-            :class="{ 
-              'is-directory': file.is_dir,
-              'is-selected': isSelected(file),
-              'is-selectable': isFileValid(file),
-              'is-navigable': file.is_dir
-            }"
-            @click="handleFileClick(file)"
-            @dblclick="handleFileDblClick(file)"
-          >
-            <div class="file-icon">
-              <svg v-if="file.is_dir" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-              </svg>
-              <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
-                <polyline points="13 2 13 9 20 9"></polyline>
-              </svg>
-            </div>
-            <div class="file-info">
-              <div class="file-name">
-                {{ file.name }}
-                <span v-if="file.is_dir" class="nav-hint">🔽</span>
-                <span v-if="isFileValid(file)" class="select-hint">✓</span>
-              </div>
-              <div class="file-meta">
-                <span v-if="!file.is_dir">{{ formatSize(file.size) }}</span>
-                <span>{{ formatDate(file.mtime) }}</span>
-                <span v-if="file.is_dir" class="action-hint">Double-click to enter</span>
-                <span v-if="isFileValid(file)" class="action-hint">Click to select</span>
-              </div>
-            </div>
-            <input 
-              v-if="multiple && isFileValid(file)"
-              type="checkbox"
-              :checked="isSelected(file)"
-              @click.stop="toggleSelection(file)"
-              class="file-checkbox"
-            />
-          </div>
-        </div>
-      </div>
-
-      <footer class="picker-footer app-modal-footer">
-        <div class="selected-info">
-          <span v-if="selectedFiles.length > 0">
-            Selected {{ selectedFiles.length }} files
-          </span>
-        </div>
-        <div class="picker-actions">
-          <button @click="close" class="btn-cancel">Cancel</button>
+        <div class="picker-breadcrumbs">
+          <button @click="navigateTo('/')" class="breadcrumb-item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+            </svg>
+            Project Root
+          </button>
+          <template v-for="(crumb, index) in breadcrumbs" :key="index">
+            <span class="separator">/</span>
+            <button @click="navigateTo(crumb.path)" class="breadcrumb-item">{{ crumb.name }}</button>
+          </template>
           <button 
-            @click="confirm" 
-            class="btn-confirm"
-            :disabled="selectedFiles.length === 0"
+            v-if="currentPath !== '/'" 
+            @click="goUp" 
+            class="up-button" 
+            title="Go to parent directory"
           >
-            Confirm
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="17 11 12 6 7 11"></polyline>
+              <polyline points="17 18 12 13 7 18"></polyline>
+            </svg>
+            Parent
+          </button>
+          <button 
+            v-if="selectDirectories" 
+            @click="selectCurrentDirectory" 
+            class="select-current-dir-button" 
+            :class="{ 'is-selected': isCurrentDirectorySelected }"
+            :title="isCurrentDirectorySelected ? 'Deselect current directory' : 'Select current directory'"
+          >
+            <svg v-if="!isCurrentDirectorySelected" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            {{ isCurrentDirectorySelected ? 'Directory Selected' : 'Select This Directory' }}
           </button>
         </div>
-      </footer>
+
+        <div class="picker-body">
+          <div v-if="loading" class="loading">
+            <div class="spinner"></div>
+            <span>Loading...</span>
+          </div>
+
+          <div v-else-if="filteredFiles.length === 0" class="empty">
+            <p v-if="files.length === 0">This directory is empty</p>
+            <div v-else>
+              <p v-if="selectDirectories">No subdirectories in this directory</p>
+              <p v-else>No files matching the criteria in this directory</p>
+              <p class="hint" v-if="extensions.length > 0 && !selectDirectories">Supported file types: {{ extensions.join(', ') }}</p>
+              <p class="hint">Current directory: {{ currentPath }}</p>
+              <div class="interaction-hints">
+                <p class="hint">💡 Double-click directories to navigate deeper</p>
+                <p class="hint" v-if="selectDirectories">📁 Click directories to select, or use "Select This Directory" button above</p>
+                <p class="hint" v-else>📄 Click files to select</p>
+              </div>
+              <details class="debug-info">
+                <summary>Debug Info ({{ files.length }} items)</summary>
+                <ul>
+                  <li v-for="file in files.slice(0, 10)" :key="file.name">
+                    {{ file.name }} - {{ file.is_dir ? 'Directory' : 'File' }} {{ file.extension }}
+                  </li>
+                  <li v-if="files.length > 10">... {{ files.length - 10 }} more items</li>
+                </ul>
+              </details>
+            </div>
+          </div>
+
+          <div v-else class="file-list">
+            <div 
+              v-for="file in filteredFiles" 
+              :key="file.name"
+              class="file-item"
+              :class="{ 
+                'is-directory': file.is_dir,
+                'is-selected': isSelected(file),
+                'is-selectable': isFileValid(file),
+                'is-navigable': file.is_dir
+              }"
+              @click="handleFileClick(file)"
+              @dblclick="handleFileDblClick(file)"
+            >
+              <div class="file-icon">
+                <svg v-if="file.is_dir" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                </svg>
+                <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                  <polyline points="13 2 13 9 20 9"></polyline>
+                </svg>
+              </div>
+              <div class="file-info">
+                <div class="file-name">
+                  {{ file.name }}
+                  <span v-if="file.is_dir" class="nav-hint">🔽</span>
+                  <span v-if="isFileValid(file)" class="select-hint">✓</span>
+                </div>
+                <div class="file-meta">
+                  <span v-if="!file.is_dir">{{ formatSize(file.size) }}</span>
+                  <span>{{ formatDate(file.mtime) }}</span>
+                  <span v-if="file.is_dir" class="action-hint">Double-click to enter</span>
+                  <span v-if="isFileValid(file)" class="action-hint">Click to select</span>
+                </div>
+              </div>
+              <input 
+                v-if="multiple && isFileValid(file)"
+                type="checkbox"
+                :checked="isSelected(file)"
+                @click.stop="toggleSelection(file)"
+                class="file-checkbox"
+              />
+            </div>
+          </div>
+        </div>
+
+        <footer class="picker-footer app-modal-footer">
+          <div class="selected-info">
+            <span v-if="selectedFiles.length > 0">
+              Selected {{ selectedFiles.length }} files
+            </span>
+          </div>
+          <div class="picker-actions">
+            <button @click="close" class="btn-cancel">Cancel</button>
+            <button 
+              @click="confirm" 
+              class="btn-confirm"
+              :disabled="selectedFiles.length === 0"
+            >
+              Confirm
+            </button>
+          </div>
+        </footer>
+      </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup>
@@ -411,6 +413,10 @@ loadFiles();
 </script>
 
 <style scoped>
+.file-picker-container {
+  z-index: 1300;
+}
+
 .file-picker-overlay {
   position: absolute;
   inset: 0;

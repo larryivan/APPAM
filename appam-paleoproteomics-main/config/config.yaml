@@ -1,0 +1,32 @@
+sample_table: config/samples.tsv
+mqpar_template: workflow/templates/mqpar.template.xml
+results_dir: results
+maxquant_output_dir: results/maxquant
+threads: 4
+
+fasta_path: /path/to/reference.fasta
+match_between_runs: false
+enzymes:
+  - Trypsin/P
+enzyme_mode: 4
+fixed_modifications:
+  - Carbamidomethyl (C)
+variable_modifications:
+  - Deamidation (NQ)
+  - Oxidation (MP)
+  - Gln->pyro-Glu
+  - Glu->pyro-Glu
+  - Phospho (ST)
+peptide_fdr: 0.01
+protein_fdr: 0.01
+site_fdr: 0.01
+include_contaminants: true
+min_peptide_length: 7
+first_search_tol: 20
+main_search_tol: 4.5
+
+dotnet_bin: dotnet
+maxquant_cmd_dll: /opt/tools/MaxQuant_v2.7.5.0/bin/MaxQuantCmd.dll
+thermo_raw_file_parser: ThermoRawFileParser
+timsconvert_bin: timsconvert
+openms_fileconverter: FileConverter

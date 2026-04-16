@@ -1,5 +1,11 @@
 <template>
   <div class="overview-container">
+    <div v-if="notifications.length" class="overview-toasts">
+      <div v-for="notice in notifications" :key="notice.id" class="overview-toast" :class="notice.kind">
+        <strong>{{ notice.title }}</strong>
+        <span>{{ notice.message }}</span>
+      </div>
+    </div>
     <div class="overview-content">
       <!-- 项目基本信息卡片 -->
       <div class="overview-card">
@@ -79,21 +85,42 @@
                   {{ getStatusText(currentTask.status) }}
                 </div>
               </div>
-              <button 
-                v-if="currentTask.status === 'running'"
-                @click="viewLogs" 
+              <button
+                v-if="['starting', 'running', 'queued'].includes(currentTask.status)"
+                @click="viewLogs"
                 class="logs-btn"
               >
                 View Logs
               </button>
+              <button
+                v-if="currentTask.job_id && ['starting', 'running', 'queued'].includes(currentTask.status)"
+                @click="cancelJob(currentTask.job_id)"
+                class="logs-btn danger"
+              >
+                {{ currentTask.status === 'queued' ? 'Cancel' : 'Interrupt' }}
+              </button>
+            </div>
+
+            <div v-if="currentTask.queue_position" class="queue-info">
+              Queue position: {{ currentTask.queue_position }}
+            </div>
+
+            <div v-if="currentTask.status === 'starting' || currentTask.status === 'running'" class="queue-info">
+              Worker: {{ currentTask.claimed_by || 'Awaiting claim' }}
+              <span v-if="currentTask.pid" class="queue-info__mono">pid {{ currentTask.pid }}</span>
+              <span v-if="currentTask.heartbeat_at" class="queue-info__mono">heartbeat {{ formatDateTime(currentTask.heartbeat_at) }}</span>
             </div>
             
-            <div v-if="currentTask.status === 'failed' && currentTask.error" class="error-info">
+            <div v-if="(currentTask.status === 'failed' || currentTask.status === 'canceled') && currentTask.error" class="error-info">
               <strong>Error:</strong>{{ currentTask.error }}
             </div>
             
             <div v-if="currentTask.status === 'failed' && currentTask.code" class="error-info">
               <strong>Exit Code:</strong>{{ currentTask.code }}
+            </div>
+
+            <div v-if="currentTask.failure_label" class="error-info soft">
+              <strong>Failure Class:</strong>{{ currentTask.failure_label }}
             </div>
           </div>
         </div>
@@ -106,9 +133,12 @@
           <div class="header-controls">
             <select v-model="historyFilter" class="filter-select">
               <option value="all">All Status</option>
+              <option value="queued">Queued</option>
+              <option value="starting">Starting</option>
               <option value="completed">Completed</option>
               <option value="failed">Failed</option>
               <option value="running">Running</option>
+              <option value="canceled">Canceled</option>
             </select>
           </div>
         </div>
@@ -144,6 +174,13 @@
                 <div class="history-duration" v-if="item.duration">
                   {{ formatDuration(item.duration) }}
                 </div>
+                <button
+                  v-if="['queued', 'starting', 'running'].includes(item.status)"
+                  class="mini-action danger"
+                  @click.stop="cancelJob(item.jobId)"
+                >
+                  {{ item.status === 'queued' ? 'Cancel' : 'Interrupt' }}
+                </button>
               </div>
             </div>
           </div>
@@ -257,6 +294,8 @@ const projectLoading = ref(true)
 // 当前进程状态
 const currentTask = ref({ status: 'not_found', tool: null })
 const statusLoading = ref(false)
+const notifications = ref([])
+const lastTaskFingerprint = ref('')
 
 // 进程历史
 const processHistory = ref([])
@@ -268,7 +307,9 @@ const showLogsModal = ref(false)
 const logs = ref([])
 const logsTitle = ref('')
 const logsLoading = ref(false)
-const logsEventSource = ref(null)
+let logPollTimer = null
+const logOffset = ref(0)
+const currentLogJobId = ref(null)
 const logsContainer = ref(null)
 
 // 日志交互
@@ -322,19 +363,22 @@ const fetchCurrentStatus = async () => {
 const fetchProcessHistory = async () => {
   try {
     historyLoading.value = true
-    const response = await fetch(`/api/pipeline/${projectId.value}/history?limit=20`)
+    const response = await fetch(`/api/jobs?project_id=${projectId.value}&limit=20`)
     if (response.ok) {
-      const history = await response.json()
+      const payload = await response.json()
+      const history = payload.jobs || []
       processHistory.value = history.map(item => ({
         id: item.id,
+        jobId: item.id,
         tool: item.tool_name,
         status: item.status,
-        timestamp: item.start_time,
+        timestamp: item.started_at || item.created_at,
         duration: item.duration,
-        logs: item.logs ? item.logs.split('\n') : [],
         command: item.command,
         exitCode: item.exit_code,
-        errorMessage: item.error_message
+        errorMessage: item.error_message,
+        queuePosition: item.queue_position,
+        failureLabel: item.failure_label,
       }))
     }
   } catch (error) {
@@ -352,61 +396,115 @@ const refreshStatus = async () => {
   }, 500)
 }
 
-const viewLogs = () => {
-  logsTitle.value = `${currentTask.value.tool} - Live Logs`
+const pushNotification = (title, message, kind = 'info') => {
+  const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  notifications.value.push({ id, title, message, kind })
+  window.setTimeout(() => {
+    notifications.value = notifications.value.filter(item => item.id !== id)
+  }, 4200)
+}
+
+const cancelJob = async (jobId) => {
+  try {
+    const response = await fetch(`/api/jobs/${jobId}/interrupt`, { method: 'POST' })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw new Error(payload.error || 'Failed to cancel job')
+    }
+    pushNotification('Task Update', payload.message || 'Task interrupt requested', 'warning')
+    await fetchCurrentStatus()
+    await fetchProcessHistory()
+  } catch (error) {
+    pushNotification('Task Update', error.message || 'Failed to cancel job', 'error')
+  }
+}
+
+const stopLogPolling = () => {
+  if (logPollTimer) {
+    clearInterval(logPollTimer)
+    logPollTimer = null
+  }
+}
+
+const pollLogs = async () => {
+  if (!currentLogJobId.value) return
+  try {
+    const response = await fetch(`/api/jobs/${currentLogJobId.value}/logs?offset=${logOffset.value}`)
+    if (!response.ok) return
+    const data = await response.json()
+    if (typeof data.offset === 'number') {
+      logOffset.value = data.offset
+    }
+    if (data.content) {
+      const lines = data.content.split('\n').filter(line => line !== '')
+      if (lines.length > 0) {
+        const wasAtBottom = isScrolledToBottom()
+        let addedCount = 0
+        lines.forEach(line => {
+          if (!shouldFilterLog(line)) {
+            logs.value.push(line)
+            addedCount += 1
+          }
+        })
+        if (addedCount > 0) {
+          if (!autoScroll.value && !wasAtBottom) {
+            hasNewLogs.value = true
+            newLogsCount.value += addedCount
+          }
+          if (autoScroll.value || wasAtBottom) {
+            setTimeout(scrollToBottom, 50)
+          }
+        }
+      }
+    }
+    if (data.status && !['starting', 'running', 'queued'].includes(data.status)) {
+      stopLogPolling()
+      logsLoading.value = false
+    }
+  } catch (error) {
+    console.error('Log polling failed:', error)
+  }
+}
+
+const startLogPolling = () => {
+  stopLogPolling()
+  pollLogs()
+  logPollTimer = setInterval(pollLogs, 2000)
+}
+
+const openLogsForJob = (jobId, title, shouldPoll) => {
+  currentLogJobId.value = jobId
+  logOffset.value = 0
+  logsTitle.value = title
   logs.value = []
   showLogsModal.value = true
   logsLoading.value = true
   hasNewLogs.value = false
   newLogsCount.value = 0
-  
-  connectToLogStream()
+
+  if (shouldPoll) {
+    startLogPolling()
+  } else {
+    stopLogPolling()
+    pollLogs().finally(() => {
+      logsLoading.value = false
+    })
+  }
+}
+
+const viewLogs = () => {
+  if (!currentTask.value.job_id) return
+  const shouldPoll = ['starting', 'running', 'queued'].includes(currentTask.value.status)
+  openLogsForJob(
+    currentTask.value.job_id,
+    `${currentTask.value.tool} - Live Logs`,
+    shouldPoll
+  )
 }
 
 watch(showLogsModal, (isOpen) => {
   syncModalLock(isOpen)
 })
-
-const connectToLogStream = () => {
-  // 关闭现有连接
-  if (logsEventSource.value) {
-    logsEventSource.value.close()
-  }
-  
-  // 使用EventSource获取实时日志
-  logsEventSource.value = new EventSource(`/api/pipeline/${projectId.value}/stream-logs`)
-  
-  logsEventSource.value.onopen = () => {
-    logsLoading.value = false
-  }
-  
-  logsEventSource.value.onmessage = (event) => {
-    if (event.data && event.data.trim()) {
-      // 过滤掉无用的日志消息
-      if (shouldFilterLog(event.data)) {
-        return;
-      }
-      
-      const wasAtBottom = isScrolledToBottom()
-      logs.value.push(event.data)
-      
-      // 处理新日志指示
-      if (!autoScroll.value && !wasAtBottom) {
-        hasNewLogs.value = true
-        newLogsCount.value++
-      }
-      
-      // 自动滚动到底部
-      if (autoScroll.value || wasAtBottom) {
-        setTimeout(scrollToBottom, 50)
-      }
-    }
-  }
-  
-  logsEventSource.value.onerror = () => {
-    console.error('EventSource failed')
-  }
-}
 
 const isScrolledToBottom = () => {
   if (!logsContainer.value) return true
@@ -478,19 +576,21 @@ const formatLogContent = (log) => {
 
 
 const viewHistoryLogs = (historyItem) => {
-  logsTitle.value = `${historyItem.tool} - History Logs`
-  logs.value = historyItem.logs || ['No logs available']
-  showLogsModal.value = true
+  if (!historyItem.jobId) return
+  const shouldPoll = ['starting', 'running', 'queued'].includes(historyItem.status)
+  openLogsForJob(
+    historyItem.jobId,
+    `${historyItem.tool} - History Logs`,
+    shouldPoll
+  )
 }
 
 const closeLogsModal = () => {
   showLogsModal.value = false
   
-  // 清理连接
-  if (logsEventSource.value) {
-    logsEventSource.value.close()
-    logsEventSource.value = null
-  }
+  stopLogPolling()
+  currentLogJobId.value = null
+  logOffset.value = 0
   
   // 重置状态
   logs.value = []
@@ -514,9 +614,12 @@ const exportLogs = () => {
 
 const getStatusText = (status) => {
   const statusMap = {
+    queued: 'Queued',
+    starting: 'Starting',
     running: 'Running',
     completed: 'Completed',
     failed: 'Failed',
+    canceled: 'Canceled',
     not_found: 'No Task'
   }
   return statusMap[status] || status
@@ -595,19 +698,39 @@ onMounted(() => {
   fetchCurrentStatus()
   fetchProcessHistory()
   
-  // 每5秒刷新一次状态
-  statusInterval = setInterval(fetchCurrentStatus, 5000)
+  // 每5秒刷新一次状态与历史
+  statusInterval = setInterval(() => {
+    fetchCurrentStatus()
+    fetchProcessHistory()
+  }, 5000)
 })
 
 onUnmounted(() => {
   if (statusInterval) {
     clearInterval(statusInterval)
   }
-  if (logsEventSource.value) {
-    logsEventSource.value.close()
-  }
+  stopLogPolling()
   syncModalLock(false)
 })
+
+watch(
+  () => currentTask.value,
+  (task) => {
+    const fingerprint = [task?.job_id, task?.status, task?.tool].join(':')
+    if (!task?.job_id || !task?.status || fingerprint === lastTaskFingerprint.value) {
+      return
+    }
+    if (['completed', 'failed', 'canceled'].includes(task.status)) {
+      const title = task.status === 'completed' ? 'Task Completed' : task.status === 'failed' ? 'Task Failed' : 'Task Canceled'
+      const message = task.tool
+        ? `${task.tool}${task.failure_label ? ` · ${task.failure_label}` : ''}`
+        : 'Task updated'
+      pushNotification(title, message, task.status === 'completed' ? 'success' : task.status === 'failed' ? 'error' : 'warning')
+    }
+    lastTaskFingerprint.value = fingerprint
+  },
+  { deep: true },
+)
 </script>
 
 <style scoped>
@@ -615,6 +738,33 @@ onUnmounted(() => {
   min-height: 100%;
   background: var(--gray-50);
 }
+
+.overview-toasts {
+  position: fixed;
+  top: 86px;
+  right: 24px;
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.overview-toast {
+  min-width: 280px;
+  max-width: 360px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.92);
+  color: white;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
+}
+
+.overview-toast.success { background: rgba(22, 101, 52, 0.94); }
+.overview-toast.warning { background: rgba(146, 64, 14, 0.94); }
+.overview-toast.error { background: rgba(153, 27, 27, 0.94); }
 
 .overview-content {
   max-width: 1200px;
@@ -786,6 +936,19 @@ onUnmounted(() => {
   gap: var(--spacing-3);
 }
 
+.queue-info {
+  color: var(--gray-600);
+  font-size: var(--text-sm);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-3);
+}
+
+.queue-info__mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
 .status-header {
   display: flex;
   justify-content: space-between;
@@ -819,6 +982,11 @@ onUnmounted(() => {
   color: var(--primary-700);
 }
 
+.status-badge.starting {
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+}
+
 .status-badge.completed {
   background: var(--success-50);
   color: var(--success-600);
@@ -827,6 +995,16 @@ onUnmounted(() => {
 .status-badge.failed {
   background: var(--error-50);
   color: var(--error-600);
+}
+
+.status-badge.queued {
+  background: var(--warning-50);
+  color: var(--warning-600);
+}
+
+.status-badge.canceled {
+  background: var(--gray-100);
+  color: var(--gray-600);
 }
 
 .status-dot {
@@ -840,12 +1018,25 @@ onUnmounted(() => {
   animation: pulse 2s infinite;
 }
 
+.status-badge.starting .status-dot {
+  background: #1d4ed8;
+  animation: pulse 1.4s infinite;
+}
+
 .status-badge.completed .status-dot {
   background: var(--success-500);
 }
 
 .status-badge.failed .status-dot {
   background: var(--error-500);
+}
+
+.status-badge.queued .status-dot {
+  background: var(--warning-500);
+}
+
+.status-badge.canceled .status-dot {
+  background: var(--gray-500);
 }
 
 @keyframes pulse {
@@ -868,6 +1059,15 @@ onUnmounted(() => {
   background: var(--primary-700);
 }
 
+.logs-btn.danger {
+  background: var(--error-50);
+  color: var(--error-700);
+}
+
+.logs-btn.danger:hover {
+  background: var(--error-100);
+}
+
 .error-info {
   padding: var(--spacing-3);
   background: var(--error-50);
@@ -875,6 +1075,12 @@ onUnmounted(() => {
   border-radius: var(--radius-md);
   color: var(--error-700);
   font-size: var(--text-sm);
+}
+
+.error-info.soft {
+  background: var(--gray-100);
+  border-color: var(--gray-200);
+  color: var(--gray-700);
 }
 
 /* 历史记录 */
@@ -956,6 +1162,20 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: flex-end;
   gap: var(--spacing-1);
+}
+
+.mini-action {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mini-action.danger {
+  background: var(--error-50);
+  color: var(--error-700);
 }
 
 .history-duration {

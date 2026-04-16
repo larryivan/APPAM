@@ -10,6 +10,7 @@ import json
 import ftplib
 import socket
 from ..database import get_db_connection
+from ..paths import resolve_project_path as resolve_project_workspace_path
 
 # 全局下载任务存储
 download_tasks = {}
@@ -54,10 +55,7 @@ class DownloadTask:
 
 def get_project_path(project_id, path=''):
     """Get absolute path for project files"""
-    base_path = os.path.join('./projects', project_id)
-    if path and path != '/':
-        return os.path.join(base_path, path.lstrip('/'))
-    return base_path
+    return str(resolve_project_workspace_path(project_id, path))
 
 def extract_filename_from_url(url):
     """从URL中提取文件名"""

@@ -13,6 +13,10 @@
           </div>
           <div class="tool-title">
             <h2>{{ tool.tool_name }}</h2>
+            <div class="tool-meta">
+              <span class="meta-badge kind">{{ tool.kind === 'workflow' ? 'Workflow' : 'Tool' }}</span>
+              <span v-if="tool.section_title" class="meta-badge section">{{ tool.section_title }}</span>
+            </div>
             <p :title="tool.description">{{ tool.description }}</p>
           </div>
         </div>
@@ -220,7 +224,13 @@
               </div>
             </div>
           </div>
-          <div v-else class="no-params">
+          <div v-if="tool.notes?.length" class="tool-notes">
+            <h5>Execution Notes</h5>
+            <ul>
+              <li v-for="note in tool.notes" :key="note">{{ note }}</li>
+            </ul>
+          </div>
+          <div v-else-if="tool.parameters.length === 0" class="no-params">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10"></circle>
               <path d="M12 16v-4"></path>
@@ -231,15 +241,17 @@
         </div>
         
         <!-- 运行按钮 -->
-        <button @click="runTool" class="run-button" :disabled="taskStatus === 'running'">
+        <button @click="runTool" class="run-button" :disabled="['starting', 'running', 'queued'].includes(taskStatus)">
           <div class="button-content">
-            <svg v-if="taskStatus === 'running'" class="spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg v-if="taskStatus === 'starting' || taskStatus === 'running'" class="spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 12a9 9 0 1 1-9-9c4.97 0 9 4.03 9 9z"></path>
             </svg>
             <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="5 3 19 12 5 21 5 3"></polygon>
             </svg>
-            <span>{{ taskStatus === 'running' ? 'Running...' : 'Running ' + tool.tool_name }}</span>
+            <span>
+              {{ taskStatus === 'starting' ? 'Starting...' : taskStatus === 'running' ? 'Running...' : taskStatus === 'queued' ? 'Queued...' : runButtonLabel }}
+            </span>
           </div>
         </button>
       </div>
@@ -425,9 +437,10 @@ const filteredLogs = computed(() => {
     
     // 过滤系统消息（除了开始执行的消息）
     if (log.data.includes('[SYSTEM]')) {
-      return log.data.includes('Starting command:') || 
-             log.data.includes('Command completed') ||
-             log.data.includes('Command failed');
+      return log.data.includes('Starting command:') ||
+             log.data.includes('Queued job:') ||
+             log.data.includes("Task '") ||
+             log.data.includes('Cancellation requested');
     }
     
     return true; // 保留其他日志
@@ -443,7 +456,9 @@ const tempFileSelection = ref(null);
 const isRefreshingStatus = ref(false);
 
 // 连接管理
-let eventSource = null;
+let logPollTimer = null;
+const currentJobId = ref(null);
+const logOffset = ref(0);
 
 const scrollToBottom = () => {
   nextTick(() => {
@@ -453,10 +468,56 @@ const scrollToBottom = () => {
   });
 };
 
+const stopLogPolling = () => {
+  if (logPollTimer) {
+    clearInterval(logPollTimer);
+    logPollTimer = null;
+  }
+};
+
+const pollLogs = async () => {
+  if (!currentJobId.value) return;
+  try {
+    const response = await fetch(`/api/jobs/${currentJobId.value}/logs?offset=${logOffset.value}`);
+    if (!response.ok) {
+      return;
+    }
+    const data = await response.json();
+    if (typeof data.offset === 'number') {
+      logOffset.value = data.offset;
+    }
+    if (data.content) {
+      const lines = data.content.split('\n').filter(line => line !== '');
+      if (lines.length > 0) {
+        lines.forEach(line => {
+          allLogs.value.push({ data: line });
+        });
+        scrollToBottom();
+      }
+    }
+    if (data.status && !['starting', 'running', 'queued'].includes(data.status)) {
+      taskStatus.value = data.status;
+      stopLogPolling();
+    }
+  } catch (error) {
+    console.error('Log polling failed:', error);
+  }
+};
+
+const startLogPolling = () => {
+  stopLogPolling();
+  pollLogs();
+  logPollTimer = setInterval(pollLogs, 2000);
+};
+
 const fetchToolLibrary = async () => {
   try {
     const response = await fetch('/api/tools');
-    toolLibrary.value = await response.json();
+    const payload = await response.json();
+    if (!response.ok || !payload.success) {
+      throw new Error(payload.error || 'Failed to load tool library');
+    }
+    toolLibrary.value = payload.tools_by_key || {};
   } catch (error) {
     console.error('Failed to load tool library:', error);
   }
@@ -469,7 +530,7 @@ const resetSuggestionState = () => {
 };
 
 const updateTool = () => {
-  const toolName = route.params.tool;
+  const toolName = decodeURIComponent(String(route.params.tool || '')).toLowerCase();
   if (!toolName) {
     tool.value = null;
     resetSuggestionState();
@@ -532,13 +593,9 @@ const removeFile = (paramName, index) => {
 const runTool = async () => {
   if (!tool.value) return;
   allLogs.value = []; // Clear previous logs
-  
-  // Close any existing connection before starting a new one
-  if (eventSource) {
-    eventSource.close();
-  }
+  stopLogPolling();
 
-  const response = await fetch(`/api/pipeline/${route.params.id}/run/${tool.value.tool_name.toLowerCase()}`,
+  const response = await fetch(`/api/pipeline/${route.params.id}/run/${encodeURIComponent(tool.value.id)}`,
   {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -547,12 +604,23 @@ const runTool = async () => {
   const result = await response.json();
   
   if(response.ok) {
-    allLogs.value.push({ data: `[SYSTEM] Starting command: ${result.command}` });
-    connectToLogStream();
+    currentJobId.value = result.job_id || null;
+    logOffset.value = 0;
+    taskStatus.value = result.status || 'queued';
+    allLogs.value.push({ data: `[SYSTEM] Queued job: ${result.job_id}` });
+    startLogPolling();
   } else {
-    allLogs.value.push({ data: `[SYSTEM] Error: ${result.error}` });
+    allLogs.value.push({ data: `[SYSTEM] Error: ${result.error || 'Failed to start task'}` });
   }
 };
+
+const runButtonLabel = computed(() => {
+  if (!tool.value) {
+    return 'Run';
+  }
+  const action = tool.value.run_label || (tool.value.kind === 'workflow' ? 'Run Workflow' : 'Run Tool');
+  return `${action}: ${tool.value.tool_name}`;
+});
 
 let statusInterval = null;
 
@@ -564,16 +632,21 @@ const checkTaskStatus = async () => {
     if (response.ok) {
       const data = await response.json();
       const newStatus = data.status;
-      
+      if (data.job_id) {
+        currentJobId.value = data.job_id;
+      } else if (newStatus === 'not_found') {
+        currentJobId.value = null;
+      }
+
       // 只有状态真正改变时才更新
       if (taskStatus.value !== newStatus) {
         taskStatus.value = newStatus;
-        
-        // 如果任务完成或出错，关闭事件源
-        if (newStatus !== 'running' && eventSource) {
-          eventSource.close();
-          eventSource = null;
-        }
+      }
+
+      if (['starting', 'running', 'queued'].includes(newStatus)) {
+        startLogPolling();
+      } else {
+        stopLogPolling();
       }
     } else {
       console.error('Failed to fetch task status:', response.statusText);
@@ -583,27 +656,6 @@ const checkTaskStatus = async () => {
     console.error('Error checking task status:', error);
     taskStatus.value = 'error';
   }
-};
-
-const connectToLogStream = () => {
-  const projectId = route.params.id;
-  if (!projectId) return;
-
-  eventSource = new EventSource(`/api/pipeline/${projectId}/stream-logs`);
-
-  eventSource.onmessage = (event) => {
-    // 过滤掉无用的日志消息
-    if (shouldFilterLog(event.data)) {
-      return;
-    }
-    
-    allLogs.value.push({ data: event.data });
-    scrollToBottom();
-  };
-
-  eventSource.onerror = (err) => {
-    console.error('EventSource failed:', err);
-  };
 };
 
 const getLogLineClass = (log) => {
@@ -622,9 +674,13 @@ const getLogPrefix = (log) => {
 
 const getStatusText = () => {
   const statusMap = {
+    'queued': 'Queued',
+    'starting': 'Starting',
     'running': 'Running',
     'completed': 'Completed',
     'error': 'Error',
+    'failed': 'Failed',
+    'canceled': 'Canceled',
     'not_found': 'Ready',
     'idle': 'Idle',
     'stopped': 'Stopped'
@@ -918,16 +974,12 @@ onMounted(() => {
   fetchToolLibrary().then(() => {
     updateTool();
     checkTaskStatus();
-    connectToLogStream();
     statusInterval = setInterval(checkTaskStatus, 2000);
   });
 });
 
 onUnmounted(() => {
-  if (eventSource) {
-    eventSource.close();
-    eventSource = null;
-  }
+  stopLogPolling();
   if (statusInterval) {
     clearInterval(statusInterval);
   }
@@ -936,19 +988,13 @@ onUnmounted(() => {
 // 监听工具变化，重置状态
 watch(() => route.params.tool, (newTool, oldTool) => {
   if (newTool !== oldTool) {
-    // 关闭之前的连接
-    if (eventSource) {
-      eventSource.close();
-      eventSource = null;
-    }
+    stopLogPolling();
     
     // 更新工具配置
     updateTool();
     
-    // 如果有新工具，建立新连接
-    if (newTool) {
-      connectToLogStream();
-    }
+    logOffset.value = 0;
+    currentJobId.value = null;
   }
 });
 
@@ -956,15 +1002,12 @@ watch(() => route.params.tool, (newTool, oldTool) => {
 watch(() => route.params.id, () => {
   taskStatus.value = 'not_found';
   allLogs.value = [];
-  
-  if (eventSource) {
-    eventSource.close();
-    eventSource = null;
-  }
+  stopLogPolling();
   
   updateTool();
   checkTaskStatus();
-  connectToLogStream();
+  logOffset.value = 0;
+  currentJobId.value = null;
 });
 
 </script>
@@ -1053,25 +1096,54 @@ html, body {
   min-width: 0;
 }
 
-.tool-title h2 {
-  margin: 0;
-  font-size: var(--text-xl);
-  font-weight: var(--font-bold);
-  color: var(--gray-900);
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.tool-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 6px 0 0;
+}
+
+.meta-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
   white-space: nowrap;
 }
 
+.meta-badge.kind {
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--primary-700);
+}
+
+.meta-badge.section {
+  background: var(--surface-2);
+  color: var(--gray-600);
+  border: 1px solid var(--border-color-light);
+}
+
+.tool-title h2 {
+  margin: 0;
+  font-size: 1.8rem;
+  font-weight: var(--font-bold);
+  color: var(--gray-900);
+  line-height: 1.15;
+}
+
 .tool-title p {
-  margin: 4px 0 0 0;
-  font-size: var(--text-sm);
+  margin: 8px 0 0 0;
+  font-size: 0.95rem;
   color: var(--gray-500);
   line-height: 1.4;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .tool-status {
@@ -1130,16 +1202,40 @@ html, body {
   white-space: nowrap;
 }
 
+.status-indicator.starting {
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+  border: var(--border-width) solid rgba(59, 130, 246, 0.22);
+}
+
 .status-indicator.running {
   background: var(--warning-50);
   color: var(--warning-600);
   border: var(--border-width) solid rgba(245, 158, 11, 0.35);
 }
 
+.status-indicator.queued {
+  background: var(--warning-50);
+  color: var(--warning-600);
+  border: var(--border-width) solid rgba(245, 158, 11, 0.2);
+}
+
 .status-indicator.completed {
   background: var(--success-50);
   color: var(--success-600);
   border: var(--border-width) solid rgba(22, 163, 74, 0.3);
+}
+
+.status-indicator.failed {
+  background: var(--error-50);
+  color: var(--error-600);
+  border: var(--border-width) solid rgba(239, 68, 68, 0.35);
+}
+
+.status-indicator.canceled {
+  background: var(--surface-2);
+  color: var(--gray-600);
+  border: var(--border-width) solid var(--border-color);
 }
 
 .status-indicator.error {
@@ -1191,9 +1287,9 @@ html, body {
 .tool-body {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(420px, 1.1fr) minmax(540px, 1fr);
-  gap: clamp(16px, 2vw, 32px);
-  padding: clamp(16px, 2vw, 36px);
+  grid-template-columns: minmax(380px, 1.04fr) minmax(460px, 0.96fr);
+  gap: clamp(14px, 1.6vw, 24px);
+  padding: clamp(14px, 1.8vw, 24px);
   min-height: 0;
   max-width: none;
   margin: 0;
@@ -1207,13 +1303,13 @@ html, body {
 }
 
 .form-section {
-  max-height: calc(100vh - 180px);
-  overflow: visible;
+  gap: 14px;
+  max-height: calc(100vh - 168px);
 }
 
 .logs-section {
-  min-height: clamp(380px, 50vh, 640px);
-  max-height: calc(100vh - 180px);
+  min-height: clamp(340px, 46vh, 560px);
+  max-height: calc(100vh - 168px);
 }
 
 /* 参数表单区域 */
@@ -1225,16 +1321,17 @@ html, body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
 }
 
 .form-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--spacing-4) var(--spacing-6);
+  padding: 14px 18px;
   background: var(--surface-2);
   border-bottom: var(--border-width) solid var(--border-color-light);
-  gap: 12px;
+  gap: 10px;
 }
 
 .form-header-actions {
@@ -1272,9 +1369,9 @@ html, body {
 }
 
 .param-list {
-  max-height: calc(100vh - 280px);
+  max-height: calc(100vh - 292px);
   overflow-y: auto;
-  padding: var(--spacing-4) var(--spacing-6);
+  padding: 16px 18px;
   flex: 1;
   -webkit-overflow-scrolling: touch;
 }
@@ -1298,7 +1395,7 @@ html, body {
 }
 
 .param-row {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .param-row:last-child {
@@ -1343,7 +1440,7 @@ html, body {
 .param-description {
   font-size: 12px;
   color: var(--gray-500);
-  margin: 0 0 10px 0;
+  margin: 0 0 8px 0;
   line-height: 1.4;
 }
 
@@ -1414,7 +1511,7 @@ html, body {
 
 /* 运行按钮 */
 .run-button {
-  margin: 16px 20px 20px;
+  margin: 0;
   padding: 0;
   border: none;
   border-radius: 10px;
@@ -1427,7 +1524,7 @@ html, body {
   box-shadow: 0 10px 20px rgba(var(--accent-rgb), 0.18);
   position: relative;
   overflow: visible;
-  min-height: 48px;
+  min-height: 46px;
 }
 
 .run-button:hover:not(:disabled) {
@@ -1583,7 +1680,7 @@ html, body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--spacing-4) var(--spacing-6);
+  padding: 14px 18px;
   background: var(--surface-2);
   border-bottom: var(--border-width) solid var(--border-color-light);
   gap: 12px;
@@ -1681,12 +1778,36 @@ html, body {
   color: var(--text-light);
   font-family: var(--font-family-mono);
   font-size: 12px;
-  padding: var(--spacing-4);
+  padding: 16px;
   overflow-y: auto;
-  min-height: clamp(280px, 38vh, 480px);
-  max-height: clamp(460px, 62vh, 760px);
+  min-height: clamp(260px, 34vh, 420px);
+  max-height: clamp(400px, 54vh, 620px);
   line-height: 1.5;
   -webkit-overflow-scrolling: touch;
+}
+
+.tool-notes {
+  padding: 0 18px 18px;
+  color: var(--gray-700);
+}
+
+.tool-notes h5 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gray-800);
+}
+
+.tool-notes ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.tool-notes li {
+  line-height: 1.5;
+  color: var(--gray-600);
 }
 
 .logs-container::-webkit-scrollbar {

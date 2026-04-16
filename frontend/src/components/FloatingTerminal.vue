@@ -352,8 +352,7 @@ const initTerminal = () => {
 // 连接 Socket
 const connectSocket = () => {
   socket = io('/', {
-    transports: ['websocket'],
-    upgrade: false
+    withCredentials: true
   })
   
   socket.on('connect', () => {

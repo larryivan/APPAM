@@ -1,0 +1,16 @@
+configfile: "config/config.yaml"
+
+pathvars:
+    results=config["results_dir"],
+    maxquant=config["maxquant_output_dir"]
+
+include: "rules/common.smk"
+include: "rules/convert.smk"
+include: "rules/maxquant.smk"
+
+
+rule all:
+    input:
+        expand("<results>/mzml/{sample}.mzML", sample=SAMPLE_IDS),
+        "<maxquant>/mqpar/all_samples.mqpar.xml",
+        "<maxquant>/combined/txt/proteinGroups.txt",

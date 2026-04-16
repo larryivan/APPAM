@@ -1,0 +1,61 @@
+services:
+  tools:
+    image: appam-tools:latest
+    build:
+      context: .
+      dockerfile: docker/tools/Dockerfile
+      args:
+        THERMO_RAW_FILE_PARSER_URL: ${THERMO_RAW_FILE_PARSER_URL:-https://github.com/CompOmics/ThermoRawFileParser/releases/download/v.2.0.0-dev/ThermoRawFileParser-v.2.0.0-dev-linux.zip}
+    restart: unless-stopped
+    environment:
+      FLASK_DEBUG: "false"
+      FLASK_HOST: "0.0.0.0"
+      FLASK_PORT: "19454"
+      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:-appam-docker-secret}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      SOCKETIO_ASYNC_MODE: "threading"
+      APPAM_REPO_ROOT: "/opt/appam"
+      APPAM_BACKEND_ROOT: "/opt/appam/backend"
+      APPAM_PROJECTS_ROOT: "/workspaces/projects"
+      APPAM_DATABASES_ROOT: "/databases"
+      APPAM_DB_PATH: "/data/app_database.db"
+      APPAM_SMK_ROOT: "/opt/appam/APPAM-SMK-main"
+      APPAM_PALEOPROTEOMICS_ROOT: "/opt/appam/appam-paleoproteomics-main"
+      APPAM_SNAKEMAKE_BIN: "snakemake"
+      APPAM_SMK_METAWRAP_ENV: ${APPAM_SMK_METAWRAP_ENV:-/opt/conda/envs/metawrap}
+      APPAM_SMK_PYDAMAGE_ENV: ${APPAM_SMK_PYDAMAGE_ENV:-/opt/conda/envs/ancient_dna}
+      APPAM_SMK_CHECKM_DB: ${APPAM_SMK_CHECKM_DB:-/databases/checkm}
+      APPAM_SMK_GUNC_DB: ${APPAM_SMK_GUNC_DB:-/databases/gunc/gunc_db.dmnd}
+      OPENCODE_PORT: "19455"
+      OPENCODE_BASE_URL: "http://127.0.0.1:19455"
+      APPAM_PALEO_DOTNET_BIN: "dotnet"
+      APPAM_PALEO_MAXQUANT_CMD: "/opt/tools/MaxQuant_v2.7.5.0/bin/MaxQuantCmd.dll"
+      APPAM_PALEO_THERMO_RAW_FILE_PARSER: ${APPAM_PALEO_THERMO_RAW_FILE_PARSER:-ThermoRawFileParser}
+      APPAM_PALEO_TIMSCONVERT_BIN: ${APPAM_PALEO_TIMSCONVERT_BIN:-timsconvert}
+      APPAM_PALEO_OPENMS_FILECONVERTER: ${APPAM_PALEO_OPENMS_FILECONVERTER:-FileConverter}
+      OPENCODE_CLI_COMMAND: "opencode"
+      OPENCODE_CLI_AGENT: ${OPENCODE_CLI_AGENT:-build}
+      OPENCODE_CLI_AGENTS_PATH: "/opt/appam/backend/opencode/AGENTS.md"
+      OPENCODE_CLI_SYSTEM_PROMPT_PATH: "/opt/appam/backend/opencode/system_prompt.txt"
+      OPENCODE_LLM_PROVIDER_ID: ${OPENCODE_LLM_PROVIDER_ID:-}
+      OPENCODE_LLM_MODEL: ${OPENCODE_LLM_MODEL:-}
+      OPENCODE_LLM_API_KEY: ${OPENCODE_LLM_API_KEY:-}
+      OPENCODE_LLM_BASE_URL: ${OPENCODE_LLM_BASE_URL:-}
+    volumes:
+      - ./docker-data/projects:/workspaces/projects
+      - ./docker-data/databases:/databases
+      - ./docker-data/app:/data
+    ports:
+      - "19454:19454"
+      - "19455:19455"
+
+  website:
+    image: appam-website:latest
+    build:
+      context: .
+      dockerfile: docker/website/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - tools
+    ports:
+      - "19453:80"

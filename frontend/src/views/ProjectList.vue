@@ -5,8 +5,13 @@
       <!-- 精简头部 -->
       <div class="page-header">
         <div class="header-left">
-          <h1>Projects</h1>
-          <span class="project-count">{{ filteredProjects.length }} projects</span>
+          <div>
+            <h1>Projects</h1>
+            <div class="header-meta">
+              <span class="project-count">{{ filteredProjects.length }} projects</span>
+              <span class="current-user">Signed in as {{ userDisplayName }}</span>
+            </div>
+          </div>
         </div>
         <button @click="showCreateModal = true" class="create-btn">
           <span class="btn-icon">+</span>
@@ -67,6 +72,7 @@
           <div class="project-info" @click="showProjectDetails(project)">
             <div class="project-header">
             <h3>{{ project.name }}</h3>
+            <span class="access-badge" :class="project.access_role">{{ accessRoleLabel(project.access_role) }}</span>
             </div>
             <p class="project-meta">Creator: {{ project.creator || 'Unknown' }}</p>
             <p class="project-meta">Created: {{ formatDate(project.created_at) }}</p>
@@ -75,8 +81,9 @@
           </div>
           <div class="project-actions">
             <button @click="openWorkspace(project.id)" class="open-btn">Open</button>
-            <button @click="openEditModal(project)" class="edit-btn" title="Edit Project">✏️</button>
-            <button @click="deleteProject(project.id)" class="delete-btn" title="Delete Project">🗑️</button>
+            <button v-if="canManageProject(project)" @click="openMembersModal(project)" class="share-btn" title="Manage Members">👥</button>
+            <button v-if="canManageProject(project)" @click="openEditModal(project)" class="edit-btn" title="Edit Project">✏️</button>
+            <button v-if="canManageProject(project)" @click="deleteProject(project.id)" class="delete-btn" title="Delete Project">🗑️</button>
           </div>
         </div>
       </div>
@@ -156,6 +163,9 @@
             <strong>Creator:</strong> {{ selectedProject?.creator || 'Unknown' }}
           </div>
           <div class="detail-item">
+            <strong>Your Access:</strong> {{ accessRoleLabel(selectedProject?.access_role) }}
+          </div>
+          <div class="detail-item">
             <strong>Created:</strong> {{ formatDate(selectedProject?.created_at) }}
           </div>
           <div class="detail-item">
@@ -167,7 +177,76 @@
           </div>
           <div class="detail-actions">
             <button @click="openWorkspace(selectedProject?.id)" class="primary-btn">Open Project</button>
-            <button @click="openEditModal(selectedProject)" class="secondary-btn">Edit Information</button>
+            <button v-if="canManageProject(selectedProject)" @click="openMembersModal(selectedProject)" class="secondary-btn">Manage Access</button>
+            <button v-if="canManageProject(selectedProject)" @click="openEditModal(selectedProject)" class="secondary-btn">Edit Information</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showMembersModal" class="modal-overlay app-modal-viewport app-modal-backdrop" @click="closeMembersModal">
+      <div class="app-modal members-modal" @click.stop>
+        <div class="modal-header app-modal-header">
+          <div>
+            <h3>Project Members</h3>
+            <p class="members-subtitle">{{ membersProject?.name }}</p>
+          </div>
+          <button @click="closeMembersModal" class="close-btn app-modal-close">×</button>
+        </div>
+
+        <div class="members-content app-modal-body">
+          <form class="member-form" @submit.prevent="addMember">
+            <label>
+              <span>User</span>
+              <select v-model="memberForm.user_id" required>
+                <option disabled value="">Select a user</option>
+                <option v-for="user in availableUsers" :key="user.id" :value="user.id">
+                  {{ user.display_name || user.username }} (@{{ user.username }})
+                </option>
+              </select>
+            </label>
+
+            <label>
+              <span>Role</span>
+              <select v-model="memberForm.role">
+                <option value="viewer">Viewer</option>
+                <option value="editor">Editor</option>
+              </select>
+            </label>
+
+            <button class="submit-btn" type="submit">Add Member</button>
+          </form>
+
+          <p v-if="membersError" class="members-error">{{ membersError }}</p>
+
+          <div class="members-list">
+            <div v-for="member in projectMembers" :key="member.user_id" class="member-row">
+              <div class="member-ident">
+                <strong>{{ member.display_name || member.username }}</strong>
+                <span>@{{ member.username }}</span>
+              </div>
+              <div class="member-controls">
+                <select
+                  :value="member.project_role"
+                  :disabled="member.project_role === 'owner'"
+                  @change="changeMemberRole(member, $event.target.value)"
+                >
+                  <option value="editor">Editor</option>
+                  <option value="viewer">Viewer</option>
+                </select>
+                <button
+                  class="danger-link"
+                  type="button"
+                  :disabled="member.project_role === 'owner'"
+                  @click="removeMember(member)"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+            <div v-if="!projectMembers.length" class="empty-members">
+              No members found.
+            </div>
           </div>
         </div>
       </div>
@@ -178,8 +257,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, reactive } from 'vue';
 import { useRouter } from 'vue-router';
+import { authState } from '../lib/auth'
 
 const projects = ref([]);
 const router = useRouter();
@@ -188,22 +268,36 @@ const router = useRouter();
 const showCreateModal = ref(false);
 const showEditModal = ref(false);
 const showDetailsModal = ref(false);
+const showMembersModal = ref(false);
 
 // 项目数据
 const newProject = ref({
   name: '',
-  creator: '',
+  creator: authState.user?.display_name || authState.user?.username || '',
   description: ''
 });
 
 const editingProject = ref({});
 const selectedProject = ref(null);
+const membersProject = ref(null);
+const projectMembers = ref([]);
+const userDirectory = ref([]);
+const membersError = ref('');
+const memberForm = reactive({
+  user_id: '',
+  role: 'viewer'
+})
 
 // 搜索和排序状态
 const searchQuery = ref('');
 const sortBy = ref('last_accessed');
 const sortOrder = ref('desc');
 const viewMode = ref('grid');
+const userDisplayName = computed(() => authState.user?.display_name || authState.user?.username || 'Unknown')
+const availableUsers = computed(() => {
+  const existing = new Set(projectMembers.value.map((member) => member.user_id))
+  return userDirectory.value.filter((user) => !existing.has(user.id))
+})
 
 // 计算过滤和排序后的项目列表
 const filteredProjects = computed(() => {
@@ -255,6 +349,17 @@ const toggleSortOrder = () => {
 const clearSearch = () => {
   searchQuery.value = '';
 };
+
+const canManageProject = (project) => {
+  return project?.access_role === 'owner' || project?.access_role === 'admin'
+}
+
+const accessRoleLabel = (role) => {
+  if (role === 'admin') return 'Admin'
+  if (role === 'owner') return 'Owner'
+  if (role === 'editor') return 'Editor'
+  return 'Viewer'
+}
 
 const fetchProjects = async () => {
   try {
@@ -324,6 +429,113 @@ const openWorkspace = async (id) => {
   await accessProject(id);
 };
 
+const fetchProjectMembers = async (projectId) => {
+  const response = await fetch(`/api/projects/${projectId}/members`)
+  const payload = await response.json()
+  if (!response.ok) {
+    throw new Error(payload?.error || 'Failed to load project members.')
+  }
+  projectMembers.value = payload.members || []
+}
+
+const fetchUserDirectory = async () => {
+  const response = await fetch('/api/auth/users/search')
+  const payload = await response.json()
+  if (!response.ok) {
+    throw new Error(payload?.error || 'Failed to load users.')
+  }
+  userDirectory.value = payload.users || []
+}
+
+const openMembersModal = async (project) => {
+  if (!project) return
+  membersProject.value = project
+  membersError.value = ''
+  memberForm.user_id = ''
+  memberForm.role = 'viewer'
+  showMembersModal.value = true
+  showDetailsModal.value = false
+  try {
+    await Promise.all([
+      fetchProjectMembers(project.id),
+      fetchUserDirectory(),
+    ])
+  } catch (error) {
+    membersError.value = error.message || 'Failed to load project access.'
+  }
+}
+
+const closeMembersModal = () => {
+  showMembersModal.value = false
+  membersProject.value = null
+  projectMembers.value = []
+  userDirectory.value = []
+  membersError.value = ''
+  memberForm.user_id = ''
+  memberForm.role = 'viewer'
+}
+
+const addMember = async () => {
+  if (!membersProject.value || !memberForm.user_id) return
+  membersError.value = ''
+  try {
+    const response = await fetch(`/api/projects/${membersProject.value.id}/members`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: memberForm.user_id,
+        role: memberForm.role,
+      }),
+    })
+    const payload = await response.json()
+    if (!response.ok) {
+      throw new Error(payload?.error || 'Failed to add project member.')
+    }
+    projectMembers.value = payload.members || []
+    memberForm.user_id = ''
+    memberForm.role = 'viewer'
+  } catch (error) {
+    membersError.value = error.message || 'Failed to add project member.'
+  }
+}
+
+const changeMemberRole = async (member, role) => {
+  if (!membersProject.value || member.project_role === 'owner') return
+  membersError.value = ''
+  try {
+    const response = await fetch(`/api/projects/${membersProject.value.id}/members/${member.user_id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role }),
+    })
+    const payload = await response.json()
+    if (!response.ok) {
+      throw new Error(payload?.error || 'Failed to update project member.')
+    }
+    projectMembers.value = payload.members || []
+  } catch (error) {
+    membersError.value = error.message || 'Failed to update project member.'
+  }
+}
+
+const removeMember = async (member) => {
+  if (!membersProject.value || member.project_role === 'owner') return
+  if (!confirm(`Remove ${member.display_name || member.username} from this project?`)) return
+  membersError.value = ''
+  try {
+    const response = await fetch(`/api/projects/${membersProject.value.id}/members/${member.user_id}`, {
+      method: 'DELETE',
+    })
+    const payload = await response.json()
+    if (!response.ok) {
+      throw new Error(payload?.error || 'Failed to remove project member.')
+    }
+    projectMembers.value = payload.members || []
+  } catch (error) {
+    membersError.value = error.message || 'Failed to remove project member.'
+  }
+}
+
 const accessProject = async (id) => {
   try {
     await fetch(`/api/projects/${id}/access`, { method: 'POST' });
@@ -343,7 +555,11 @@ const accessProject = async (id) => {
 // 弹窗控制
 const closeCreateModal = () => {
   showCreateModal.value = false;
-  newProject.value = { name: '', creator: '', description: '' };
+  newProject.value = {
+    name: '',
+    creator: authState.user?.display_name || authState.user?.username || '',
+    description: ''
+  };
 };
 
 const closeEditModal = () => {
@@ -382,7 +598,10 @@ const formatDate = (dateString) => {
   });
 };
 
-onMounted(fetchProjects);
+onMounted(() => {
+  newProject.value.creator = authState.user?.display_name || authState.user?.username || ''
+  fetchProjects()
+});
 </script>
 
 <style scoped>
@@ -414,6 +633,13 @@ onMounted(fetchProjects);
   gap: var(--spacing-4);
 }
 
+.header-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  margin-top: var(--spacing-2);
+}
+
 .page-header h1 {
   font-size: var(--text-3xl);
   font-weight: var(--font-bold);
@@ -428,6 +654,11 @@ onMounted(fetchProjects);
   padding: var(--spacing-1) var(--spacing-3);
   border-radius: var(--radius-xl);
   border: var(--border-width) solid var(--border-color-light);
+}
+
+.current-user {
+  color: var(--gray-600);
+  font-size: var(--text-sm);
 }
 
 .create-btn {
@@ -681,6 +912,7 @@ onMounted(fetchProjects);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   margin-bottom: 8px;
 }
 
@@ -744,7 +976,35 @@ onMounted(fetchProjects);
   align-items: center;
 }
 
-.open-btn, .edit-btn {
+.access-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.7rem;
+  border-radius: var(--radius-full);
+  font-size: 0.78rem;
+  font-weight: var(--font-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.access-badge.viewer {
+  background: var(--surface-2);
+  color: var(--gray-600);
+}
+
+.access-badge.editor {
+  background: rgba(14, 165, 233, 0.12);
+  color: var(--secondary-color);
+}
+
+.access-badge.owner,
+.access-badge.admin {
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--primary-700);
+}
+
+.open-btn, .edit-btn, .share-btn {
   background-color: var(--surface-2);
   color: var(--gray-700);
   border: 1px solid var(--border-color);
@@ -756,7 +1016,7 @@ onMounted(fetchProjects);
   flex: 1;
 }
 
-.open-btn:hover, .edit-btn:hover {
+.open-btn:hover, .edit-btn:hover, .share-btn:hover {
   background-color: var(--surface-3);
 }
 
@@ -782,6 +1042,16 @@ onMounted(fetchProjects);
   width: 90%;
   max-height: 80vh;
   overflow-y: auto;
+}
+
+.members-modal {
+  max-width: 720px;
+}
+
+.members-subtitle {
+  margin: 4px 0 0;
+  color: var(--gray-500);
+  font-size: var(--text-sm);
 }
 
 .form-group {
@@ -922,6 +1192,109 @@ onMounted(fetchProjects);
   background-color: var(--surface-3);
 }
 
+.members-content {
+  display: grid;
+  gap: var(--spacing-5);
+}
+
+.member-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) auto;
+  gap: var(--spacing-3);
+  align-items: end;
+}
+
+.member-form label {
+  display: grid;
+  gap: var(--spacing-2);
+}
+
+.member-form span {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--gray-700);
+}
+
+.member-form select {
+  width: 100%;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  background: var(--surface-1);
+  font: inherit;
+}
+
+.members-error {
+  margin: 0;
+  padding: var(--spacing-3) var(--spacing-4);
+  border-radius: var(--radius-base);
+  background: var(--error-50);
+  color: var(--error-600);
+  font-size: var(--text-sm);
+}
+
+.members-list {
+  display: grid;
+  gap: var(--spacing-3);
+}
+
+.member-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-4);
+  padding: var(--spacing-4);
+  border-radius: var(--radius-base);
+  background: var(--surface-2);
+  border: 1px solid var(--border-color-light);
+}
+
+.member-ident {
+  display: grid;
+  gap: 4px;
+}
+
+.member-ident span {
+  color: var(--gray-500);
+  font-size: var(--text-sm);
+}
+
+.member-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+}
+
+.member-controls select {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  background: white;
+  font: inherit;
+}
+
+.danger-link {
+  border: 0;
+  background: transparent;
+  color: var(--error-600);
+  font: inherit;
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+}
+
+.danger-link:disabled {
+  color: var(--gray-400);
+  cursor: not-allowed;
+}
+
+.empty-members {
+  padding: var(--spacing-4);
+  text-align: center;
+  color: var(--gray-500);
+  border-radius: var(--radius-base);
+  background: var(--surface-2);
+}
+
 /* 响应式设计 */
 @media (max-width: 1024px) {
   .controls-bar {
@@ -989,6 +1362,19 @@ onMounted(fetchProjects);
   .project-card.list .project-actions {
     margin-left: 0;
     justify-content: center;
+  }
+
+  .member-form {
+    grid-template-columns: 1fr;
+  }
+
+  .member-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .member-controls {
+    justify-content: space-between;
   }
 }
 

@@ -8,8 +8,7 @@ import yaml
 import json
 import xml.etree.ElementTree as ET
 from ..database import get_db_connection
-
-PROJECTS_DIR = './projects'
+from ..paths import resolve_project_path as resolve_project_workspace_path
 
 # File extension mappings - centralized configuration
 BIO_EXTENSIONS = {
@@ -49,12 +48,7 @@ LANG_MAP = {
 # Utility functions
 def get_project_path(project_id, path=''):
     """Safely constructs a path within a project directory."""
-    base_path = os.path.abspath(os.path.join(os.getcwd(), PROJECTS_DIR, project_id))
-    target_path = os.path.abspath(os.path.join(base_path, path.lstrip('/')))
-    
-    if not target_path.startswith(base_path):
-        raise ValueError("Attempted to access path outside of project directory.")
-    return target_path
+    return str(resolve_project_workspace_path(project_id, path))
 
 def get_file_format(file_ext):
     """Determine file format from extension."""
@@ -392,100 +386,148 @@ def preview_file_sample(project_id, path, samples=100):
         }
 
 # Project management functions
-def get_all_projects():
-    """Get all projects from the database."""
-    conn = get_db_connection()
-    projects = conn.execute('SELECT * FROM projects').fetchall()
-    conn.close()
-    
-    # Remove password data from returned projects
-    result = []
-    for project in projects:
-        project_dict = dict(project)
-        if 'password_hash' in project_dict:
-            del project_dict['password_hash']
-        if 'has_password' in project_dict:
-            del project_dict['has_password']
-        result.append(project_dict)
-    
-    return result
-
-def get_project_by_id(project_id):
-    """Get a specific project by ID."""
-    conn = get_db_connection()
-    project = conn.execute('SELECT * FROM projects WHERE id = ?', (project_id,)).fetchone()
-    conn.close()
-    
+def _sanitize_project(project):
     if not project:
         return None
-    
+
     project_dict = dict(project)
     if 'password_hash' in project_dict:
         del project_dict['password_hash']
     if 'has_password' in project_dict:
         del project_dict['has_password']
-    
     return project_dict
 
-def create_project(name, description='', creator=''):
+
+def get_all_projects(user_id=None, is_admin=False):
+    """Get all projects accessible to a user."""
+    conn = get_db_connection()
+    try:
+        if is_admin:
+            projects = conn.execute(
+                '''
+                SELECT p.*, 'admin' AS access_role
+                FROM projects p
+                ORDER BY p.last_accessed DESC
+                '''
+            ).fetchall()
+        else:
+            projects = conn.execute(
+                '''
+                SELECT
+                    p.*,
+                    CASE
+                        WHEN p.owner_id = ? THEN 'owner'
+                        ELSE pm.role
+                    END AS access_role
+                FROM projects p
+                LEFT JOIN project_members pm
+                    ON pm.project_id = p.id
+                   AND pm.user_id = ?
+                WHERE p.owner_id = ? OR pm.user_id = ?
+                ORDER BY p.last_accessed DESC
+                ''',
+                (user_id, user_id, user_id, user_id)
+            ).fetchall()
+    finally:
+        conn.close()
+
+    return [_sanitize_project(project) for project in projects]
+
+
+def get_project_by_id(project_id, user_id=None, is_admin=False):
+    """Get a specific project by ID if the user can access it."""
+    conn = get_db_connection()
+    try:
+        if is_admin:
+            project = conn.execute(
+                '''
+                SELECT p.*, 'admin' AS access_role
+                FROM projects p
+                WHERE p.id = ?
+                ''',
+                (project_id,)
+            ).fetchone()
+        else:
+            project = conn.execute(
+                '''
+                SELECT
+                    p.*,
+                    CASE
+                        WHEN p.owner_id = ? THEN 'owner'
+                        ELSE pm.role
+                    END AS access_role
+                FROM projects p
+                LEFT JOIN project_members pm
+                    ON pm.project_id = p.id
+                   AND pm.user_id = ?
+                WHERE p.id = ?
+                  AND (p.owner_id = ? OR pm.user_id = ?)
+                LIMIT 1
+                ''',
+                (user_id, user_id, project_id, user_id, user_id)
+            ).fetchone()
+    finally:
+        conn.close()
+
+    return _sanitize_project(project)
+
+
+def create_project(name, description='', creator='', owner_id=None):
     """Create a new project."""
     project_id = str(uuid.uuid4())
-    
-    # Create project directory
+
     project_dir = get_project_path(project_id)
     os.makedirs(project_dir, exist_ok=True)
-    
-    # Insert into database
-    conn = get_db_connection()
-    conn.execute(
-        'INSERT INTO projects (id, name, description, creator) VALUES (?, ?, ?, ?)',
-        (project_id, name, description, creator)
-    )
-    conn.commit()
-    
-    # Get the created project with all fields
-    project = conn.execute('SELECT * FROM projects WHERE id = ?', (project_id,)).fetchone()
-    conn.close()
-    
-    project_dict = dict(project)
-    if 'password_hash' in project_dict:
-        del project_dict['password_hash']
-    if 'has_password' in project_dict:
-        del project_dict['has_password']
 
-    return project_dict
+    conn = get_db_connection()
+    try:
+        conn.execute(
+            'INSERT INTO projects (id, name, description, creator, owner_id) VALUES (?, ?, ?, ?, ?)',
+            (project_id, name, description, creator, owner_id)
+        )
+        if owner_id:
+            conn.execute(
+                '''
+                INSERT INTO project_members (project_id, user_id, role, created_by)
+                VALUES (?, ?, 'owner', ?)
+                ''',
+                (project_id, owner_id, owner_id)
+            )
+        conn.commit()
+        project = conn.execute(
+            '''
+            SELECT p.*, 'owner' AS access_role
+            FROM projects p
+            WHERE p.id = ?
+            ''',
+            (project_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+
+    return _sanitize_project(project)
+
 
 def update_project(project_id, name=None, description=None, creator=None):
     """Update an existing project."""
     conn = get_db_connection()
-    
-    # Check if project exists
-    project = conn.execute('SELECT * FROM projects WHERE id = ?', (project_id,)).fetchone()
-    if not project:
+    try:
+        project = conn.execute('SELECT * FROM projects WHERE id = ?', (project_id,)).fetchone()
+        if not project:
+            return None
+
+        if name is not None:
+            conn.execute('UPDATE projects SET name = ? WHERE id = ?', (name, project_id))
+        if description is not None:
+            conn.execute('UPDATE projects SET description = ? WHERE id = ?', (description, project_id))
+        if creator is not None:
+            conn.execute('UPDATE projects SET creator = ? WHERE id = ?', (creator, project_id))
+
+        conn.commit()
+        updated_project = conn.execute('SELECT * FROM projects WHERE id = ?', (project_id,)).fetchone()
+        return _sanitize_project(updated_project)
+    finally:
         conn.close()
-        return None
-    
-    # Update fields
-    if name is not None:
-        conn.execute('UPDATE projects SET name = ? WHERE id = ?', (name, project_id))
-    if description is not None:
-        conn.execute('UPDATE projects SET description = ? WHERE id = ?', (description, project_id))
-    if creator is not None:
-        conn.execute('UPDATE projects SET creator = ? WHERE id = ?', (creator, project_id))
-    
-    conn.commit()
-    
-    # Get updated project
-    updated_project = conn.execute('SELECT * FROM projects WHERE id = ?', (project_id,)).fetchone()
-    conn.close()
-    
-    project_dict = dict(updated_project)
-    if 'password_hash' in project_dict:
-        del project_dict['password_hash']
-    if 'has_password' in project_dict:
-        del project_dict['has_password']
-    
-    return project_dict
 
 def update_project_access_time(project_id):
     """Update the last accessed time for a project."""
@@ -503,9 +545,95 @@ def delete_project(project_id):
     
     # Delete from database
     conn = get_db_connection()
-    conn.execute('DELETE FROM projects WHERE id = ?', (project_id,))
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute('DELETE FROM projects WHERE id = ?', (project_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def list_project_members(project_id):
+    conn = get_db_connection()
+    try:
+        rows = conn.execute(
+            '''
+            SELECT
+                pm.project_id,
+                pm.user_id,
+                pm.role AS project_role,
+                pm.created_at,
+                pm.created_by,
+                u.username,
+                u.display_name,
+                u.role AS global_role,
+                u.status
+            FROM project_members pm
+            JOIN users u ON u.id = pm.user_id
+            WHERE pm.project_id = ?
+            ORDER BY
+                CASE pm.role
+                    WHEN 'owner' THEN 0
+                    WHEN 'editor' THEN 1
+                    ELSE 2
+                END,
+                u.username ASC
+            ''',
+            (project_id,)
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def add_or_update_project_member(project_id, user_id, role, created_by=None):
+    conn = get_db_connection()
+    try:
+        project = conn.execute('SELECT owner_id FROM projects WHERE id = ?', (project_id,)).fetchone()
+        if not project:
+            raise ValueError('Project not found.')
+        if project['owner_id'] == user_id:
+            raise ValueError('The project owner already has full access.')
+        if role == 'owner':
+            raise ValueError('Owner access can only be assigned to the project owner.')
+
+        user = conn.execute(
+            "SELECT id, status FROM users WHERE id = ?",
+            (user_id,)
+        ).fetchone()
+        if not user:
+            raise ValueError('User not found.')
+        if user['status'] != 'active':
+            raise ValueError('Only active users can be added to a project.')
+
+        conn.execute(
+            '''
+            INSERT INTO project_members (project_id, user_id, role, created_by)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(project_id, user_id)
+            DO UPDATE SET role = excluded.role
+            ''',
+            (project_id, user_id, role, created_by)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def remove_project_member(project_id, user_id):
+    conn = get_db_connection()
+    try:
+        project = conn.execute('SELECT owner_id FROM projects WHERE id = ?', (project_id,)).fetchone()
+        if not project:
+            raise ValueError('Project not found.')
+        if project['owner_id'] == user_id:
+            raise ValueError('The project owner cannot be removed.')
+        conn.execute(
+            'DELETE FROM project_members WHERE project_id = ? AND user_id = ?',
+            (project_id, user_id)
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 # Analysis functions
 def analyze_bio_file(abs_path, file_ext, file_size):

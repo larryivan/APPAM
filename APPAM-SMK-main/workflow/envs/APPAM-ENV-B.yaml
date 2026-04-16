@@ -1,0 +1,19 @@
+name: APPAM-ENV-B
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+
+dependencies:
+  #- checkm2=1.1
+  - abricate=1.0.1
+  #- gtdbtk=2.5.2
+  - gtdbtk=1.0.2
+  - numpy=1.23.5
+  - matplotlib 
+  - pysam
+  - hmmer 
+  - prodigal 
+  - pplacer
+  - checkm-genome=1.2.2
+

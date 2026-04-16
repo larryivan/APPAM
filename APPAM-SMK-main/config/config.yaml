@@ -1,0 +1,41 @@
+samples_file: "config/samples.tsv"
+paths:
+  raw_data_dir: "path/to/raw"
+  temp_dir: "path/to/temp"
+  results_dir: "path/to/results"
+  logs_dir: "path/to/logs"
+  benchmark_dir: "path/to/benchmark"
+params:
+  preprocess_method: "fastp"  # adapter_removal | fastp
+  fastp_detect_adapter_for_pe: true
+  adapter1: "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACCGATTCGATCTCGTATGCCGTCTTCTGCTTG"
+  adapter2: "AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATTT"
+
+  min_contig_len: 500
+  freebayes_freq: 0.33
+  freebayes_qual: 20
+  bcftools_qual: 30
+  bcftools_qual_low: 20
+  bin_completeness: 50
+  bin_contamination: 10
+  pydamage_window: 35
+  use_ancient_contigs: true
+  pydamage_contig_column: "reference"
+  pydamage_qvalue_column: "qvalue"
+  pydamage_qvalue_max: 0.05
+  pydamage_predicted_accuracy_column: "predicted_accuracy"
+  pydamage_predicted_accuracy_min: 0.5
+  min_binninglength: 1000
+  maxbin2_markerset: 40
+  magrefinement: true
+  magrefiner: "metawrap"
+  min_completeness: 50
+  max_contamination: 10
+
+databases:
+  checkm_db: "/path/to/checkm_db"
+  gunc_db: "/path/to/gunc_db"
+
+tools:
+  metawrap_env: "/path/to/metawrap_env"
+  pydamage_env: "/path/to/pydamage_env"

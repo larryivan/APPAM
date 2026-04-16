@@ -101,12 +101,8 @@ let fitPending = false
 let fitQueued = false
 
 const sessionKey = ref('')
-const SESSION_STORAGE_PREFIX = 'opencode_terminal_session'
-
-const storageKey = computed(() => {
-  const projectKey = projectId.value || 'global'
-  return `${SESSION_STORAGE_PREFIX}:${projectKey}`
-})
+const sessionReady = ref(false)
+const createSessionKey = () => `opencode_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 
 const scheduleFit = (delay = 0) => {
   if (!fitAddon || !terminal) return
@@ -120,7 +116,7 @@ const scheduleFit = (delay = 0) => {
     fitPending = false
     if (!fitAddon || !terminal) return
     fitAddon.fit()
-    if (socket) {
+    if (sessionReady.value && socket && socket.connected) {
       const { rows, cols } = terminal
       socket.emit('terminal_resize', { rows, cols, session_key: sessionKey.value })
     }
@@ -184,37 +180,22 @@ const windowStyle = computed(() => {
   }
 })
 
-const loadSessionKey = () => {
-  sessionKey.value = ''
-  try {
-    const stored = localStorage.getItem(storageKey.value)
-    if (stored) {
-      sessionKey.value = stored
-      return
-    }
-  } catch (error) {
-    console.error('Failed to load OpenCode session key:', error)
-  }
-
-  sessionKey.value = `opencode_${Math.random().toString(36).slice(2, 10)}`
-  try {
-    localStorage.setItem(storageKey.value, sessionKey.value)
-  } catch (error) {
-    console.error('Failed to save OpenCode session key:', error)
-  }
+const resetSessionKey = () => {
+  sessionKey.value = createSessionKey()
 }
 
 const ensureSessionKey = () => {
   if (!sessionKey.value) {
-    loadSessionKey()
+    resetSessionKey()
   }
   return sessionKey.value
 }
 
 const openWindow = () => {
   if (isOpen.value) return
-  ensureSessionKey()
+  resetSessionKey()
   isMobile.value = detectMobile()
+  sessionReady.value = false
   if (isMobile.value) {
     isFullscreen.value = true
   }
@@ -245,6 +226,8 @@ const closeWindow = () => {
   fitQueued = false
   isOpen.value = false
   isFullscreen.value = false
+  sessionReady.value = false
+  sessionKey.value = ''
 }
 
 const toggleWindow = () => {
@@ -348,20 +331,21 @@ const initTerminal = () => {
 
 const connectSocket = () => {
   socket = io('/', {
-    transports: ['websocket'],
-    upgrade: false
+    withCredentials: true
   })
 
   socket.on('connect', () => {
+    sessionReady.value = false
     socket.emit('terminal_connect', {
       project_id: projectId.value,
       session_key: ensureSessionKey(),
-      keep_alive: true,
+      keep_alive: false,
       preset: 'opencode'
     })
   })
 
   socket.on('terminal_connected', () => {
+    sessionReady.value = true
     scheduleFit(80)
   })
 
@@ -375,16 +359,45 @@ const connectSocket = () => {
     if (terminal) {
       terminal.write(`\r\n\x1b[31mError: ${data.error}\x1b[0m\r\n`)
     }
+    if (data?.error && (
+      data.error.includes('Terminal session not found') ||
+      data.error.includes('Terminal session ended') ||
+      data.error.includes('Failed to start terminal command')
+    )) {
+      sessionReady.value = false
+      socket?.disconnect()
+    }
+  })
+
+  socket.on('terminal_exit', () => {
+    sessionReady.value = false
+    if (terminal) {
+      terminal.write('\r\n\x1b[33mOpenCode exited. Close and reopen the panel to start a fresh session.\x1b[0m\r\n')
+    }
+    socket?.disconnect()
+  })
+
+  socket.on('connect_error', (error) => {
+    if (terminal) {
+      terminal.write(`\r\n\x1b[31mConnection failed: ${error?.message || 'unknown error'}\x1b[0m\r\n`)
+    }
+  })
+
+  socket.on('disconnect', (reason) => {
+    sessionReady.value = false
+    if (terminal && isOpen.value && reason !== 'io client disconnect') {
+      terminal.write('\r\n\x1b[33mTerminal disconnected. Reopen OpenCode to reconnect.\x1b[0m\r\n')
+    }
   })
 
   terminal.onData((data) => {
-    if (socket && socket.connected) {
+    if (sessionReady.value && socket && socket.connected) {
       socket.emit('terminal_input', { input: data, session_key: sessionKey.value })
     }
   })
 
   terminal.onResize(({ rows, cols }) => {
-    if (socket && socket.connected) {
+    if (sessionReady.value && socket && socket.connected) {
       socket.emit('terminal_resize', { rows, cols, session_key: sessionKey.value })
     }
   })
@@ -532,7 +545,6 @@ watch(projectId, () => {
   if (wasOpen) {
     closeWindow()
   }
-  loadSessionKey()
   if (wasOpen) {
     openWindow()
   }
@@ -540,7 +552,6 @@ watch(projectId, () => {
 
 onMounted(() => {
   isMobile.value = detectMobile()
-  loadSessionKey()
   window.addEventListener('resize', handleResize)
 })
 

@@ -8,12 +8,19 @@
 </template>
 
 <script setup>
+import { onMounted } from 'vue'
 import Topbar from './components/Topbar.vue'
+import { loadCurrentUser } from './lib/auth'
+
+onMounted(() => {
+  loadCurrentUser()
+})
 </script>
 
 <style>
 /* Global Styles */
 @import url('https://fonts.googleapis.com/css2?family=Gabarito:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+@import './styles/account-ui.css';
 
 :root {
   /* 主要色彩系统 */

@@ -1,0 +1,78 @@
+# Snakefile
+from pathlib import Path
+
+configfile: "config/config.yaml"
+
+include: "rules/common.smk"
+
+
+SAMPLES = load_samples(config["samples_file"])
+
+RAW_DATA_DIR = config["paths"]["raw_data_dir"]
+RESULTS_DIR = config["paths"]["results_dir"]
+PREPROCESS_DIR = f"{RESULTS_DIR}/preprocess"
+TEMP_DIR = config["paths"]["temp_dir"]
+LOGS_DIR = config["paths"]["logs_dir"]
+BENCHMARK_DIR = config["paths"]["benchmark_dir"]
+PREPROCESS_METHOD = config["params"].get("preprocess_method", "adapter_removal").lower()
+
+if PREPROCESS_METHOD not in {"adapter_removal", "fastp"}:
+    raise ValueError(
+        "params.preprocess_method must be either 'adapter_removal' or 'fastp'. "
+        f"Got: {PREPROCESS_METHOD}"
+    )
+
+for path in (RESULTS_DIR, TEMP_DIR, LOGS_DIR, BENCHMARK_DIR):
+    Path(path).mkdir(parents=True, exist_ok=True)
+
+include: "rules/preprocess.smk"
+include: "rules/assembly.smk"
+include: "rules/variants.smk"
+include: "rules/damage.smk"
+include: "rules/contigs_filter.smk"
+include: "rules/binning.smk"
+include: "rules/classify.smk"
+
+# optional messages, log and error handling
+# -----------------------------------------------------
+onstart:
+    print("\n--- Analysis started ---\n")
+
+
+onsuccess:
+    print("\n--- Workflow finished! ---\n")
+
+
+onerror:
+    print("\n--- An error occurred! ---\n")
+
+
+# target rules
+# -----------------------------------------------------
+rule all:
+    input:
+        (
+            [
+                *expand(f"{PREPROCESS_DIR}/{{sample}}.fastp.html", sample=SAMPLES),
+                *expand(f"{PREPROCESS_DIR}/{{sample}}.fastp.json", sample=SAMPLES),
+                *expand(f"{PREPROCESS_DIR}/{{sample}}.single.fastq", sample=SAMPLES),
+            ]
+            if PREPROCESS_METHOD == "fastp"
+            else [
+                *expand(f"{PREPROCESS_DIR}/{{sample}}_R1_fastqc.html", sample=SAMPLES),
+                *expand(f"{PREPROCESS_DIR}/{{sample}}_R2_fastqc.html", sample=SAMPLES),
+                *expand(f"{PREPROCESS_DIR}/{{sample}}.collapsed.gz", sample=SAMPLES),
+            ]
+        )
+        + [
+            # Assembly
+            *expand(f"{RESULTS_DIR}/megahit/{{sample}}/final.contigs.fa", sample=SAMPLES),
+            # Damage
+            *expand(f"{RESULTS_DIR}/pydamage/{{sample}}/pydamage_results.csv", sample=SAMPLES),
+            # Binning & bin quality
+            *expand(f"{RESULTS_DIR}/metawrap/bin_refinement/{{sample}}/metawrap_50_10_bins", sample=SAMPLES),
+            *expand(f"{RESULTS_DIR}/checkm/{{sample}}/bins_qa.txt", sample=SAMPLES),
+            *expand(f"{RESULTS_DIR}/gtdbtk/{{sample}}/classify_wf.done", sample=SAMPLES),
+            # expand(f"{RESULTS_DIR}/gunc/{{sample}}/GUNC.progenomes_2.1.maxCSS_level.tsv", sample=SAMPLES)
+        ]
+    default_target: True

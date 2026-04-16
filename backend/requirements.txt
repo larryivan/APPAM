@@ -2,6 +2,7 @@ Flask==3.0.3
 Flask-SocketIO==5.5.1
 requests==2.32.3
 flask_cors==6.0.1
+PyYAML==6.0.2
 # AI Assistant dependencies
 python-dotenv==1.0.1
 # System monitoring

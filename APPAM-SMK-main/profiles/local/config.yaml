@@ -1,0 +1,7 @@
+cores: 16
+use-conda: true
+conda-frontend: mamba
+rerun-incomplete: true
+printshellcmds: true
+show-failed-logs: true
+latency-wait: 60
