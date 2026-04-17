@@ -1,13 +1,11 @@
 name: metawrap
 channels:
+  - defaults
   - bioconda
   - conda-forge
 dependencies:
-  # APPAM-SMK only uses metaWRAP binning and bin_refinement.
-  # Installing the old monolithic ursky::metawrap-mg=1.3.2 now tends to
-  # pull optional modules such as classify/quant bins and hits an unsatisfiable
-  # boost/taxator/salmon dependency chain on current channels.
+  # APPAM-SMK only needs the metaWRAP wrapper scripts plus the Python helpers
+  # used by binning/bin_refinement. The wrapped binaries themselves are
+  # provided by APPAM's other environments and exposed through appam-tool.
   - python=2.7.15
   - biopython=1.72
-  - metawrap-binning=1.3.0
-  - metawrap-refinement=1.3.0

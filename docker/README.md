@@ -25,17 +25,51 @@ Then open:
 - Direct tools API: `http://localhost:19454`
 - Direct OpenCode API: `http://localhost:19455`
 
+## Build with a persistent log
+
+For server-side troubleshooting, prefer the build wrapper. It forces plain Docker
+progress output and writes the complete build transcript to a timestamped file on
+the host:
+
+```bash
+./docker/build-tools.sh tools
+```
+
+Logs are written under:
+
+- `docker-data/build-logs/`
+
+You can also build multiple services and keep one combined log:
+
+```bash
+./docker/build-tools.sh tools website
+```
+
 ## Persistent host directories
 
 The compose file uses host-mounted directories under `docker-data/` for project files and reference databases:
 
 - `docker-data/projects`
 - `docker-data/databases`
+- `docker-data/build-logs` (created automatically by the build wrapper)
+- `docker-data/runtime-logs`
 
 These map to container paths:
 
 - `/workspaces/projects`
 - `/databases`
+- `/runtime-logs`
+
+## Runtime crash logs
+
+The tools container writes backend and OpenCode runtime logs to the host at:
+
+- `docker-data/runtime-logs/backend.latest.log`
+- `docker-data/runtime-logs/opencode.latest.log`
+
+Each container start also creates timestamped log files in the same directory.
+If the backend exits and Docker restarts the container, the last 120 lines of the
+backend log are echoed back into `docker compose logs tools` as well.
 
 The application database is stored in a dedicated Docker volume:
 

@@ -4,6 +4,8 @@ USER root
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG THERMO_RAW_FILE_PARSER_URL=https://github.com/CompOmics/ThermoRawFileParser/releases/download/v.2.0.0-dev/ThermoRawFileParser-v.2.0.0-dev-linux.zip
+ARG METAWRAP_REPO=https://github.com/bxlab/metaWRAP.git
+ARG METAWRAP_REF=c4a23f0fff872abe3cafb63767dc592a8361331b
 ARG APPAM_BUILD_RETRY_ATTEMPTS=5
 ARG APPAM_BUILD_RETRY_INITIAL_DELAY=10
 
@@ -53,6 +55,23 @@ EOF
 RUN retry-bash "curl --retry 8 --retry-delay 5 --retry-all-errors -fsSL https://opencode.ai/install | bash"
 ENV PATH="/home/mambauser/.opencode/bin:${PATH}"
 
+USER root
+
+RUN mkdir -p /opt/vendor && \
+    retry-bash "git clone ${METAWRAP_REPO} /opt/vendor/metaWRAP" && \
+    git -C /opt/vendor/metaWRAP checkout --detach "${METAWRAP_REF}" && \
+    printf '%s\n' \
+      'SOFT=/opt/vendor/metaWRAP/bin/metawrap-scripts' \
+      'PIPES=/opt/vendor/metaWRAP/bin/metawrap-modules' \
+      'KRAKEN_DB=${APPAM_METAWRAP_KRAKEN_DB:-/databases/kraken}' \
+      'KRAKEN2_DB=${APPAM_METAWRAP_KRAKEN2_DB:-/databases/kraken2}' \
+      'BMTAGGER_DB=${APPAM_METAWRAP_BMTAGGER_DB:-/databases/bmtagger}' \
+      'BLASTDB=${APPAM_METAWRAP_BLASTDB:-/databases/blastdb}' \
+      'TAXDUMP=${APPAM_METAWRAP_TAXDUMP:-/databases/taxdump}' \
+      > /opt/vendor/metaWRAP/bin/config-metawrap
+
+USER mambauser
+
 RUN retry-bash "micromamba create -y -n preprocessing -f /opt/appam/docker/tools/environments/preprocessing.yml && micromamba clean --all --yes"
 RUN retry-bash "micromamba create -y -n mapping_dna -f /opt/appam/docker/tools/environments/mapping_dna.yml && micromamba clean --all --yes"
 RUN retry-bash "micromamba create -y -n ancient_dna -f /opt/appam/docker/tools/environments/ancient_dna.yml && micromamba clean --all --yes"
@@ -82,11 +101,13 @@ RUN mkdir -p /opt/vendor/ThermoRawFileParser /opt/tools /data /workspaces/projec
     THERMO_BIN="$(find /opt/vendor/ThermoRawFileParser -type f -name 'ThermoRawFileParser*' -perm -u+x | head -n 1)" && \
     if [ -n "${THERMO_BIN}" ]; then ln -sf "${THERMO_BIN}" /usr/local/bin/ThermoRawFileParser; fi && \
     cp /opt/appam/docker/tools/tool-wrapper.sh /usr/local/bin/appam-tool && \
+    ln -sf /opt/vendor/metaWRAP/bin/config-metawrap /usr/local/bin/config-metawrap && \
     chmod +x /usr/local/bin/appam-tool /usr/local/bin/start-appam-tools && \
     for name in \
       fastqc multiqc adapterremoval AdapterRemoval bwa bowtie2 samtools bedtools pmdtools pmdtools.py \
       pydamage krakenuniq krona ktImportText ktImportTaxonomy megahit spades spades.py quast quast.py \
       freebayes bcftools metabat2 maxbin2 run_MaxBin.pl concoct gunc checkm checkm2 metawrap metawrap-mg \
+      jgi_summarize_bam_contig_depths cut_up_fasta.py concoct_coverage_table.py merge_cutup_clustering.py \
       prokka rgi abricate gtdb-tk gtdbtk antismash seqkit; do \
       ln -sf /usr/local/bin/appam-tool /usr/local/bin/$name; \
     done && \

@@ -30,6 +30,9 @@ case "$cmd" in
   metabat2|maxbin2|run_MaxBin.pl|concoct|gunc)
     env="binning"
     ;;
+  jgi_summarize_bam_contig_depths|cut_up_fasta.py|concoct_coverage_table.py|merge_cutup_clustering.py)
+    env="binning"
+    ;;
   checkm|checkm2)
     env="checkm"
     ;;
@@ -68,5 +71,10 @@ case "$cmd" in
   gtdb-tk) target="gtdbtk" ;;
   *) target="$cmd" ;;
 esac
+
+if [[ "$cmd" == "metawrap" || "$cmd" == "metawrap-mg" ]]; then
+  export PATH="/opt/vendor/metaWRAP/bin:${PATH}"
+  exec micromamba run -n "$env" /opt/vendor/metaWRAP/bin/metawrap "$@"
+fi
 
 exec micromamba run -n "$env" "$target" "$@"

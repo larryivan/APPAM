@@ -12,6 +12,7 @@ services:
       FLASK_DEBUG: "false"
       FLASK_HOST: "0.0.0.0"
       FLASK_PORT: "19454"
+      APPAM_ALLOW_UNSAFE_WERKZEUG: "true"
       FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:-appam-docker-secret}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
       SOCKETIO_ASYNC_MODE: "threading"
@@ -27,6 +28,7 @@ services:
       APPAM_SMK_PYDAMAGE_ENV: ${APPAM_SMK_PYDAMAGE_ENV:-/opt/conda/envs/ancient_dna}
       APPAM_SMK_CHECKM_DB: ${APPAM_SMK_CHECKM_DB:-/databases/checkm}
       APPAM_SMK_GUNC_DB: ${APPAM_SMK_GUNC_DB:-/databases/gunc/gunc_db.dmnd}
+      APPAM_RUNTIME_LOG_DIR: "/runtime-logs"
       OPENCODE_PORT: "19455"
       OPENCODE_BASE_URL: "http://127.0.0.1:19455"
       APPAM_PALEO_DOTNET_BIN: "dotnet"
@@ -46,6 +48,7 @@ services:
       - appam-data:/data
       - ./docker-data/projects:/workspaces/projects
       - ./docker-data/databases:/databases
+      - ./docker-data/runtime-logs:/runtime-logs
     ports:
       - "19454:19454"
       - "19455:19455"
