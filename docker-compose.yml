@@ -7,6 +7,7 @@ services:
       args:
         THERMO_RAW_FILE_PARSER_URL: ${THERMO_RAW_FILE_PARSER_URL:-https://github.com/CompOmics/ThermoRawFileParser/releases/download/v.2.0.0-dev/ThermoRawFileParser-v.2.0.0-dev-linux.zip}
     restart: unless-stopped
+    user: "0:0"
     environment:
       FLASK_DEBUG: "false"
       FLASK_HOST: "0.0.0.0"
@@ -42,9 +43,9 @@ services:
       OPENCODE_LLM_API_KEY: ${OPENCODE_LLM_API_KEY:-}
       OPENCODE_LLM_BASE_URL: ${OPENCODE_LLM_BASE_URL:-}
     volumes:
+      - appam-data:/data
       - ./docker-data/projects:/workspaces/projects
       - ./docker-data/databases:/databases
-      - ./docker-data/app:/data
     ports:
       - "19454:19454"
       - "19455:19455"
@@ -59,3 +60,6 @@ services:
       - tools
     ports:
       - "19453:80"
+
+volumes:
+  appam-data:

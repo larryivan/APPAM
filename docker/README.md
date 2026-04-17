@@ -27,17 +27,21 @@ Then open:
 
 ## Persistent host directories
 
-The compose file uses host-mounted directories under `docker-data/`:
+The compose file uses host-mounted directories under `docker-data/` for project files and reference databases:
 
 - `docker-data/projects`
 - `docker-data/databases`
-- `docker-data/app`
 
 These map to container paths:
 
 - `/workspaces/projects`
 - `/databases`
-- `/data`
+
+The application database is stored in a dedicated Docker volume:
+
+- `appam-data` -> `/data`
+
+This keeps deployments clean by default and avoids shipping a pre-populated SQLite file with the repository.
 
 ## Important runtime notes
 
@@ -78,3 +82,21 @@ These paths are intentionally fixed for container deployment:
 - `/workspaces/projects`
 - `/databases`
 - `/data/app_database.db`
+
+## Reset to an empty database
+
+To start with a clean APPAM database on a server:
+
+```bash
+docker compose down
+docker volume rm appam_appam-data
+docker compose up -d --build
+```
+
+If you only want to recreate the tools container against a fresh database:
+
+```bash
+docker compose rm -sf tools
+docker volume rm appam_appam-data
+docker compose up -d --build tools
+```

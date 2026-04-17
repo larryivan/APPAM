@@ -5,7 +5,10 @@ mkdir -p /data /workspaces/projects /databases
 
 OPENCODE_PORT="${OPENCODE_PORT:-19455}"
 OPENCODE_BASE_URL="${OPENCODE_BASE_URL:-http://127.0.0.1:${OPENCODE_PORT}}"
+APPAM_DB_PATH="${APPAM_DB_PATH:-/data/app_database.db}"
 export OPENCODE_BASE_URL
+
+mkdir -p "$(dirname "${APPAM_DB_PATH}")"
 
 if [[ -n "${APPAM_PALEO_MAXQUANT_CMD:-}" && ! -f "${APPAM_PALEO_MAXQUANT_CMD}" ]]; then
   echo "[appam-tools] Warning: APPAM_PALEO_MAXQUANT_CMD points to a missing file: ${APPAM_PALEO_MAXQUANT_CMD}" >&2
