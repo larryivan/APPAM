@@ -133,6 +133,20 @@ let socket = null
 let resizeObserver = null
 let fitPending = false
 let fitQueued = false
+const sessionKey = ref('')
+const sessionReady = ref(false)
+const createSessionKey = () => `terminal_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+
+const resetSessionKey = () => {
+  sessionKey.value = createSessionKey()
+}
+
+const ensureSessionKey = () => {
+  if (!sessionKey.value) {
+    resetSessionKey()
+  }
+  return sessionKey.value
+}
 
 const scheduleFit = (delay = 0) => {
   if (!fitAddon || !terminal) return
@@ -146,9 +160,9 @@ const scheduleFit = (delay = 0) => {
     fitPending = false
     if (!fitAddon || !terminal) return
     fitAddon.fit()
-    if (socket) {
+    if (sessionReady.value && socket && socket.connected) {
       const { rows, cols } = terminal
-      socket.emit('terminal_resize', { rows, cols })
+      socket.emit('terminal_resize', { rows, cols, session_key: sessionKey.value })
     }
     if (fitQueued) {
       fitQueued = false
@@ -210,6 +224,8 @@ const windowStyle = computed(() => {
 // 打开终端
 const openTerminal = () => {
   if (!isOpen.value) {
+    resetSessionKey()
+    sessionReady.value = false
   isOpen.value = true
     isFullscreen.value = isMobile.value
   
@@ -233,7 +249,7 @@ const toggleTerminal = () => {
 // 关闭终端
 const closeTerminal = () => {
   if (socket) {
-    socket.emit('terminal_disconnect')
+    socket.emit('terminal_disconnect', { session_key: sessionKey.value })
     socket.disconnect()
     socket = null
   }
@@ -248,6 +264,8 @@ const closeTerminal = () => {
   fitQueued = false
   isOpen.value = false
   isFullscreen.value = false
+  sessionReady.value = false
+  sessionKey.value = ''
 }
 
 // 切换全屏
@@ -356,12 +374,21 @@ const connectSocket = () => {
   })
   
   socket.on('connect', () => {
-    socket.emit('terminal_connect', { project_id: projectId.value })
+    sessionReady.value = false
+    socket.emit('terminal_connect', {
+      project_id: projectId.value,
+      session_key: ensureSessionKey(),
+      keep_alive: false,
+      preset: 'shell'
+    })
   })
   
   socket.on('terminal_connected', (data) => {
     console.log('Terminal connected:', data)
-    // 移除冗余的提示信息，让用户直接使用终端
+    sessionReady.value = true
+    if (data?.session_key) {
+      sessionKey.value = data.session_key
+    }
     scheduleFit(80)
   })
   
@@ -375,19 +402,42 @@ const connectSocket = () => {
     if (terminal) {
       terminal.write(`\r\n\x1b[31mError: ${data.error}\x1b[0m\r\n`)
     }
+    if (data?.error && (
+      data.error.includes('Terminal session not found') ||
+      data.error.includes('Terminal session ended') ||
+      data.error.includes('Failed to start terminal command')
+    )) {
+      sessionReady.value = false
+      socket?.disconnect()
+    }
+  })
+
+  socket.on('terminal_exit', () => {
+    sessionReady.value = false
+    if (terminal) {
+      terminal.write('\r\n\x1b[33mTerminal exited. Close and reopen the panel to start a fresh session.\x1b[0m\r\n')
+    }
+    socket?.disconnect()
+  })
+
+  socket.on('disconnect', (reason) => {
+    sessionReady.value = false
+    if (terminal && isOpen.value && reason !== 'io client disconnect') {
+      terminal.write('\r\n\x1b[33mTerminal disconnected. Reopen the panel to reconnect.\x1b[0m\r\n')
+    }
   })
   
   // 处理终端输入
   terminal.onData((data) => {
-    if (socket && socket.connected) {
-      socket.emit('terminal_input', { input: data })
+    if (sessionReady.value && socket && socket.connected) {
+      socket.emit('terminal_input', { input: data, session_key: sessionKey.value })
     }
   })
   
   // 处理终端大小变化
   terminal.onResize(({ rows, cols }) => {
-    if (socket && socket.connected) {
-      socket.emit('terminal_resize', { rows, cols })
+    if (sessionReady.value && socket && socket.connected) {
+      socket.emit('terminal_resize', { rows, cols, session_key: sessionKey.value })
     }
   })
 }

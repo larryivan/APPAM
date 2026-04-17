@@ -11,7 +11,7 @@ from flask import Blueprint, request, session as flask_session
 from flask_socketio import emit, join_room, leave_room
 from app import socketio
 from app.auth import get_project_for_user, session_user
-from app.paths import OPENCODE_ASSETS_ROOT
+from app.paths import OPENCODE_ASSETS_ROOT, get_project_dir
 import logging
 
 terminal_bp = Blueprint('terminal', __name__)
@@ -340,9 +340,7 @@ def handle_terminal_connect(data):
         emit('terminal_error', {'error': 'Project not found or write access denied'})
         return
 
-    project_path = os.path.join(BACKEND_DIR, 'projects', project_id)
-    
-    logger.info(f"Calculated backend_dir: {BACKEND_DIR}")
+    project_path = str(get_project_dir(project_id))
     logger.info(f"Calculated project_path: {project_path}")
     
     if not os.path.exists(project_path):
