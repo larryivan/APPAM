@@ -36,7 +36,7 @@ services:
       APPAM_PALEO_THERMO_RAW_FILE_PARSER: ${APPAM_PALEO_THERMO_RAW_FILE_PARSER:-ThermoRawFileParser}
       APPAM_PALEO_TIMSCONVERT_BIN: ${APPAM_PALEO_TIMSCONVERT_BIN:-timsconvert}
       APPAM_PALEO_OPENMS_FILECONVERTER: ${APPAM_PALEO_OPENMS_FILECONVERTER:-FileConverter}
-      OPENCODE_CLI_COMMAND: "opencode"
+      OPENCODE_CLI_COMMAND: "/home/mambauser/.opencode/bin/opencode"
       OPENCODE_CLI_AGENT: ${OPENCODE_CLI_AGENT:-build}
       OPENCODE_CLI_AGENTS_PATH: "/opt/appam/backend/opencode/AGENTS.md"
       OPENCODE_CLI_SYSTEM_PROMPT_PATH: "/opt/appam/backend/opencode/system_prompt.txt"

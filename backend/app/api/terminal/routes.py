@@ -6,6 +6,7 @@ import struct
 import fcntl
 import termios
 import shlex
+import shutil
 from collections import deque
 from flask import Blueprint, request, session as flask_session
 from flask_socketio import emit, join_room, leave_room
@@ -23,6 +24,10 @@ client_sessions = {}
 
 DEFAULT_OPENCODE_AGENTS_PATH = str(OPENCODE_ASSETS_ROOT / "AGENTS.md")
 DEFAULT_OPENCODE_SYSTEM_PROMPT_PATH = str(OPENCODE_ASSETS_ROOT / "system_prompt.txt")
+DEFAULT_OPENCODE_COMMAND_CANDIDATES = (
+    "/home/mambauser/.opencode/bin/opencode",
+    "/root/.opencode/bin/opencode",
+)
 
 class TerminalSession:
     def __init__(
@@ -68,6 +73,10 @@ class TerminalSession:
                 env['PYTHONUNBUFFERED'] = '1'
                 if self.extra_env:
                     env.update(self.extra_env)
+                if self.launch_command and os.path.isabs(self.launch_command[0]):
+                    launch_dir = os.path.dirname(self.launch_command[0])
+                    if launch_dir:
+                        env['PATH'] = f"{launch_dir}:{env.get('PATH', '')}".rstrip(':')
                 
                 # 切换到项目目录
                 if os.path.exists(self.project_path):
@@ -202,9 +211,30 @@ def _build_launch_command(preset, command):
     if not command:
         return []
     if preset == "opencode":
-        shell = os.environ.get('SHELL', '/bin/bash')
-        return [shell, '-lc', command]
+        tokens = _parse_terminal_command(command)
+        if not tokens:
+            return []
+        tokens[0] = _resolve_opencode_executable(tokens[0])
+        return tokens
     return _parse_terminal_command(command)
+
+
+def _resolve_opencode_executable(executable):
+    if not executable:
+        return "opencode"
+    if os.path.isabs(executable) and os.access(executable, os.X_OK):
+        return executable
+
+    resolved = shutil.which(executable)
+    if resolved:
+        return resolved
+
+    if executable == "opencode":
+        for candidate in DEFAULT_OPENCODE_COMMAND_CANDIDATES:
+            if os.access(candidate, os.X_OK):
+                return candidate
+
+    return executable
 
 
 def _resolve_opencode_path(value, fallback):

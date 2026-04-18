@@ -12,6 +12,23 @@ export OPENCODE_BASE_URL
 mkdir -p "$(dirname "${APPAM_DB_PATH}")"
 mkdir -p "${APPAM_RUNTIME_LOG_DIR}"
 
+resolve_opencode_command() {
+  local configured="${OPENCODE_CLI_COMMAND:-opencode}"
+  if [[ "${configured}" = /* ]] && [[ -x "${configured}" ]]; then
+    printf '%s\n' "${configured}"
+    return 0
+  fi
+  if command -v "${configured}" >/dev/null 2>&1; then
+    command -v "${configured}"
+    return 0
+  fi
+  if [[ "${configured}" = "opencode" && -x /home/mambauser/.opencode/bin/opencode ]]; then
+    printf '%s\n' "/home/mambauser/.opencode/bin/opencode"
+    return 0
+  fi
+  return 1
+}
+
 START_TS="$(date '+%Y%m%d_%H%M%S')"
 BACKEND_LOG="${APPAM_RUNTIME_LOG_DIR}/backend-${START_TS}.log"
 OPENCODE_LOG="${APPAM_RUNTIME_LOG_DIR}/opencode-${START_TS}.log"
@@ -27,9 +44,10 @@ if [[ -n "${APPAM_PALEO_MAXQUANT_CMD:-}" && ! -f "${APPAM_PALEO_MAXQUANT_CMD}" ]
   echo "[appam-tools] Warning: APPAM_PALEO_MAXQUANT_CMD points to a missing file: ${APPAM_PALEO_MAXQUANT_CMD}" >&2
 fi
 
-if command -v opencode >/dev/null 2>&1; then
+if OPENCODE_COMMAND="$(resolve_opencode_command)"; then
+  export OPENCODE_CLI_COMMAND="${OPENCODE_COMMAND}"
   echo "[appam-tools] Starting OpenCode API on 0.0.0.0:${OPENCODE_PORT}" >&2
-  opencode serve --hostname 0.0.0.0 --port "${OPENCODE_PORT}" --print-logs >>"${OPENCODE_LOG}" 2>&1 &
+  "${OPENCODE_COMMAND}" serve --hostname 0.0.0.0 --port "${OPENCODE_PORT}" --print-logs >>"${OPENCODE_LOG}" 2>&1 &
   OPENCODE_PID=$!
 else
   echo "[appam-tools] Warning: opencode command not found; OpenCode API will be unavailable." >&2
