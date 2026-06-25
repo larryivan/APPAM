@@ -8,7 +8,7 @@ services:
         THERMO_RAW_FILE_PARSER_URL: ${THERMO_RAW_FILE_PARSER_URL:-https://github.com/CompOmics/ThermoRawFileParser/releases/download/v.2.0.0-dev/ThermoRawFileParser-v.2.0.0-dev-linux.zip}
     restart: unless-stopped
     user: "0:0"
-    environment:
+    environment: &appam-tools-environment
       FLASK_DEBUG: "false"
       FLASK_HOST: "0.0.0.0"
       FLASK_PORT: "19454"
@@ -16,18 +16,35 @@ services:
       FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:-appam-docker-secret}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
       SOCKETIO_ASYNC_MODE: "threading"
+      APPAM_QUEUE_BACKEND: ${APPAM_QUEUE_BACKEND:-local-db}
+      APPAM_REDIS_URL: ${APPAM_REDIS_URL:-redis://redis:6379/0}
+      APPAM_RQ_QUEUE: ${APPAM_RQ_QUEUE:-appam-workflows}
+      APPAM_PREFLIGHT_DRY_RUN: ${APPAM_PREFLIGHT_DRY_RUN:-true}
+      APPAM_PREFLIGHT_DRY_RUN_TIMEOUT: ${APPAM_PREFLIGHT_DRY_RUN_TIMEOUT:-120}
       APPAM_REPO_ROOT: "/opt/appam"
       APPAM_BACKEND_ROOT: "/opt/appam/backend"
       APPAM_PROJECTS_ROOT: "/workspaces/projects"
       APPAM_DATABASES_ROOT: "/databases"
+      APPAM_DB_MANIFEST: ${APPAM_DB_MANIFEST:-/databases/appam-db-manifest.json}
       APPAM_DB_PATH: "/data/app_database.db"
       APPAM_SMK_ROOT: "/opt/appam/APPAM-SMK-main"
       APPAM_PALEOPROTEOMICS_ROOT: "/opt/appam/appam-paleoproteomics-main"
       APPAM_SNAKEMAKE_BIN: "snakemake"
       APPAM_SMK_METAWRAP_ENV: ${APPAM_SMK_METAWRAP_ENV:-/opt/conda/envs/metawrap}
       APPAM_SMK_PYDAMAGE_ENV: ${APPAM_SMK_PYDAMAGE_ENV:-/opt/conda/envs/ancient_dna}
+      APPAM_SMK_CHECKM1_DB: ${APPAM_SMK_CHECKM1_DB:-/databases/checkm}
       APPAM_SMK_CHECKM_DB: ${APPAM_SMK_CHECKM_DB:-/databases/checkm}
-      APPAM_SMK_GUNC_DB: ${APPAM_SMK_GUNC_DB:-/databases/gunc/gunc_db.dmnd}
+      APPAM_SMK_CHECKM2_ENV: ${APPAM_SMK_CHECKM2_ENV:-/opt/conda/envs/checkm2}
+      APPAM_SMK_CHECKM2_DB: ${APPAM_SMK_CHECKM2_DB:-/databases/checkm2}
+      APPAM_SMK_GUNC_ENV: ${APPAM_SMK_GUNC_ENV:-/opt/conda/envs/binning}
+      APPAM_SMK_GUNC_DB: ${APPAM_SMK_GUNC_DB:-/databases/gunc}
+      APPAM_SMK_PROKKA_ENV: ${APPAM_SMK_PROKKA_ENV:-/opt/conda/envs/prokka}
+      APPAM_SMK_EGGNOG_ENV: ${APPAM_SMK_EGGNOG_ENV:-/opt/conda/envs/eggnog_py310}
+      APPAM_SMK_EGGNOG_DB: ${APPAM_SMK_EGGNOG_DB:-/databases/eggnog}
+      APPAM_SMK_ABRICATE_ENV: ${APPAM_SMK_ABRICATE_ENV:-/opt/conda/envs/abricate}
+      APPAM_SMK_RGI_ENV: ${APPAM_SMK_RGI_ENV:-/opt/conda/envs/rgi}
+      APPAM_SMK_RGI_DB_MODE: ${APPAM_SMK_RGI_DB_MODE:-online}
+      APPAM_SMK_ANTISMASH_ENV: ${APPAM_SMK_ANTISMASH_ENV:-/opt/conda/envs/antismash}
       APPAM_RUNTIME_LOG_DIR: "/runtime-logs"
       OPENCODE_PORT: "19455"
       OPENCODE_BASE_URL: "http://127.0.0.1:19455"
@@ -44,10 +61,10 @@ services:
       OPENCODE_LLM_MODEL: ${OPENCODE_LLM_MODEL:-}
       OPENCODE_LLM_API_KEY: ${OPENCODE_LLM_API_KEY:-}
       OPENCODE_LLM_BASE_URL: ${OPENCODE_LLM_BASE_URL:-}
-    volumes:
+    volumes: &appam-tools-volumes
       - appam-data:/data
       - ./docker-data/projects:/workspaces/projects
-      - ./docker-data/databases:/databases
+      - ${APPAM_HOST_DB_ROOT:-./docker-data/databases}:/databases:ro
       - ./docker-data/runtime-logs:/runtime-logs
     ports:
       - "19454:19454"
@@ -64,5 +81,28 @@ services:
     ports:
       - "19453:80"
 
+  redis:
+    image: redis:7-alpine
+    profiles: ["rq"]
+    restart: unless-stopped
+    volumes:
+      - appam-redis:/data
+
+  rq-worker:
+    image: appam-tools:latest
+    profiles: ["rq"]
+    restart: unless-stopped
+    user: "0:0"
+    depends_on:
+      - redis
+    environment:
+      <<: *appam-tools-environment
+      APPAM_QUEUE_BACKEND: "rq"
+      APPAM_DISABLE_EMBEDDED_WORKER: "true"
+      APPAM_RQ_WORKER_NAME: ${APPAM_RQ_WORKER_NAME:-}
+    volumes: *appam-tools-volumes
+    command: ["micromamba", "run", "-n", "backend", "python", "/opt/appam/backend/run_rq_worker.py"]
+
 volumes:
   appam-data:
+  appam-redis:

@@ -1,0 +1,7 @@
+name: eggnog_py310
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - python=3.10
+  - eggnog-mapper==2.1.13

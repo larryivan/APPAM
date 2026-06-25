@@ -11,7 +11,7 @@ from collections import deque
 from flask import Blueprint, request, session as flask_session
 from flask_socketio import emit, join_room, leave_room
 from app import socketio
-from app.auth import get_project_for_user, session_user
+from app.auth import can, get_project_for_user, session_user
 from app.paths import OPENCODE_ASSETS_ROOT, get_project_dir
 import logging
 
@@ -365,9 +365,9 @@ def handle_terminal_connect(data):
         emit('terminal_error', {'error': 'Project ID is required'})
         return
 
-    project = get_project_for_user(project_id, user=user, min_role='editor')
-    if not project:
-        emit('terminal_error', {'error': 'Project not found or write access denied'})
+    project = get_project_for_user(project_id, user=user, min_role='viewer')
+    if not project or not can(user, 'open_terminal', project):
+        emit('terminal_error', {'error': 'Terminal access requires admin privileges'})
         return
 
     project_path = str(get_project_dir(project_id))

@@ -57,6 +57,34 @@ rule metawrap_bin_refinement:
             -A {input.metabat2} -B {input.maxbin2} -C {input.concoct} &> {log}
         """
 
+rule checkm2:
+    conda: config["tools"].get("checkm2_env", "../envs/APPAM-ENV-B.yaml")
+    input:
+        f"{RESULTS_DIR}/metawrap/bin_refinement/{{sample}}/metawrap_50_10_bins"
+    output:
+        quality=f"{RESULTS_DIR}/checkm2/{{sample}}/quality_report.tsv"
+    params:
+        outdir=lambda wc, output: os.path.dirname(output.quality),
+        db=config["databases"]["checkm2_db"]
+    log:
+        f"{LOGS_DIR}/checkm2/{{sample}}.log"
+    benchmark:
+        f"{BENCHMARK_DIR}/checkm2/{{sample}}.txt"
+    threads: 24
+    resources:
+        mem_mb=64000
+    shell:
+        r"""
+        mkdir -p {params.outdir} $(dirname {log})
+        checkm2 predict \
+            --input {input} \
+            --output-directory {params.outdir} \
+            --database_path {params.db} \
+            --threads {threads} \
+            -x fa &> {log}
+        test -s {output.quality}
+        """
+
 rule checkm:
     conda: "../envs/APPAM-ENV-B.yaml"
     input:
@@ -80,7 +108,7 @@ rule checkm:
         """
 
 rule gunc:
-    conda: "../envs/APPAM-ENV-A.yaml"
+    conda: config["tools"].get("gunc_env", "../envs/APPAM-ENV-A.yaml")
     input:
         f"{RESULTS_DIR}/metawrap/bin_refinement/{{sample}}/metawrap_50_10_bins"
     output:
@@ -96,6 +124,16 @@ rule gunc:
     shell:
         r"""
         mkdir -p {params.outdir} $(dirname {log})
+        db_path="{params.db}"
+        if [ -d "$db_path" ]; then
+            db_file="$(find "$db_path" -maxdepth 2 -type f -name '*.dmnd' | head -n 1)"
+            if [ -z "$db_file" ]; then
+                echo "No GUNC .dmnd database found under $db_path" >&2
+                exit 1
+            fi
+        else
+            db_file="$db_path"
+        fi
         gunc run --input_dir {input} -t {threads} \
-            --out_dir {params.outdir} --db_file {params.db} 2> {log}
+            --out_dir {params.outdir} --db_file "$db_file" 2> {log}
         """

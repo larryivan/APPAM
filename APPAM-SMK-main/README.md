@@ -4,8 +4,8 @@ APPAM-SMK is the Snakemake workflow component of APPAM, providing automated and 
 
 ## Features
 - Reproducible, user-friendly, efficient, and actively maintained workflow
-- End-to-end processing from raw reads to bins and taxonomy
-- Built-in QC, assembly, damage assessment, variant calling, binning, and classification
+- End-to-end processing from raw reads to bins, taxonomy, MAG quality assessment, and genome annotation
+- Built-in QC, assembly, damage assessment, variant calling, binning, CheckM/CheckM2/GUNC assessment, classification, and annotation
 - Optional preprocessing backend: `fastqc + AdapterRemoval` or `fastp`
 - Ready-to-use local and SLURM execution profiles
 
@@ -37,7 +37,8 @@ Key sections:
 - `paths`: input/output/log/benchmark directories
 - `params`: tool parameters (e.g., `min_contig_len`, `pydamage_window`)
 - `tools`: external environment paths (e.g., `metawrap_env`, `pydamage_env`)
-- `databases`: external database paths (e.g., `checkm_db`, `gunc_db`)
+- `databases`: external database paths (e.g., `checkm1_db`, `checkm2_db`, `gunc_db`, `eggnog_db`)
+- `tools`: external environment paths for Docker/Conda-backed runtime modules
 
 Optional preprocessing mode:
 - `preprocess_method`: `adapter_removal` (default) or `fastp`
@@ -81,12 +82,13 @@ Default targets in `rule all` include:
 - Assembly
 - Mapping and damage assessment
 - Binning and refinement
-- Bin quality assessment
+- Bin quality assessment with CheckM1 and optional CheckM2
+- Contamination/chimerism assessment with optional GUNC
 - Taxonomic classification
+- Optional genome annotation with Prokka, eggNOG-mapper, ABRicate, RGI, and antiSMASH
 
 Additional rules exist but are not in the default targets:
 - Variant calling
-- Contamination check
 - Contig filtering by damage (ancient vs modern)
 
 ## Outputs
@@ -97,7 +99,14 @@ Primary outputs are under `paths.results_dir` in `config/config.yaml`. Examples 
 - `pydamage/`
 - `metawrap/`
 - `checkm/`
+- `checkm2/`
+- `gunc/`
 - `gtdbtk/`
+- `annotation/prokka/`
+- `annotation/eggnog/`
+- `annotation/abricate/`
+- `annotation/rgi/`
+- `annotation/antismash/`
 
 Logs and benchmarks are written to `paths.logs_dir` and `paths.benchmark_dir`.  
 Runtime directories like `work/` and `.snakemake/` are gitignored.

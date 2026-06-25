@@ -1,0 +1,2 @@
+sample_id	forward_reads	reverse_reads
+demo	examples/appam-smk/raw/demo_R1.fastq	examples/appam-smk/raw/demo_R2.fastq

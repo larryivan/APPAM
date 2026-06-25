@@ -53,6 +53,47 @@
         </div>
       </div>
 
+      <div class="overview-card dashboard-card">
+        <div class="card-header">
+          <h3>Workflow Readiness</h3>
+          <button @click="fetchDashboard" class="refresh-btn" :class="{ loading: dashboardLoading }">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+          </button>
+        </div>
+        <div class="dashboard-grid">
+          <div class="readiness-tile" :class="{ ok: dashboard?.readiness?.has_passed_preflight }">
+            <span class="tile-label">Latest Preflight</span>
+            <strong>{{ dashboard?.latest_preflight ? (dashboard.latest_preflight.ok ? 'Passed' : 'Failed') : 'Missing' }}</strong>
+            <small>{{ formatDateTime(dashboard?.latest_preflight?.created_at) }}</small>
+          </div>
+          <div class="readiness-tile" :class="{ ok: dashboard?.readiness?.has_completed_run }">
+            <span class="tile-label">Workflow Runs</span>
+            <strong>{{ dashboard?.latest_run?.status ? getStatusText(dashboard.latest_run.status) : 'No Run' }}</strong>
+            <small>{{ dashboard?.latest_run?.workflow_id || 'No workflow history' }}</small>
+          </div>
+          <div class="readiness-tile" :class="{ ok: dashboard?.readiness?.database_manifest_found }">
+            <span class="tile-label">Database Manifest</span>
+            <strong>{{ dashboard?.database_manifest?.found ? 'Recorded' : 'Inferred' }}</strong>
+            <small>{{ dashboard?.readiness?.database_resources_present || 0 }}/{{ dashboard?.readiness?.database_resources_total || 0 }} resources</small>
+          </div>
+        </div>
+
+        <div v-if="dashboardMetrics.length" class="metric-strip">
+          <div v-for="metric in dashboardMetrics" :key="`${metric.group}-${metric.name}-${metric.sample_id}`" class="metric-chip">
+            <span>{{ metric.group }} · {{ metric.name }}</span>
+            <strong>{{ formatMetric(metric) }}</strong>
+          </div>
+        </div>
+
+        <div v-if="dashboard?.recommendations?.length" class="dashboard-notes">
+          <div v-for="note in dashboard.recommendations" :key="note" class="dashboard-note">{{ note }}</div>
+        </div>
+      </div>
+
       <!-- 系统性能监控 -->
       <SystemPerformance />
 
@@ -121,6 +162,10 @@
 
             <div v-if="currentTask.failure_label" class="error-info soft">
               <strong>Failure Class:</strong>{{ currentTask.failure_label }}
+            </div>
+
+            <div v-if="currentTask.failure_suggestion" class="error-info soft">
+              <strong>Suggested Fix:</strong>{{ currentTask.failure_suggestion }}
             </div>
           </div>
         </div>
@@ -290,6 +335,8 @@ const projectId = computed(() => route.params.id)
 // 项目信息
 const project = ref(null)
 const projectLoading = ref(true)
+const dashboard = ref(null)
+const dashboardLoading = ref(false)
 
 // 当前进程状态
 const currentTask = ref({ status: 'not_found', tool: null })
@@ -330,6 +377,7 @@ const filteredHistory = computed(() => {
   }
   return processHistory.value.filter(item => item.status === historyFilter.value)
 })
+const dashboardMetrics = computed(() => (dashboard.value?.metrics || []).slice(0, 8))
 
 // 方法
 const fetchProjectInfo = async () => {
@@ -360,6 +408,20 @@ const fetchCurrentStatus = async () => {
   }
 }
 
+const fetchDashboard = async () => {
+  try {
+    dashboardLoading.value = true
+    const response = await fetch(`/api/projects/${projectId.value}/dashboard`)
+    if (response.ok) {
+      dashboard.value = await response.json()
+    }
+  } catch (error) {
+    console.error('Error fetching project dashboard:', error)
+  } finally {
+    dashboardLoading.value = false
+  }
+}
+
 const fetchProcessHistory = async () => {
   try {
     historyLoading.value = true
@@ -379,6 +441,7 @@ const fetchProcessHistory = async () => {
         errorMessage: item.error_message,
         queuePosition: item.queue_position,
         failureLabel: item.failure_label,
+        failureSuggestion: item.failure_suggestion,
       }))
     }
   } catch (error) {
@@ -690,17 +753,31 @@ const formatDuration = (seconds) => {
   return `${Math.round(seconds / 3600)}h`
 }
 
+const formatMetric = (metric) => {
+  const value = metric.value
+  const text = metric.text
+  const unit = metric.unit || ''
+  if (value !== null && value !== undefined && value !== '') {
+    const numeric = Number(value)
+    const formatted = Number.isFinite(numeric) ? (Math.abs(numeric) >= 10 ? numeric.toFixed(0) : numeric.toFixed(2)) : value
+    return `${formatted}${unit}`
+  }
+  return text || 'Recorded'
+}
+
 // 定时刷新当前状态
 let statusInterval = null
 
 onMounted(() => {
   fetchProjectInfo()
+  fetchDashboard()
   fetchCurrentStatus()
   fetchProcessHistory()
   
   // 每5秒刷新一次状态与历史
   statusInterval = setInterval(() => {
     fetchCurrentStatus()
+    fetchDashboard()
     fetchProcessHistory()
   }, 5000)
 })
@@ -876,6 +953,85 @@ watch(
   background: var(--gray-50);
   border-radius: var(--radius-md);
   border-left: 4px solid var(--primary-500);
+}
+
+.dashboard-card {
+  display: grid;
+  gap: var(--spacing-4);
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--spacing-3);
+}
+
+.readiness-tile {
+  display: grid;
+  gap: var(--spacing-1);
+  padding: var(--spacing-4);
+  border-radius: var(--radius-md);
+  background: var(--gray-50);
+  border: var(--border-width) solid var(--gray-200);
+}
+
+.readiness-tile.ok {
+  background: var(--success-50);
+  border-color: rgba(34, 197, 94, 0.18);
+}
+
+.tile-label {
+  color: var(--gray-500);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  text-transform: uppercase;
+}
+
+.readiness-tile strong {
+  color: var(--gray-800);
+  font-size: var(--text-xl);
+}
+
+.readiness-tile small {
+  color: var(--gray-500);
+}
+
+.metric-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--spacing-2);
+}
+
+.metric-chip {
+  display: grid;
+  gap: 2px;
+  padding: var(--spacing-3);
+  border-radius: var(--radius-md);
+  background: rgba(37, 99, 235, 0.06);
+  border: 1px solid rgba(37, 99, 235, 0.12);
+}
+
+.metric-chip span {
+  color: var(--gray-600);
+  font-size: var(--text-xs);
+}
+
+.metric-chip strong {
+  color: var(--primary-700);
+}
+
+.dashboard-notes {
+  display: grid;
+  gap: var(--spacing-2);
+}
+
+.dashboard-note {
+  padding: var(--spacing-3);
+  border-radius: var(--radius-md);
+  background: var(--warning-50);
+  color: var(--warning-700);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
 }
 
 /* 进程状态 */

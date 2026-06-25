@@ -1,12 +1,82 @@
+from __future__ import annotations
+
+import os
+import socket
 import uuid
 
 from ..database import get_db_connection
-from .job_store import create_job, get_job
-from .local_executor import notify_new_job, start_embedded_worker, stop_embedded_worker
+from .job_store import create_job, get_job, mark_job_claimed
+from .local_executor import (
+    notify_new_job,
+    start_embedded_worker as _start_embedded_worker,
+    stop_embedded_worker as _stop_embedded_worker,
+)
+
+
+def _queue_backend() -> str:
+    return os.getenv('APPAM_QUEUE_BACKEND', 'local-db').strip().lower() or 'local-db'
+
+
+def _rq_queue():
+    try:
+        from redis import Redis
+        from rq import Queue
+    except Exception as exc:
+        raise RuntimeError('RQ backend requires redis and rq Python packages') from exc
+
+    redis_url = os.getenv('APPAM_REDIS_URL', 'redis://redis:6379/0')
+    queue_name = os.getenv('APPAM_RQ_QUEUE', 'appam-workflows')
+    return Queue(queue_name, connection=Redis.from_url(redis_url))
+
+
+def run_queued_rq_job(job_id: str) -> dict:
+    from .job_runner import run_pipeline_job
+
+    job = get_job(job_id)
+    if not job:
+        raise ValueError(f'Job not found: {job_id}')
+    if job.get('status') != 'queued':
+        return {'status': job.get('status'), 'skipped': True}
+
+    worker_id = os.getenv('APPAM_RQ_WORKER_NAME') or f'rq:{socket.gethostname()}'
+    if not mark_job_claimed(job_id, worker_id, host=socket.gethostname(), backend='rq'):
+        job = get_job(job_id)
+        return {'status': job.get('status') if job else 'missing', 'skipped': True}
+    job = get_job(job_id)
+    if not job:
+        raise ValueError(f'Job disappeared after claim: {job_id}')
+    return run_pipeline_job(
+        job['id'],
+        job['project_id'],
+        job['tool_name'],
+        job['command'],
+        job['log_path'],
+        command_spec=job.get('command_spec'),
+    )
 
 
 def get_queue():
+    if _queue_backend() == 'rq':
+        queue = _rq_queue()
+        return {
+            'mode': 'rq',
+            'name': queue.name,
+            'redis_url': os.getenv('APPAM_REDIS_URL', 'redis://redis:6379/0'),
+            'queued_count': len(queue),
+        }
     return {'mode': 'local-db'}
+
+
+def start_embedded_worker():
+    if _queue_backend() == 'rq':
+        return None
+    return _start_embedded_worker()
+
+
+def stop_embedded_worker(timeout: float = 5.0) -> None:
+    if _queue_backend() == 'rq':
+        return
+    _stop_embedded_worker(timeout=timeout)
 
 
 def get_queue_position(job_id: str) -> int | None:
@@ -41,6 +111,13 @@ def get_queue_position(job_id: str) -> int | None:
 
 def cancel_enqueued_job(job_id: str) -> bool:
     job = get_job(job_id)
+    if job and job.get('status') == 'queued' and _queue_backend() == 'rq':
+        try:
+            rq_job = _rq_queue().fetch_job(job_id)
+            if rq_job:
+                rq_job.cancel()
+        except Exception:
+            pass
     return bool(job and job.get('status') == 'queued')
 
 
@@ -77,9 +154,13 @@ def enqueue_pipeline_job(
         work_dir=work_dir,
         is_dry_run=is_dry_run,
         workflow_run_spec=workflow_run_spec,
+        backend='rq' if _queue_backend() == 'rq' else 'local',
     )
-    start_embedded_worker()
-    notify_new_job()
+    if _queue_backend() == 'rq':
+        _rq_queue().enqueue(run_queued_rq_job, job_id, job_id=job_id)
+    else:
+        start_embedded_worker()
+        notify_new_job()
     return job_id
 
 

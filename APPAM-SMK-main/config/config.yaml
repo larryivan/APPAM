@@ -31,11 +31,37 @@ params:
   magrefiner: "metawrap"
   min_completeness: 50
   max_contamination: 10
+  enable_checkm2: true
+  enable_gunc: true
+  enable_prokka: true
+  enable_eggnog: true
+  enable_abricate: true
+  enable_rgi: false
+  enable_antismash: true
+  annotation_threads: 8
+  abricate_db: "vfdb"
+  abricate_minid: 80
+  abricate_mincov: 80
 
 databases:
-  checkm_db: "/path/to/checkm_db"
-  gunc_db: "/path/to/gunc_db"
+  checkm_db: "/path/to/checkm1_db"
+  checkm1_db: "/path/to/checkm1_db"
+  checkm2_db: "/path/to/checkm2_db"
+  gunc_db: "/path/to/gunc_db_or_dmnd"
+  eggnog_db: "/path/to/eggnog_db"
+  abricate_db: "builtin"
+  rgi_db_mode: "online"
+  rgi_db: ""
+  antismash_db: "builtin"
+  prokka_db: "builtin"
 
 tools:
   metawrap_env: "/path/to/metawrap_env"
   pydamage_env: "/path/to/pydamage_env"
+  checkm2_env: "/path/to/checkm2_env"
+  gunc_env: "/path/to/gunc_env"
+  prokka_env: "/path/to/prokka_env"
+  eggnog_env: "/path/to/eggnog_py310_env"
+  abricate_env: "/path/to/abricate_env"
+  rgi_env: "/path/to/rgi_env"
+  antismash_env: "/path/to/antismash_env"

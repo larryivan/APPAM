@@ -33,14 +33,20 @@ case "$cmd" in
   jgi_summarize_bam_contig_depths|cut_up_fasta.py|concoct_coverage_table.py|merge_cutup_clustering.py)
     env="binning"
     ;;
-  checkm|checkm2)
+  checkm)
     env="checkm"
+    ;;
+  checkm2)
+    env="checkm2"
     ;;
   metawrap|metawrap-mg)
     env="metawrap"
     ;;
   prokka)
     env="prokka"
+    ;;
+  emapper.py)
+    env="eggnog_py310"
     ;;
   rgi)
     env="rgi"

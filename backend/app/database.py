@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import sqlite3
 
@@ -120,6 +122,7 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
     error_message TEXT,
     submitted_by TEXT,
     parent_run_id TEXT,
+    preflight_id TEXT,
     params_json TEXT,
     config_path TEXT,
     manifest_path TEXT,
@@ -135,6 +138,35 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
     FOREIGN KEY (submitted_by) REFERENCES users (id) ON DELETE SET NULL,
     FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE SET NULL,
     FOREIGN KEY (parent_run_id) REFERENCES workflow_runs (id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS workflow_preflights (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    workflow_id TEXT,
+    tool_name TEXT NOT NULL,
+    ok INTEGER NOT NULL DEFAULT 0,
+    params_hash TEXT,
+    checks_json TEXT,
+    preview_json TEXT,
+    submitted_by TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+    FOREIGN KEY (submitted_by) REFERENCES users (id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS workflow_metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL,
+    metric_group TEXT NOT NULL,
+    metric_name TEXT NOT NULL,
+    metric_value REAL,
+    metric_text TEXT,
+    unit TEXT,
+    sample_id TEXT,
+    payload TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (run_id) REFERENCES workflow_runs (id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS workflow_stage_states (
@@ -183,6 +215,8 @@ CREATE INDEX IF NOT EXISTS idx_jobs_project_created_at ON jobs (project_id, crea
 CREATE INDEX IF NOT EXISTS idx_process_history_project_start_time ON process_history (project_id, start_time);
 CREATE INDEX IF NOT EXISTS idx_workflow_runs_project_created_at ON workflow_runs (project_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_workflow_runs_project_status ON workflow_runs (project_id, workflow_id, status);
+CREATE INDEX IF NOT EXISTS idx_workflow_preflights_project_created_at ON workflow_preflights (project_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_workflow_metrics_run_group ON workflow_metrics (run_id, metric_group);
 CREATE INDEX IF NOT EXISTS idx_workflow_stage_states_run_order ON workflow_stage_states (run_id, stage_order);
 CREATE INDEX IF NOT EXISTS idx_workflow_run_events_run_created_at ON workflow_run_events (run_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_workflow_artifacts_run_created_at ON workflow_artifacts (run_id, created_at);
@@ -245,6 +279,8 @@ def migrate_db(conn: sqlite3.Connection | None = None):
         _migrate_process_history_table(connection)
         _migrate_jobs_table(connection)
         _migrate_workflow_runs_table(connection)
+        _migrate_workflow_preflights_table(connection)
+        _migrate_workflow_metrics_table(connection)
         _migrate_workflow_stage_states_table(connection)
         _migrate_workflow_run_events_table(connection)
         _migrate_workflow_artifacts_table(connection)
@@ -497,6 +533,7 @@ def _migrate_workflow_runs_table(conn: sqlite3.Connection) -> None:
                 exit_code INTEGER,
                 error_message TEXT,
                 submitted_by TEXT,
+                preflight_id TEXT,
                 config_path TEXT,
                 run_dir TEXT,
                 work_dir TEXT,
@@ -529,6 +566,7 @@ def _migrate_workflow_runs_table(conn: sqlite3.Connection) -> None:
             ('error_message', "ALTER TABLE workflow_runs ADD COLUMN error_message TEXT"),
             ('submitted_by', "ALTER TABLE workflow_runs ADD COLUMN submitted_by TEXT"),
             ('parent_run_id', "ALTER TABLE workflow_runs ADD COLUMN parent_run_id TEXT"),
+            ('preflight_id', "ALTER TABLE workflow_runs ADD COLUMN preflight_id TEXT"),
             ('params_json', "ALTER TABLE workflow_runs ADD COLUMN params_json TEXT"),
             ('config_path', "ALTER TABLE workflow_runs ADD COLUMN config_path TEXT"),
             ('manifest_path', "ALTER TABLE workflow_runs ADD COLUMN manifest_path TEXT"),
@@ -546,6 +584,79 @@ def _migrate_workflow_runs_table(conn: sqlite3.Connection) -> None:
 
     conn.execute("CREATE INDEX IF NOT EXISTS idx_workflow_runs_project_created_at ON workflow_runs (project_id, created_at)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_workflow_runs_project_status ON workflow_runs (project_id, workflow_id, status)")
+
+
+def _migrate_workflow_preflights_table(conn: sqlite3.Connection) -> None:
+    if not table_exists(conn, 'workflow_preflights'):
+        conn.execute(
+            '''
+            CREATE TABLE workflow_preflights (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                workflow_id TEXT,
+                tool_name TEXT NOT NULL,
+                ok INTEGER NOT NULL DEFAULT 0,
+                params_hash TEXT,
+                checks_json TEXT,
+                preview_json TEXT,
+                submitted_by TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+                FOREIGN KEY (submitted_by) REFERENCES users (id) ON DELETE SET NULL
+            )
+            '''
+        )
+    else:
+        for column_name, column_sql in (
+            ('workflow_id', "ALTER TABLE workflow_preflights ADD COLUMN workflow_id TEXT"),
+            ('tool_name', "ALTER TABLE workflow_preflights ADD COLUMN tool_name TEXT"),
+            ('ok', "ALTER TABLE workflow_preflights ADD COLUMN ok INTEGER NOT NULL DEFAULT 0"),
+            ('params_hash', "ALTER TABLE workflow_preflights ADD COLUMN params_hash TEXT"),
+            ('checks_json', "ALTER TABLE workflow_preflights ADD COLUMN checks_json TEXT"),
+            ('preview_json', "ALTER TABLE workflow_preflights ADD COLUMN preview_json TEXT"),
+            ('submitted_by', "ALTER TABLE workflow_preflights ADD COLUMN submitted_by TEXT"),
+            ('created_at', "ALTER TABLE workflow_preflights ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+        ):
+            if not column_exists(conn, 'workflow_preflights', column_name):
+                conn.execute(column_sql)
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_workflow_preflights_project_created_at ON workflow_preflights (project_id, created_at)")
+
+
+def _migrate_workflow_metrics_table(conn: sqlite3.Connection) -> None:
+    if not table_exists(conn, 'workflow_metrics'):
+        conn.execute(
+            '''
+            CREATE TABLE workflow_metrics (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id TEXT NOT NULL,
+                metric_group TEXT NOT NULL,
+                metric_name TEXT NOT NULL,
+                metric_value REAL,
+                metric_text TEXT,
+                unit TEXT,
+                sample_id TEXT,
+                payload TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (run_id) REFERENCES workflow_runs (id) ON DELETE CASCADE
+            )
+            '''
+        )
+    else:
+        for column_name, column_sql in (
+            ('metric_group', "ALTER TABLE workflow_metrics ADD COLUMN metric_group TEXT NOT NULL DEFAULT 'general'"),
+            ('metric_name', "ALTER TABLE workflow_metrics ADD COLUMN metric_name TEXT NOT NULL DEFAULT 'metric'"),
+            ('metric_value', "ALTER TABLE workflow_metrics ADD COLUMN metric_value REAL"),
+            ('metric_text', "ALTER TABLE workflow_metrics ADD COLUMN metric_text TEXT"),
+            ('unit', "ALTER TABLE workflow_metrics ADD COLUMN unit TEXT"),
+            ('sample_id', "ALTER TABLE workflow_metrics ADD COLUMN sample_id TEXT"),
+            ('payload', "ALTER TABLE workflow_metrics ADD COLUMN payload TEXT"),
+            ('created_at', "ALTER TABLE workflow_metrics ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+        ):
+            if not column_exists(conn, 'workflow_metrics', column_name):
+                conn.execute(column_sql)
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_workflow_metrics_run_group ON workflow_metrics (run_id, metric_group)")
 
 
 def _migrate_workflow_stage_states_table(conn: sqlite3.Connection) -> None:

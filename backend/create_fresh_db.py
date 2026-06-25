@@ -1,60 +1,12 @@
 #!/usr/bin/env python3
 """
-Create a brand-new SQLite database for APPAM.
-
-This script creates the projects, process_history, and jobs tables
-without any password-related columns.
+Create a fresh APPAM SQLite database using the canonical application schema.
 """
 
 import argparse
+import importlib.util
 import os
-import sqlite3
 import sys
-
-
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS projects (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    description TEXT,
-    creator TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS process_history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    project_id TEXT NOT NULL,
-    tool_name TEXT NOT NULL,
-    command TEXT,
-    status TEXT NOT NULL,
-    start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    end_time TIMESTAMP,
-    duration REAL,
-    exit_code INTEGER,
-    error_message TEXT,
-    logs TEXT,
-    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS jobs (
-    id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL,
-    tool_name TEXT NOT NULL,
-    command TEXT NOT NULL,
-    status TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    started_at TIMESTAMP,
-    finished_at TIMESTAMP,
-    duration REAL,
-    exit_code INTEGER,
-    error_message TEXT,
-    log_path TEXT,
-    output_path TEXT,
-    cancel_requested INTEGER DEFAULT 0,
-    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
-);
-"""
 
 
 def create_db(db_path: str, force: bool) -> None:
@@ -65,19 +17,24 @@ def create_db(db_path: str, force: bool) -> None:
             )
         os.remove(db_path)
 
-    os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
+    os.makedirs(os.path.dirname(os.path.abspath(db_path)) or ".", exist_ok=True)
+    os.environ["APPAM_DB_PATH"] = db_path
 
-    conn = sqlite3.connect(db_path)
-    conn.executescript(SCHEMA)
-    conn.commit()
-    conn.close()
+    database_path = os.path.join(os.path.dirname(__file__), "app", "database.py")
+    spec = importlib.util.spec_from_file_location("appam_database", database_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load database module from {database_path}")
+    database_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(database_module)
+
+    database_module.init_db()
 
 
 def main() -> int:
     default_path = os.path.join(os.path.dirname(__file__), "app_database.db")
 
     parser = argparse.ArgumentParser(
-        description="Create a fresh APPAM SQLite database."
+        description="Create a fresh APPAM SQLite database with the current schema."
     )
     parser.add_argument(
         "--path",

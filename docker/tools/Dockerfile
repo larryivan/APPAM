@@ -81,8 +81,10 @@ RUN retry-bash "micromamba create -y -n freebayes -f /opt/appam/docker/tools/env
 RUN retry-bash "micromamba create -y -n bcftools -f /opt/appam/docker/tools/environments/bcftools.yml && micromamba clean --all --yes"
 RUN retry-bash "micromamba create -y -n binning -f /opt/appam/docker/tools/environments/binning.yml && micromamba clean --all --yes"
 RUN retry-bash "micromamba create -y -n checkm -f /opt/appam/docker/tools/environments/checkm.yml && micromamba clean --all --yes"
+RUN retry-bash "micromamba create -y -n checkm2 -f /opt/appam/docker/tools/environments/checkm2.yml && micromamba clean --all --yes"
 RUN retry-bash "micromamba create -y -n metawrap -f /opt/appam/docker/tools/environments/metawrap.yml && micromamba clean --all --yes"
 RUN retry-bash "micromamba create -y -n prokka -f /opt/appam/docker/tools/environments/prokka.yml && micromamba clean --all --yes"
+RUN retry-bash "micromamba create -y -n eggnog_py310 -f /opt/appam/docker/tools/environments/eggnog_py310.yml && micromamba clean --all --yes"
 RUN retry-bash "micromamba create -y -n rgi -f /opt/appam/docker/tools/environments/rgi.yml && micromamba clean --all --yes"
 RUN retry-bash "micromamba create -y -n abricate -f /opt/appam/docker/tools/environments/abricate.yml && micromamba clean --all --yes"
 RUN retry-bash "micromamba create -y -n gtdbtk -f /opt/appam/docker/tools/environments/gtdbtk.yml && micromamba clean --all --yes"
@@ -108,7 +110,7 @@ RUN mkdir -p /opt/vendor/ThermoRawFileParser /opt/tools /data /workspaces/projec
       pydamage krakenuniq krona ktImportText ktImportTaxonomy megahit spades spades.py quast quast.py \
       freebayes bcftools metabat2 maxbin2 run_MaxBin.pl concoct gunc checkm checkm2 metawrap metawrap-mg \
       jgi_summarize_bam_contig_depths cut_up_fasta.py concoct_coverage_table.py merge_cutup_clustering.py \
-      prokka rgi abricate gtdb-tk gtdbtk antismash seqkit; do \
+      prokka emapper.py rgi abricate gtdb-tk gtdbtk antismash seqkit; do \
       ln -sf /usr/local/bin/appam-tool /usr/local/bin/$name; \
     done && \
     chown -R mambauser:mambauser /opt/appam /opt/vendor /opt/tools /data /workspaces/projects /databases
@@ -126,10 +128,26 @@ ENV APPAM_REPO_ROOT=/opt/appam
 ENV APPAM_BACKEND_ROOT=/opt/appam/backend
 ENV APPAM_PROJECTS_ROOT=/workspaces/projects
 ENV APPAM_DATABASES_ROOT=/databases
+ENV APPAM_DB_MANIFEST=/databases/appam-db-manifest.json
 ENV APPAM_DB_PATH=/data/app_database.db
 ENV APPAM_SMK_ROOT=/opt/appam/APPAM-SMK-main
 ENV APPAM_PALEOPROTEOMICS_ROOT=/opt/appam/appam-paleoproteomics-main
 ENV APPAM_SNAKEMAKE_BIN=snakemake
+ENV APPAM_SMK_METAWRAP_ENV=/opt/conda/envs/metawrap
+ENV APPAM_SMK_PYDAMAGE_ENV=/opt/conda/envs/ancient_dna
+ENV APPAM_SMK_CHECKM1_DB=/databases/checkm
+ENV APPAM_SMK_CHECKM_DB=/databases/checkm
+ENV APPAM_SMK_CHECKM2_ENV=/opt/conda/envs/checkm2
+ENV APPAM_SMK_CHECKM2_DB=/databases/checkm2
+ENV APPAM_SMK_GUNC_ENV=/opt/conda/envs/binning
+ENV APPAM_SMK_GUNC_DB=/databases/gunc
+ENV APPAM_SMK_PROKKA_ENV=/opt/conda/envs/prokka
+ENV APPAM_SMK_EGGNOG_ENV=/opt/conda/envs/eggnog_py310
+ENV APPAM_SMK_EGGNOG_DB=/databases/eggnog
+ENV APPAM_SMK_ABRICATE_ENV=/opt/conda/envs/abricate
+ENV APPAM_SMK_RGI_ENV=/opt/conda/envs/rgi
+ENV APPAM_SMK_RGI_DB_MODE=online
+ENV APPAM_SMK_ANTISMASH_ENV=/opt/conda/envs/antismash
 ENV APPAM_PALEO_DOTNET_BIN=dotnet
 ENV APPAM_PALEO_MAXQUANT_CMD=/opt/tools/MaxQuant_v2.7.5.0/bin/MaxQuantCmd.dll
 ENV APPAM_PALEO_THERMO_RAW_FILE_PARSER=ThermoRawFileParser

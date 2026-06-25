@@ -83,10 +83,40 @@ This keeps deployments clean by default and avoids shipping a pre-populated SQLi
 
 Set these before starting if you want the metagenomics workflow to run immediately:
 
-- `APPAM_SMK_CHECKM_DB`
+- `APPAM_HOST_DB_ROOT` (host directory mounted read-only as `/databases`)
+- `APPAM_SMK_CHECKM1_DB`
+- `APPAM_SMK_CHECKM2_DB`
 - `APPAM_SMK_GUNC_DB`
+- `APPAM_SMK_EGGNOG_DB`
 
 Defaults point inside `/databases`.
+
+For example, if local databases live under `~/db`, start APPAM with:
+
+```bash
+APPAM_HOST_DB_ROOT="$HOME/db" docker compose up
+```
+
+For publication-grade provenance, keep a database manifest at:
+
+- `/databases/appam-db-manifest.json` inside the container, or
+- a custom path set with `APPAM_DB_MANIFEST`
+
+Start from `docker/database-manifest.example.json` and record exact database versions, download dates, and paths. APPAM includes this manifest in the project dashboard and provenance bundles.
+
+### Queue backend
+
+APPAM defaults to the built-in local SQLite-backed worker:
+
+- `APPAM_QUEUE_BACKEND=local-db`
+
+For Redis/RQ-based queueing, start Redis and the dedicated RQ worker through the `rq` profile and set:
+
+```bash
+APPAM_QUEUE_BACKEND=rq docker compose --profile rq up
+```
+
+The `rq-worker` service reuses the same image, project volume, runtime log volume, and database mount as the `tools` service. Keep `APPAM_HOST_DB_ROOT` and any `APPAM_SMK_*_DB` overrides identical for both services by setting them in the shell or `.env` before running Compose.
 
 ### Paleoproteomics MaxQuant
 

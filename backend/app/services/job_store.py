@@ -1,7 +1,11 @@
+from __future__ import annotations
+
 import json
 import socket
+import uuid
+import hashlib
 from pathlib import Path
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from ..database import get_db_connection
@@ -9,7 +13,7 @@ from .execution_insights import classify_failure
 
 
 def _now_str() -> str:
-    return datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')
+    return datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
 
 def create_job(
@@ -28,6 +32,7 @@ def create_job(
     work_dir: Optional[str] = None,
     is_dry_run: bool = False,
     workflow_run_spec: Optional[dict] = None,
+    backend: Optional[str] = None,
 ) -> None:
     conn = get_db_connection()
     try:
@@ -66,7 +71,7 @@ def create_job(
                 work_dir,
                 submitted_by,
                 execution_mode,
-                'local',
+                backend or 'local',
                 workflow_id,
                 workflow_run_id,
                 1 if is_dry_run else 0,
@@ -104,6 +109,7 @@ def _insert_workflow_run(conn, workflow_run_spec: dict) -> None:
             backend,
             submitted_by,
             parent_run_id,
+            preflight_id,
             params_json,
             config_path,
             manifest_path,
@@ -116,7 +122,7 @@ def _insert_workflow_run(conn, workflow_run_spec: dict) -> None:
             current_stage_title,
             current_rule
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''',
         (
             workflow_run_spec['id'],
@@ -129,6 +135,7 @@ def _insert_workflow_run(conn, workflow_run_spec: dict) -> None:
             workflow_run_spec.get('backend'),
             workflow_run_spec.get('submitted_by'),
             workflow_run_spec.get('parent_run_id'),
+            workflow_run_spec.get('preflight_id'),
             json.dumps(workflow_run_spec.get('params')) if workflow_run_spec.get('params') is not None else None,
             workflow_run_spec.get('config_path'),
             workflow_run_spec.get('manifest_path'),
@@ -338,6 +345,134 @@ def replace_workflow_artifacts(run_id: str, artifacts: list[dict]) -> None:
         conn.close()
 
 
+def replace_workflow_metrics(run_id: str, metrics: list[dict]) -> None:
+    conn = get_db_connection()
+    try:
+        conn.execute('DELETE FROM workflow_metrics WHERE run_id = ?', (run_id,))
+        for metric in metrics or []:
+            payload = metric.get('payload')
+            conn.execute(
+                '''
+                INSERT INTO workflow_metrics
+                (run_id, metric_group, metric_name, metric_value, metric_text, unit, sample_id, payload)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''',
+                (
+                    run_id,
+                    metric.get('group') or metric.get('metric_group') or 'general',
+                    metric.get('name') or metric.get('metric_name') or 'metric',
+                    metric.get('value') if metric.get('value') is not None else metric.get('metric_value'),
+                    metric.get('text') if metric.get('text') is not None else metric.get('metric_text'),
+                    metric.get('unit'),
+                    metric.get('sample_id'),
+                    json.dumps(payload, ensure_ascii=False) if payload is not None else None,
+                )
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _params_hash(params: dict | None) -> str:
+    serialized = json.dumps(params or {}, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(serialized.encode('utf-8')).hexdigest()
+
+
+def create_workflow_preflight(
+    project_id: str,
+    tool_name: str,
+    result: dict,
+    params: dict | None = None,
+    submitted_by: str | None = None,
+    preflight_id: str | None = None,
+) -> dict:
+    preflight_id = preflight_id or uuid.uuid4().hex
+    conn = get_db_connection()
+    try:
+        conn.execute(
+            '''
+            INSERT INTO workflow_preflights
+            (id, project_id, workflow_id, tool_name, ok, params_hash, checks_json, preview_json, submitted_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''',
+            (
+                preflight_id,
+                project_id,
+                result.get('workflow_id'),
+                tool_name,
+                1 if result.get('ok') else 0,
+                _params_hash(params),
+                json.dumps(result.get('checks') or [], ensure_ascii=False),
+                json.dumps(result.get('preview') or {}, ensure_ascii=False),
+                submitted_by,
+            )
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    record = get_workflow_preflight(preflight_id)
+    return record or {'id': preflight_id}
+
+
+def get_workflow_preflight(preflight_id: str) -> Optional[Dict]:
+    conn = get_db_connection()
+    try:
+        row = conn.execute(
+            '''
+            SELECT *
+            FROM workflow_preflights
+            WHERE id = ?
+            ''',
+            (preflight_id,),
+        ).fetchone()
+        if not row:
+            return None
+        record = dict(row)
+        record['ok'] = bool(record.get('ok'))
+        record['checks'] = _decode_json(record.get('checks_json')) or []
+        record['preview'] = _decode_json(record.get('preview_json')) or {}
+        return record
+    finally:
+        conn.close()
+
+
+def list_workflow_preflights(project_id: str, workflow_id: str | None = None, limit: int = 10) -> List[Dict]:
+    conn = get_db_connection()
+    try:
+        if workflow_id:
+            rows = conn.execute(
+                '''
+                SELECT *
+                FROM workflow_preflights
+                WHERE project_id = ? AND workflow_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+                ''',
+                (project_id, workflow_id, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                '''
+                SELECT *
+                FROM workflow_preflights
+                WHERE project_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+                ''',
+                (project_id, limit),
+            ).fetchall()
+        records = []
+        for row in rows:
+            record = dict(row)
+            record['ok'] = bool(record.get('ok'))
+            record['checks'] = _decode_json(record.get('checks_json')) or []
+            record['preview'] = _decode_json(record.get('preview_json')) or {}
+            records.append(record)
+        return records
+    finally:
+        conn.close()
+
+
 def set_job_status(job_id: str, status: str) -> None:
     update_job(job_id, status=status)
     update_process_history(job_id, status=status)
@@ -353,6 +488,60 @@ def mark_job_started(job_id: str) -> None:
     if run_id:
         update_workflow_run(run_id, status='running', started_at=timestamp)
         append_workflow_run_event(run_id, 'run_started', message='Workflow execution started')
+
+
+def mark_job_claimed(job_id: str, worker_id: str, host: str | None = None, backend: str = 'local') -> bool:
+    host = host or socket.gethostname()
+    claimed_at = _now_str()
+    conn = get_db_connection()
+    try:
+        conn.execute('BEGIN IMMEDIATE')
+        row = conn.execute(
+            '''
+            SELECT id, workflow_run_id, status
+            FROM jobs
+            WHERE id = ?
+            ''',
+            (job_id,),
+        ).fetchone()
+        if not row or row['status'] != 'queued':
+            conn.rollback()
+            return False
+        conn.execute(
+            '''
+            UPDATE jobs
+            SET status = 'starting',
+                claimed_at = ?,
+                claimed_by = ?,
+                heartbeat_at = ?,
+                host = ?,
+                backend = ?
+            WHERE id = ?
+              AND status = 'queued'
+            ''',
+            (claimed_at, worker_id, claimed_at, host, backend, job_id),
+        )
+        conn.execute(
+            '''
+            UPDATE process_history
+            SET status = 'starting'
+            WHERE job_id = ?
+            ''',
+            (job_id,),
+        )
+        if row['workflow_run_id']:
+            conn.execute(
+                '''
+                UPDATE workflow_runs
+                SET status = 'starting'
+                WHERE id = ?
+                ''',
+                (row['workflow_run_id'],),
+            )
+        conn.commit()
+        return True
+    finally:
+        conn.close()
 
 
 def mark_job_finished(job_id: str, status: str, exit_code: Optional[int], error_message: Optional[str], duration: Optional[float]) -> None:
@@ -468,7 +657,7 @@ def _parse_timestamp(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.strptime(value, '%Y-%m-%d %H:%M:%S').replace(tzinfo=UTC)
+        return datetime.strptime(value, '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
     except Exception:
         return None
 
@@ -480,6 +669,7 @@ def _enrich_job_record(record: Dict) -> Dict:
     failure = classify_failure(record.get('error_message'), record.get('exit_code'), record.get('log_path'))
     record['failure_category'] = failure['category']
     record['failure_label'] = failure['label']
+    record['failure_suggestion'] = failure.get('suggestion')
     record['queue_position'] = _get_queue_position_safe(record.get('id')) if record.get('status') == 'queued' else None
     return record
 
@@ -490,6 +680,7 @@ def _enrich_workflow_run_record(record: Dict) -> Dict:
     failure = classify_failure(record.get('error_message'), record.get('exit_code'), record.get('log_path'))
     record['failure_category'] = failure['category']
     record['failure_label'] = failure['label']
+    record['failure_suggestion'] = failure.get('suggestion')
     record['queue_position'] = _get_queue_position_safe(record.get('job_id')) if record.get('status') == 'queued' and record.get('job_id') else None
     return record
 
@@ -562,6 +753,7 @@ def list_process_history(project_id: str, limit: int = 20) -> List[Dict]:
             failure = classify_failure(item.get('error_message'), item.get('exit_code'))
             item['failure_category'] = failure['category']
             item['failure_label'] = failure['label']
+            item['failure_suggestion'] = failure.get('suggestion')
         return history
     finally:
         conn.close()
@@ -652,6 +844,7 @@ def get_workflow_run(run_id: str) -> Optional[Dict]:
         data['stage_states'] = list_workflow_stage_states(run_id, conn=conn)
         data['events'] = list_workflow_run_events(run_id, limit=200, conn=conn)
         data['artifacts'] = list_workflow_artifacts(run_id, conn=conn)
+        data['metrics'] = list_workflow_metrics(run_id, conn=conn)
         return data
     finally:
         conn.close()
@@ -674,6 +867,7 @@ def get_workflow_run_by_job(job_id: str) -> Optional[Dict]:
         data['stage_states'] = list_workflow_stage_states(data['id'], conn=conn)
         data['events'] = list_workflow_run_events(data['id'], limit=200, conn=conn)
         data['artifacts'] = list_workflow_artifacts(data['id'], conn=conn)
+        data['metrics'] = list_workflow_metrics(data['id'], conn=conn)
         return data
     finally:
         conn.close()
@@ -741,6 +935,29 @@ def list_workflow_artifacts(run_id: str, limit: int = 200, conn=None) -> List[Di
             connection.close()
 
 
+def list_workflow_metrics(run_id: str, limit: int = 500, conn=None) -> List[Dict]:
+    owns_connection = conn is None
+    connection = conn or get_db_connection()
+    try:
+        rows = connection.execute(
+            '''
+            SELECT *
+            FROM workflow_metrics
+            WHERE run_id = ?
+            ORDER BY metric_group ASC, sample_id ASC, metric_name ASC, id ASC
+            LIMIT ?
+            ''',
+            (run_id, limit)
+        ).fetchall()
+        metrics = [dict(row) for row in rows]
+        for metric in metrics:
+            metric['payload'] = _decode_payload(metric.get('payload'))
+        return metrics
+    finally:
+        if owns_connection:
+            connection.close()
+
+
 def list_workflow_runs(project_id: str, workflow_id: Optional[str] = None, limit: int = 20) -> List[Dict]:
     conn = get_db_connection()
     try:
@@ -770,6 +987,7 @@ def list_workflow_runs(project_id: str, workflow_id: Optional[str] = None, limit
             run['params'] = _decode_json(run.get('params_json'))
             run['stage_states'] = list_workflow_stage_states(run['id'], conn=conn)
             run['artifacts'] = list_workflow_artifacts(run['id'], conn=conn)
+            run['metrics'] = list_workflow_metrics(run['id'], conn=conn)
         return runs
     finally:
         conn.close()
@@ -806,6 +1024,7 @@ def get_active_workflow_run(project_id: str, workflow_id: Optional[str] = None) 
         run['params'] = _decode_json(run.get('params_json'))
         run['stage_states'] = list_workflow_stage_states(run['id'], conn=conn)
         run['artifacts'] = list_workflow_artifacts(run['id'], conn=conn)
+        run['metrics'] = list_workflow_metrics(run['id'], conn=conn)
         return run
     finally:
         conn.close()
@@ -828,12 +1047,15 @@ def build_workflow_run_provenance(run_id: str) -> Optional[Dict]:
     run = get_workflow_run(run_id)
     if not run:
         return None
+    preflight = get_workflow_preflight(run.get('preflight_id')) if run.get('preflight_id') else None
     return {
-        'run': {k: v for k, v in run.items() if k not in {'events', 'stage_states', 'artifacts'}},
+        'run': {k: v for k, v in run.items() if k not in {'events', 'stage_states', 'artifacts', 'metrics'}},
         'stage_states': run.get('stage_states', []),
         'artifacts': run.get('artifacts', []),
+        'metrics': run.get('metrics', []),
         'events': run.get('events', []),
         'manifest': load_workflow_manifest(run_id),
+        'preflight': preflight,
         'exported_at': _now_str(),
     }
 
@@ -948,7 +1170,7 @@ def attach_process_info(job_id: str, *, pid: int | None = None, pgid: int | None
 
 
 def list_stale_jobs(timeout_seconds: int = 600) -> List[Dict]:
-    threshold = (datetime.now(UTC) - timedelta(seconds=timeout_seconds)).strftime('%Y-%m-%d %H:%M:%S')
+    threshold = (datetime.now(timezone.utc) - timedelta(seconds=timeout_seconds)).strftime('%Y-%m-%d %H:%M:%S')
     conn = get_db_connection()
     try:
         rows = conn.execute(

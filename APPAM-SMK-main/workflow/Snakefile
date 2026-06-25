@@ -32,6 +32,30 @@ include: "rules/damage.smk"
 include: "rules/contigs_filter.smk"
 include: "rules/binning.smk"
 include: "rules/classify.smk"
+include: "rules/annotation.smk"
+
+BINNING_TARGETS = [
+    *expand(f"{RESULTS_DIR}/metawrap/bin_refinement/{{sample}}/metawrap_50_10_bins", sample=SAMPLES),
+    *expand(f"{RESULTS_DIR}/checkm/{{sample}}/bins_qa.txt", sample=SAMPLES),
+]
+if config["params"].get("enable_checkm2", True):
+    BINNING_TARGETS += expand(f"{RESULTS_DIR}/checkm2/{{sample}}/quality_report.tsv", sample=SAMPLES)
+if config["params"].get("enable_gunc", True):
+    BINNING_TARGETS += expand(f"{RESULTS_DIR}/gunc/{{sample}}/GUNC.progenomes_2.1.maxCSS_level.tsv", sample=SAMPLES)
+
+ANNOTATION_TARGETS = [
+    *expand(f"{RESULTS_DIR}/gtdbtk/{{sample}}/classify_wf.done", sample=SAMPLES),
+]
+if config["params"].get("enable_prokka", True):
+    ANNOTATION_TARGETS += expand(f"{RESULTS_DIR}/annotation/prokka/{{sample}}/prokka.done", sample=SAMPLES)
+if config["params"].get("enable_eggnog", True):
+    ANNOTATION_TARGETS += expand(f"{RESULTS_DIR}/annotation/eggnog/{{sample}}/eggnog.done", sample=SAMPLES)
+if config["params"].get("enable_abricate", True):
+    ANNOTATION_TARGETS += expand(f"{RESULTS_DIR}/annotation/abricate/{{sample}}/abricate.done", sample=SAMPLES)
+if config["params"].get("enable_rgi", False):
+    ANNOTATION_TARGETS += expand(f"{RESULTS_DIR}/annotation/rgi/{{sample}}/rgi.done", sample=SAMPLES)
+if config["params"].get("enable_antismash", True):
+    ANNOTATION_TARGETS += expand(f"{RESULTS_DIR}/annotation/antismash/{{sample}}/antismash.done", sample=SAMPLES)
 
 # optional messages, log and error handling
 # -----------------------------------------------------
@@ -70,9 +94,7 @@ rule all:
             # Damage
             *expand(f"{RESULTS_DIR}/pydamage/{{sample}}/pydamage_results.csv", sample=SAMPLES),
             # Binning & bin quality
-            *expand(f"{RESULTS_DIR}/metawrap/bin_refinement/{{sample}}/metawrap_50_10_bins", sample=SAMPLES),
-            *expand(f"{RESULTS_DIR}/checkm/{{sample}}/bins_qa.txt", sample=SAMPLES),
-            *expand(f"{RESULTS_DIR}/gtdbtk/{{sample}}/classify_wf.done", sample=SAMPLES),
-            # expand(f"{RESULTS_DIR}/gunc/{{sample}}/GUNC.progenomes_2.1.maxCSS_level.tsv", sample=SAMPLES)
+            *BINNING_TARGETS,
+            *ANNOTATION_TARGETS,
         ]
     default_target: True

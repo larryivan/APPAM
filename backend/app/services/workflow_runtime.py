@@ -40,13 +40,20 @@ WORKFLOW_RUNTIME_DEFINITIONS = {
                 'id': 'binning',
                 'title': 'Binning / Refinement / Evaluation',
                 'optional': False,
-                'rules': ['metawrap_binning', 'metawrap_bin_refinement', 'checkm', 'gunc'],
+                'rules': ['metawrap_binning', 'metawrap_bin_refinement', 'checkm', 'checkm2', 'gunc'],
             },
             {
                 'id': 'taxonomy-annotation',
                 'title': 'Species / Genome Annotation',
                 'optional': False,
-                'rules': ['gtdbtk_classify'],
+                'rules': [
+                    'gtdbtk_classify',
+                    'prokka_annotation',
+                    'eggnog_annotation',
+                    'abricate_annotation',
+                    'rgi_annotation',
+                    'antismash_annotation',
+                ],
             },
         ],
     },
@@ -126,4 +133,3 @@ def detect_rule_name(line: str):
         if match:
             return match.group(1)
     return None
-

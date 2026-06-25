@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import os
 import json
 import socket
 import subprocess
 import time
 import signal
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -22,10 +24,12 @@ from .job_store import (
     mark_job_finished,
     mark_job_started,
     replace_workflow_artifacts,
+    replace_workflow_metrics,
     update_job_heartbeat,
     update_workflow_run,
     update_workflow_stage,
 )
+from .workflow_results import build_result_metrics, collect_workflow_artifacts
 from .workflow_runtime import detect_rule_name, get_rule_to_stage_map
 
 
@@ -37,7 +41,7 @@ def _backend_dir() -> str:
 
 
 def _now_str() -> str:
-    return datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')
+    return datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
 
 def _ensure_directory(path: str) -> None:
@@ -199,38 +203,12 @@ class WorkflowExecutionTracker:
 
 
 def _collect_workflow_artifacts(workflow_context: dict | None) -> list[dict]:
+    return collect_workflow_artifacts(workflow_context)
+
+
+def _collect_workflow_metrics(workflow_context: dict | None) -> list[dict]:
     workflow_context = workflow_context or {}
-    candidate_dirs = [
-        workflow_context.get('results_dir'),
-        workflow_context.get('reports_dir'),
-    ]
-    artifacts = []
-    seen_paths = set()
-    interesting_suffixes = {'.html', '.tsv', '.txt', '.xml', '.yaml', '.yml', '.mzml', '.fasta', '.fa', '.fna', '.faa'}
-    for candidate in candidate_dirs:
-        if not candidate:
-            continue
-        base_path = Path(candidate)
-        if not base_path.exists():
-            continue
-        for path in sorted(base_path.rglob('*')):
-            if len(artifacts) >= 200:
-                break
-            if not path.is_file():
-                continue
-            if path.suffix.lower() not in interesting_suffixes:
-                continue
-            resolved = str(path.resolve())
-            if resolved in seen_paths:
-                continue
-            seen_paths.add(resolved)
-            artifacts.append({
-                'label': path.name,
-                'path': resolved,
-                'kind': path.suffix.lower().lstrip('.') or 'file',
-                'size_bytes': path.stat().st_size,
-            })
-    return artifacts
+    return build_result_metrics(workflow_context.get('workflow_id'), workflow_context.get('results_dir'))
 
 
 def _update_manifest_after_run(workflow_context: dict | None, *, status: str, exit_code: int | None = None, error_message: str | None = None, artifacts: list[dict] | None = None) -> None:
@@ -249,6 +227,7 @@ def _update_manifest_after_run(workflow_context: dict | None, *, status: str, ex
     manifest['exit_code'] = exit_code
     manifest['error_message'] = error_message
     manifest['artifacts'] = artifacts or []
+    manifest['metrics'] = _collect_workflow_metrics(workflow_context)
     manifest_file.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding='utf-8')
 
 
@@ -349,8 +328,10 @@ def run_pipeline_job(
                     end_time = time.time()
                     workflow_tracker.finalize('canceled', error_message='Canceled by user')
                     artifacts = _collect_workflow_artifacts(workflow_context)
+                    metrics = _collect_workflow_metrics(workflow_context)
                     if workflow_context.get('run_id'):
                         replace_workflow_artifacts(workflow_context['run_id'], artifacts)
+                        replace_workflow_metrics(workflow_context['run_id'], metrics)
                     _update_manifest_after_run(workflow_context, status='canceled', error_message='Canceled by user', artifacts=artifacts)
                     mark_job_finished(job_id, 'canceled', None, 'Canceled by user', end_time - start_time)
                     return {'status': 'canceled'}
@@ -388,8 +369,10 @@ def run_pipeline_job(
                 _write_log_line(log_file, f"[SYSTEM] Task '{tool_name}' completed successfully with exit code {return_code}")
                 workflow_tracker.finalize('completed')
                 artifacts = _collect_workflow_artifacts(workflow_context)
+                metrics = _collect_workflow_metrics(workflow_context)
                 if workflow_context.get('run_id'):
                     replace_workflow_artifacts(workflow_context['run_id'], artifacts)
+                    replace_workflow_metrics(workflow_context['run_id'], metrics)
                     append_workflow_run_event(
                         workflow_context['run_id'],
                         'artifacts_collected',
@@ -403,8 +386,10 @@ def run_pipeline_job(
             _write_log_line(log_file, f"[SYSTEM] Task '{tool_name}' failed with exit code {return_code}")
             workflow_tracker.finalize('failed', error_message=f'Exit code {return_code}')
             artifacts = _collect_workflow_artifacts(workflow_context)
+            metrics = _collect_workflow_metrics(workflow_context)
             if workflow_context.get('run_id'):
                 replace_workflow_artifacts(workflow_context['run_id'], artifacts)
+                replace_workflow_metrics(workflow_context['run_id'], metrics)
             _update_manifest_after_run(workflow_context, status='failed', exit_code=return_code, error_message=f'Exit code {return_code}', artifacts=artifacts)
             mark_job_finished(job_id, 'failed', return_code, None, end_time - start_time)
             return {'status': 'failed', 'exit_code': return_code}
@@ -419,8 +404,10 @@ def run_pipeline_job(
             pass
         workflow_tracker.finalize('failed', error_message=error_message)
         artifacts = _collect_workflow_artifacts(workflow_context)
+        metrics = _collect_workflow_metrics(workflow_context)
         if workflow_context.get('run_id'):
             replace_workflow_artifacts(workflow_context['run_id'], artifacts)
+            replace_workflow_metrics(workflow_context['run_id'], metrics)
         _update_manifest_after_run(workflow_context, status='failed', error_message=error_message, artifacts=artifacts)
         mark_job_finished(job_id, 'failed', None, error_message, end_time - start_time)
         return {'status': 'failed', 'error': error_message}

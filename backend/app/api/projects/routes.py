@@ -6,6 +6,7 @@ from app.services.auth_service import (
     get_user_by_username,
     validate_project_member_role,
 )
+from app.services.project_dashboard import build_project_dashboard
 
 
 projects_bp = Blueprint('projects_bp', __name__)
@@ -40,6 +41,12 @@ def get_project(project_id):
     if project:
         return jsonify(project)
     return jsonify({'error': 'Project not found'}), 404
+
+
+@projects_bp.route('/<project_id>/dashboard', methods=['GET'])
+@project_access_required
+def get_project_dashboard(project_id):
+    return jsonify(build_project_dashboard(project_id))
 
 
 @projects_bp.route('/<project_id>', methods=['PUT'])

@@ -98,6 +98,13 @@
           </span>
         </div>
       </div>
+      <div v-if="runtimeHealthChecks.length" class="runtime-checks">
+        <div v-for="check in runtimeHealthChecks" :key="`${check.name}-${check.message}`" class="runtime-check" :class="check.status || 'warn'">
+          <span class="status-dot"></span>
+          <strong>{{ check.name }}</strong>
+          <span>{{ check.message }}</span>
+        </div>
+      </div>
     </section>
 
     <section class="workflow-activity-card">
@@ -105,6 +112,7 @@
         <div class="tab-buttons">
           <button :class="{ active: activeTab === 'logs' }" @click="activeTab = 'logs'">Logs</button>
           <button :class="{ active: activeTab === 'history' }" @click="activeTab = 'history'">Runs</button>
+          <button :class="{ active: activeTab === 'results' }" @click="activeTab = 'results'">Results</button>
         </div>
         <div class="activity-meta">
           <span v-if="displayRun" class="mono">{{ displayRun.id }}</span>
@@ -124,7 +132,7 @@
         </div>
       </div>
 
-      <div v-else class="activity-panel">
+      <div v-else-if="activeTab === 'history'" class="activity-panel">
         <div v-if="workflowRuns.length === 0" class="empty-activity">
           <p>No workflow history yet.</p>
           <span>Completed and failed runs will appear here.</span>
@@ -138,6 +146,25 @@
             <div class="history-card-bottom">
               <span class="mono">{{ run.id }}</span>
               <span v-if="run.duration">{{ formatDuration(run.duration) }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-else class="activity-panel">
+        <div v-if="!displayRun || (displayRun.artifacts || []).length === 0" class="empty-activity">
+          <p>No parsed results yet.</p>
+          <span>Completed workflow artifacts and summaries will appear here.</span>
+        </div>
+        <div v-else class="history-grid">
+          <div v-for="artifact in displayRun.artifacts" :key="artifact.path" class="history-card artifact-card">
+            <div class="history-card-top">
+              <strong>{{ artifact.label || artifact.kind || 'Result file' }}</strong>
+              <span class="history-state completed">{{ artifact.kind || 'artifact' }}</span>
+            </div>
+            <div class="history-card-bottom artifact-card-bottom">
+              <span class="mono">{{ artifact.path }}</span>
+              <span v-if="artifact.size_bytes">{{ formatBytes(artifact.size_bytes) }}</span>
             </div>
           </div>
         </div>
@@ -166,7 +193,38 @@
         </div>
 
         <div class="run-dialog-body">
-          <div v-for="param in workflowTool.parameters" :key="param.name" class="compact-field dialog-field">
+          <div v-if="workflowPresets.length" class="preset-strip">
+            <button
+              v-for="preset in workflowPresets"
+              :key="preset.id"
+              class="preset-btn"
+              :class="{ active: activePresetId === preset.id }"
+              @click="applyPreset(preset)"
+            >
+              {{ preset.label }}
+            </button>
+          </div>
+
+          <div v-if="showManifestTools" class="manifest-tools">
+            <div class="manifest-copy">
+              <strong>Input Manifest</strong>
+              <span>{{ manifestStatus || 'No scan yet' }}</span>
+            </div>
+            <div class="manifest-actions">
+              <button class="hero-btn secondary" @click="handleScanData" :disabled="!canPrepareManifest || loadingState">
+                Scan Data
+              </button>
+              <button class="hero-btn subtle" @click="handleCreateManifest" :disabled="!canPrepareManifest || loadingState">
+                Create Manifest
+              </button>
+            </div>
+            <div v-if="manifestScan" class="manifest-counts">
+              <span>{{ manifestScan.counts?.fastq_samples || 0 }} FASTQ samples</span>
+              <span>{{ manifestScan.counts?.complete_fastq_pairs || 0 }} complete pairs</span>
+            </div>
+          </div>
+
+          <div v-for="param in visibleParameters" :key="param.name" class="compact-field dialog-field">
             <div class="field-topline">
               <label :for="param.name">{{ param.name }}</label>
               <span class="field-tag">{{ param.type }}</span>
@@ -214,6 +272,10 @@
             <input v-model="runDialogDryRun" type="checkbox" />
             <span>Run as dry-run first</span>
           </label>
+
+          <button v-if="advancedParameters.length" class="advanced-toggle" @click="showAdvancedParams = !showAdvancedParams">
+            {{ showAdvancedParams ? 'Hide Advanced Parameters' : `Show Advanced Parameters (${advancedParameters.length})` }}
+          </button>
         </div>
 
         <div class="run-dialog-footer">
@@ -260,12 +322,16 @@ const activeTab = ref('history')
 const actionError = ref('')
 const showRunDialog = ref(false)
 const runDialogDryRun = ref(false)
+const showAdvancedParams = ref(false)
+const activePresetId = ref('')
 
 const formValues = ref({})
 const showFilePicker = ref(false)
 const currentPickerParam = ref(null)
 const tempFileSelection = ref(null)
 const runtimeHealth = ref(null)
+const manifestStatus = ref('')
+const manifestScan = ref(null)
 
 let refreshTimer = null
 
@@ -316,6 +382,74 @@ const disableRunActions = computed(() => {
 const canRetryRun = computed(() => Boolean(displayRun.value && !['queued', 'starting', 'running'].includes(displayRun.value.status)))
 const canResumeRun = computed(() => Boolean(displayRun.value && ['failed', 'canceled'].includes(displayRun.value.status)))
 const runtimeHealthChecks = computed(() => runtimeHealth.value?.checks || [])
+const showManifestTools = computed(() => workflow.value?.id === 'appam-smk')
+const canPrepareManifest = computed(() => Boolean(showManifestTools.value && formValues.value.raw_data_dir))
+const basicParameterNames = computed(() => {
+  if (workflow.value?.id === 'appam-smk') {
+    return new Set([
+      'sample_manifest',
+      'raw_data_dir',
+      'profile',
+      'cores',
+      'preprocess_method',
+      'use_ancient_contigs',
+      'enable_checkm2',
+      'enable_gunc',
+      'enable_prokka',
+      'enable_eggnog',
+      'enable_abricate',
+      'enable_rgi',
+      'enable_antismash',
+    ])
+  }
+  if (workflow.value?.id === 'appam-paleoproteomics') {
+    return new Set([
+      'sample_table',
+      'fasta_path',
+      'cores',
+      'match_between_runs',
+      'include_contaminants',
+    ])
+  }
+  return new Set((workflowTool.value?.parameters || []).map((param) => param.name))
+})
+const editableParameters = computed(() => (workflowTool.value?.parameters || []).filter((param) => param.name !== 'dry_run'))
+const basicParameters = computed(() => editableParameters.value.filter((param) => basicParameterNames.value.has(param.name)))
+const advancedParameters = computed(() => editableParameters.value.filter((param) => !basicParameterNames.value.has(param.name)))
+const visibleParameters = computed(() => showAdvancedParams.value ? [...basicParameters.value, ...advancedParameters.value] : basicParameters.value)
+const workflowPresets = computed(() => {
+  if (workflow.value?.id === 'appam-smk') {
+    return [
+      {
+        id: 'quick-validation',
+        label: 'Quick validation',
+        values: { dry_run: true, enable_antismash: false, enable_rgi: false, enable_eggnog: false, enable_abricate: false, cores: 4 },
+      },
+      {
+        id: 'mag-recovery',
+        label: 'MAG recovery',
+        values: { dry_run: false, enable_checkm2: true, enable_gunc: true, enable_prokka: false, enable_eggnog: false, enable_abricate: false, enable_rgi: false, enable_antismash: false },
+      },
+      {
+        id: 'full-annotation',
+        label: 'Full annotation',
+        values: { dry_run: false, enable_checkm2: true, enable_gunc: true, enable_prokka: true, enable_eggnog: true, enable_abricate: true, enable_rgi: false, enable_antismash: true },
+      },
+      {
+        id: 'publication-run',
+        label: 'Publication run',
+        values: { dry_run: false, enable_checkm2: true, enable_gunc: true, enable_prokka: true, enable_eggnog: true, enable_abricate: true, enable_rgi: true, enable_antismash: true },
+      },
+    ]
+  }
+  if (workflow.value?.id === 'appam-paleoproteomics') {
+    return [
+      { id: 'quick-validation', label: 'Quick validation', values: { dry_run: true, cores: 4, match_between_runs: false } },
+      { id: 'publication-run', label: 'Publication run', values: { dry_run: false, cores: 8, match_between_runs: true, include_contaminants: true } },
+    ]
+  }
+  return []
+})
 const configuredParameterCount = computed(() => {
   return (workflowTool.value?.parameters || []).filter((param) => {
     const value = formValues.value[param.name]
@@ -352,6 +486,20 @@ function formatDuration(seconds) {
   return `${Math.floor(numeric / 3600)}h ${Math.round((numeric % 3600) / 60)}m`
 }
 
+function formatBytes(bytes) {
+  const numeric = Number(bytes)
+  if (!Number.isFinite(numeric) || numeric < 0) return ''
+  if (numeric < 1024) return `${numeric} B`
+  const units = ['KB', 'MB', 'GB', 'TB']
+  let value = numeric / 1024
+  let unitIndex = 0
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024
+    unitIndex += 1
+  }
+  return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${units[unitIndex]}`
+}
+
 function humanizeStatus(status) {
   const mapping = {
     queued: 'Queued',
@@ -379,6 +527,17 @@ function displayStageLabel(nodeId) {
 function formatValue(value) {
   if (Array.isArray(value)) return value.join(', ')
   return value || ''
+}
+
+function applyPreset(preset) {
+  activePresetId.value = preset.id
+  formValues.value = {
+    ...formValues.value,
+    ...preset.values,
+  }
+  if (Object.prototype.hasOwnProperty.call(preset.values, 'dry_run')) {
+    runDialogDryRun.value = Boolean(preset.values.dry_run)
+  }
 }
 
 function inspectHistoryRun(run) {
@@ -528,6 +687,54 @@ async function safeFetchHealth() {
   }
 }
 
+async function handleScanData() {
+  if (!canPrepareManifest.value) return
+  actionError.value = ''
+  manifestStatus.value = ''
+  manifestScan.value = null
+  try {
+    const response = await fetch(
+      `/api/pipeline/${projectId.value}/data/scan?path=${encodeURIComponent(formValues.value.raw_data_dir)}`,
+    )
+    const payload = await response.json()
+    if (!response.ok) {
+      throw new Error(payload.error || 'Failed to scan data')
+    }
+    manifestScan.value = payload
+    manifestStatus.value = `${payload.counts?.complete_fastq_pairs || 0}/${payload.counts?.fastq_samples || 0} complete FASTQ pairs`
+  } catch (error) {
+    showActionError(error)
+  }
+}
+
+async function handleCreateManifest() {
+  if (!canPrepareManifest.value) return
+  actionError.value = ''
+  manifestStatus.value = ''
+  try {
+    const outputPath = formValues.value.sample_manifest || 'workflow_templates/appam-smk/samples.tsv'
+    const response = await fetch(`/api/pipeline/${projectId.value}/data/create-manifest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        workflow_id: 'appam-smk',
+        raw_data_dir: formValues.value.raw_data_dir,
+        output_path: outputPath,
+        overwrite: false,
+      }),
+    })
+    const payload = await response.json()
+    if (!response.ok) {
+      throw new Error(payload.error || 'Failed to create manifest')
+    }
+    formValues.value.sample_manifest = payload.path
+    manifestScan.value = payload.scan || null
+    manifestStatus.value = `Manifest created: ${payload.path}`
+  } catch (error) {
+    showActionError(error)
+  }
+}
+
 function validateRequiredFields() {
   const missing = []
   for (const param of workflowTool.value?.parameters || []) {
@@ -557,6 +764,10 @@ async function runWorkflow(forceDryRun) {
   const preflightResult = await preflightResponse.json()
   if (!preflightResponse.ok) {
     throw new Error(preflightResult.error || 'Preflight failed')
+  }
+  if (!preflightResult.ok) {
+    const firstError = (preflightResult.checks || []).find((check) => check.status === 'error')
+    throw new Error(firstError?.message || 'Preflight failed')
   }
   const response = await fetch(`/api/pipeline/${projectId.value}/run/${workflowTool.value.id}`, {
     method: 'POST',
@@ -621,6 +832,7 @@ async function handleRun(forceDryRun) {
 function openRunDialog() {
   actionError.value = ''
   runDialogDryRun.value = false
+  showAdvancedParams.value = false
   showRunDialog.value = true
 }
 
@@ -712,6 +924,10 @@ watch(
     displayRun.value = null
     logText.value = ''
     runtimeHealth.value = null
+    activePresetId.value = ''
+    showAdvancedParams.value = false
+    manifestStatus.value = ''
+    manifestScan.value = null
     actionError.value = ''
     await refreshAll()
     selectedNodeId.value = runtimeState.value.currentStageId || workflow.value.nodes[0]?.id || null
@@ -1115,6 +1331,44 @@ onUnmounted(() => {
   max-width: 45%;
 }
 
+.runtime-checks {
+  display: grid;
+  gap: 8px;
+  max-height: 180px;
+  overflow: auto;
+  margin: -4px 18px 18px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.runtime-check {
+  display: grid;
+  grid-template-columns: 12px minmax(110px, 180px) 1fr;
+  align-items: start;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.84);
+  color: #475569;
+  font-size: 0.78rem;
+}
+
+.runtime-check .status-dot {
+  margin-top: 4px;
+}
+
+.runtime-check strong {
+  color: #0f172a;
+}
+
+.runtime-check.ok .status-dot { background: #37a866; }
+.runtime-check.warn .status-dot { background: #ef8d27; }
+.runtime-check.error .status-dot { background: #dc2626; }
+.runtime-check.error {
+  background: rgba(220, 38, 38, 0.06);
+  color: #991b1b;
+}
+
 .mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
@@ -1311,6 +1565,79 @@ onUnmounted(() => {
   border: 1px solid rgba(148, 163, 184, 0.14);
 }
 
+.manifest-tools {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.94);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.preset-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preset-btn,
+.advanced-toggle {
+  min-height: 34px;
+  padding: 0 11px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: #fff;
+  color: #475569;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.preset-btn.active {
+  background: rgba(47, 111, 237, 0.1);
+  border-color: rgba(47, 111, 237, 0.22);
+  color: #1d4ed8;
+}
+
+.advanced-toggle {
+  width: 100%;
+  min-height: 40px;
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.manifest-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #64748b;
+  font-size: 0.84rem;
+}
+
+.manifest-copy strong {
+  color: #0f172a;
+  font-size: 0.92rem;
+}
+
+.manifest-actions,
+.manifest-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.manifest-counts span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: rgba(47, 111, 237, 0.08);
+  color: #1d4ed8;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
 .run-mode-toggle {
   display: flex;
   align-items: center;
@@ -1421,6 +1748,14 @@ onUnmounted(() => {
   box-shadow: 0 14px 24px rgba(15, 23, 42, 0.06);
 }
 
+.artifact-card {
+  cursor: default;
+}
+
+.artifact-card:hover {
+  transform: none;
+}
+
 .history-card-top,
 .history-card-bottom {
   display: flex;
@@ -1433,6 +1768,15 @@ onUnmounted(() => {
   margin-top: 10px;
   color: #64748b;
   font-size: 0.82rem;
+}
+
+.artifact-card-bottom {
+  align-items: flex-start;
+}
+
+.artifact-card-bottom .mono {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .history-state {

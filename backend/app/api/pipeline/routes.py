@@ -1,9 +1,13 @@
 import os
 import uuid
+import zipfile
+from io import BytesIO
+from pathlib import Path
 
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, Response, g, jsonify, request
 
-from app.auth import current_user, get_project_for_user, project_role_at_least
+from app.auth import can, current_user, get_project_for_user
+from app.services.database_manifest import load_database_manifest
 from app.services.pipeline_execution import (
     build_job_request,
     build_job_request_from_workflow_run,
@@ -11,15 +15,24 @@ from app.services.pipeline_execution import (
     preflight_job_request,
     runtime_health_for_workflow,
 )
+from app.services.sample_validator import (
+    scan_project_data,
+    validate_appam_smk_manifest,
+    validate_paleoproteomics_table,
+    write_appam_smk_manifest,
+    write_paleoproteomics_manifest,
+)
 from app.services.job_queue import enqueue_pipeline_job
 from app.services.job_store import (
     build_workflow_run_provenance,
     compare_workflow_runs,
+    create_workflow_preflight,
     count_jobs,
     get_active_job,
     get_active_workflow_run,
     get_latest_job,
     get_workflow_run,
+    list_workflow_preflights,
     list_jobs,
     list_process_history,
     list_workflow_runs,
@@ -49,11 +62,15 @@ def ensure_project_access():
     return None
 
 
-def require_project_editor():
+def require_project_action(action: str):
     project = getattr(g, 'current_project', None)
-    if not project or not project_role_at_least(project.get('access_role'), 'editor'):
+    if not project or not can(current_user(), action, project):
         return jsonify({'error': 'Project write access required'}), 403
     return None
+
+
+def require_project_editor():
+    return require_project_action('run_workflow')
 
 
 def _queue_job_from_request(project_id: str, display_tool_name: str, job_request: dict, job_id: str):
@@ -104,6 +121,78 @@ def validate_tool_params(tool_info: dict, params: dict) -> list[str]:
             except (ValueError, TypeError):
                 validation_errors.append(f"Parameter '{param_name}' must be a float")
     return validation_errors
+
+
+@pipeline_bp.route('/<project_id>/data/scan')
+def scan_project_data_endpoint(project_id):
+    path = request.args.get('path', '.')
+    try:
+        return jsonify(scan_project_data(project_id, path))
+    except FileNotFoundError as exc:
+        return jsonify({'error': str(exc)}), 404
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as exc:
+        return jsonify({'error': f'Failed to scan project data: {exc}'}), 500
+
+
+@pipeline_bp.route('/<project_id>/data/validate', methods=['POST'])
+def validate_project_data_endpoint(project_id):
+    payload = request.get_json() or {}
+    workflow_id = str(payload.get('workflow_id') or '').strip()
+    try:
+        if workflow_id == 'appam-smk':
+            result = validate_appam_smk_manifest(
+                project_id,
+                payload.get('sample_manifest', ''),
+                payload.get('raw_data_dir', ''),
+            )
+        elif workflow_id == 'appam-paleoproteomics':
+            result = validate_paleoproteomics_table(
+                project_id,
+                payload.get('sample_table', ''),
+            )
+        else:
+            return jsonify({'error': 'Unsupported workflow_id'}), 400
+        status = 200 if result.get('ok') else 400
+        return jsonify(result), status
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as exc:
+        return jsonify({'error': f'Failed to validate project data: {exc}'}), 500
+
+
+@pipeline_bp.route('/<project_id>/data/create-manifest', methods=['POST'])
+def create_project_manifest_endpoint(project_id):
+    editor_error = require_project_action('create_manifest')
+    if editor_error:
+        return editor_error
+
+    payload = request.get_json() or {}
+    workflow_id = str(payload.get('workflow_id') or '').strip()
+    overwrite = bool(payload.get('overwrite', False))
+    try:
+        if workflow_id == 'appam-smk':
+            result = write_appam_smk_manifest(
+                project_id,
+                payload.get('raw_data_dir', ''),
+                payload.get('output_path', 'workflow_templates/appam-smk/samples.tsv'),
+                overwrite=overwrite,
+            )
+        elif workflow_id == 'appam-paleoproteomics':
+            result = write_paleoproteomics_manifest(
+                project_id,
+                payload.get('data_dir', ''),
+                payload.get('output_path', 'workflow_templates/appam-paleoproteomics/samples.tsv'),
+                overwrite=overwrite,
+            )
+        else:
+            return jsonify({'error': 'Unsupported workflow_id'}), 400
+        return jsonify(result)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as exc:
+        return jsonify({'error': f'Failed to create manifest: {exc}'}), 500
 
 
 def _get_limit(env_name: str, default: int) -> int:
@@ -161,6 +250,16 @@ def preflight_tool_endpoint(project_id, tool_name):
     except Exception as exc:
         return jsonify({'error': f'Failed to prepare preflight: {exc}'}), 500
 
+    if tool_info.get('kind') == 'workflow':
+        preflight = create_workflow_preflight(
+            project_id,
+            tool_info.get('tool_name', tool_name),
+            result,
+            params=params,
+            submitted_by=current_user()['id'],
+        )
+        result['preflight_id'] = preflight.get('id')
+
     return jsonify(result)
 
 
@@ -186,6 +285,33 @@ def run_tool_endpoint(project_id, tool_name):
             'error': 'Parameter validation failed',
             'details': validation_errors
         }), 400
+
+    if tool_info.get('kind') == 'workflow':
+        try:
+            preflight_result = preflight_job_request(project_id, tool_info, params)
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
+        except Exception as exc:
+            return jsonify({'error': f'Failed to run preflight: {exc}'}), 500
+        if not preflight_result.get('ok'):
+            failed_preflight = create_workflow_preflight(
+                project_id,
+                display_tool_name,
+                preflight_result,
+                params=params,
+                submitted_by=current_user()['id'],
+            )
+            preflight_result['preflight_id'] = failed_preflight.get('id')
+            return jsonify({'error': 'Preflight failed', 'preflight': preflight_result}), 400
+        preflight = create_workflow_preflight(
+            project_id,
+            display_tool_name,
+            preflight_result,
+            params=params,
+            submitted_by=current_user()['id'],
+        )
+        params = dict(params)
+        params['_preflight_id'] = preflight.get('id')
 
     job_id = uuid.uuid4().hex
     workflow_run_id = uuid.uuid4().hex if tool_info.get('kind') == 'workflow' else None
@@ -213,6 +339,7 @@ def run_tool_endpoint(project_id, tool_name):
         'command': job_request['display_command'],
         'job_id': job_id,
         'workflow_run_id': job_request.get('workflow_run_id'),
+        'preflight_id': params.get('_preflight_id'),
         'status': 'queued'
     })
 
@@ -241,6 +368,7 @@ def task_status(project_id):
         'queue_position': job.get('queue_position'),
         'failure_category': job.get('failure_category'),
         'failure_label': job.get('failure_label'),
+        'failure_suggestion': job.get('failure_suggestion'),
         'workflow_run_id': job.get('workflow_run_id'),
         'workflow_id': job.get('workflow_id'),
         'current_stage_id': workflow_run.get('current_stage_id') if workflow_run else None,
@@ -273,6 +401,13 @@ def workflow_runs(project_id):
     return jsonify({'workflow_runs': runs})
 
 
+@pipeline_bp.route('/<project_id>/preflights')
+def workflow_preflights(project_id):
+    workflow_id = request.args.get('workflow_id')
+    limit = request.args.get('limit', 10, type=int)
+    return jsonify({'preflights': list_workflow_preflights(project_id, workflow_id=workflow_id, limit=limit)})
+
+
 @pipeline_bp.route('/<project_id>/workflow-runs/<run_id>')
 def workflow_run_detail(project_id, run_id):
     run = get_workflow_run(run_id)
@@ -287,6 +422,63 @@ def workflow_run_provenance(project_id, run_id):
     if not provenance or provenance['run'].get('project_id') != project_id:
         return jsonify({'error': 'Workflow run not found'}), 404
     return jsonify(provenance)
+
+
+@pipeline_bp.route('/<project_id>/workflow-runs/<run_id>/provenance-bundle')
+def workflow_run_provenance_bundle(project_id, run_id):
+    provenance = build_workflow_run_provenance(run_id)
+    if not provenance or provenance['run'].get('project_id') != project_id:
+        return jsonify({'error': 'Workflow run not found'}), 404
+
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr('provenance.json', jsonify_safe_json(provenance))
+        archive.writestr('database-manifest.json', jsonify_safe_json(load_database_manifest()))
+        metrics = provenance.get('metrics') or []
+        if metrics:
+            archive.writestr('metrics.tsv', workflow_metrics_tsv(metrics))
+        run = provenance.get('run') or {}
+        for label, value in (
+            ('config.yaml', run.get('config_path')),
+            ('manifest.json', run.get('manifest_path')),
+            ('run.log', run.get('log_path')),
+        ):
+            if not value:
+                continue
+            path = Path(value)
+            if path.is_file():
+                archive.write(path, f'run/{label}')
+        manifest = provenance.get('manifest') or {}
+        params = manifest.get('params') or {}
+        for label, value in (
+            ('samples.tsv', params.get('sample_manifest') or params.get('sample_table')),
+        ):
+            if not value:
+                continue
+            path = Path(value)
+            if path.is_file():
+                archive.write(path, f'inputs/{label}')
+    buffer.seek(0)
+    filename = f'{run_id}-provenance.zip'
+    return Response(
+        buffer.getvalue(),
+        mimetype='application/zip',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+    )
+
+
+def jsonify_safe_json(payload: dict) -> str:
+    import json
+
+    return json.dumps(payload, indent=2, ensure_ascii=False, default=str)
+
+
+def workflow_metrics_tsv(metrics: list[dict]) -> str:
+    header = ['metric_group', 'metric_name', 'sample_id', 'metric_value', 'metric_text', 'unit']
+    lines = ['\t'.join(header)]
+    for metric in metrics:
+        lines.append('\t'.join(str(metric.get(column) or '').replace('\t', ' ') for column in header))
+    return '\n'.join(lines) + '\n'
 
 
 @pipeline_bp.route('/<project_id>/workflow-runs/compare')

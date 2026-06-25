@@ -373,16 +373,39 @@ class AuthPermissionApiTests(unittest.TestCase):
         project_dir.mkdir(exist_ok=True)
         sample_manifest = project_dir / 'samples.tsv'
         raw_data_dir = project_dir / 'raw'
-        sample_manifest.write_text('sample\tforward\treverse\n', encoding='utf-8')
+        sample_manifest.write_text('sample_id\nsample1\n', encoding='utf-8')
         raw_data_dir.mkdir(exist_ok=True)
         metawrap_env = Path(TEST_TEMP_DIR) / 'envs' / 'metawrap'
         pydamage_env = Path(TEST_TEMP_DIR) / 'envs' / 'pydamage'
+        checkm2_env = Path(TEST_TEMP_DIR) / 'envs' / 'checkm2'
+        gunc_env = Path(TEST_TEMP_DIR) / 'envs' / 'gunc'
+        prokka_env = Path(TEST_TEMP_DIR) / 'envs' / 'prokka'
+        eggnog_env = Path(TEST_TEMP_DIR) / 'envs' / 'eggnog_py310'
+        abricate_env = Path(TEST_TEMP_DIR) / 'envs' / 'abricate'
+        antismash_env = Path(TEST_TEMP_DIR) / 'envs' / 'antismash'
         checkm_db = Path(TEST_TEMP_DIR) / 'db' / 'checkm'
+        checkm2_db = Path(TEST_TEMP_DIR) / 'db' / 'checkm2'
         gunc_db = Path(TEST_TEMP_DIR) / 'db' / 'gunc'
+        eggnog_db = Path(TEST_TEMP_DIR) / 'db' / 'eggnog'
         maxquant_cmd = Path(TEST_TEMP_DIR) / 'maxquant' / 'MaxQuantCmd.dll'
         fasta_path = Path(TEST_TEMP_DIR) / 'references' / 'db.fasta'
 
-        for directory in (metawrap_env, pydamage_env, checkm_db, gunc_db, maxquant_cmd.parent, fasta_path.parent):
+        for directory in (
+            metawrap_env,
+            pydamage_env,
+            checkm2_env,
+            gunc_env,
+            prokka_env,
+            eggnog_env,
+            abricate_env,
+            antismash_env,
+            checkm_db,
+            checkm2_db,
+            gunc_db,
+            eggnog_db,
+            maxquant_cmd.parent,
+            fasta_path.parent,
+        ):
             directory.mkdir(parents=True, exist_ok=True)
         maxquant_cmd.write_text('maxquant', encoding='utf-8')
         fasta_path.write_text('>seq\nAAAA\n', encoding='utf-8')
@@ -391,8 +414,17 @@ class AuthPermissionApiTests(unittest.TestCase):
             'APPAM_SNAKEMAKE_BIN': '/bin/echo',
             'APPAM_SMK_METAWRAP_ENV': str(metawrap_env),
             'APPAM_SMK_PYDAMAGE_ENV': str(pydamage_env),
+            'APPAM_SMK_CHECKM1_DB': str(checkm_db),
             'APPAM_SMK_CHECKM_DB': str(checkm_db),
+            'APPAM_SMK_CHECKM2_ENV': str(checkm2_env),
+            'APPAM_SMK_CHECKM2_DB': str(checkm2_db),
+            'APPAM_SMK_GUNC_ENV': str(gunc_env),
             'APPAM_SMK_GUNC_DB': str(gunc_db),
+            'APPAM_SMK_PROKKA_ENV': str(prokka_env),
+            'APPAM_SMK_EGGNOG_ENV': str(eggnog_env),
+            'APPAM_SMK_EGGNOG_DB': str(eggnog_db),
+            'APPAM_SMK_ABRICATE_ENV': str(abricate_env),
+            'APPAM_SMK_ANTISMASH_ENV': str(antismash_env),
             'APPAM_PALEO_MAXQUANT_CMD': str(maxquant_cmd),
             'APPAM_PALEO_DOTNET_BIN': '/bin/echo',
             'APPAM_PALEO_THERMO_RAW_FILE_PARSER': '/bin/echo',
@@ -486,7 +518,7 @@ class AuthPermissionApiTests(unittest.TestCase):
             self.assertEqual(retry_response.status_code, 200, retry_response.get_data(as_text=True))
 
         paleoproteomics_table = project_dir / 'proteomics_samples.tsv'
-        paleoproteomics_table.write_text('sample_id\traw_path\nS1\tdata.RAW\n', encoding='utf-8')
+        paleoproteomics_table.write_text('sample_id\tinput_path\texperiment\tfraction\nS1\tdata.RAW\tprojectA\t1\n', encoding='utf-8')
 
         with mock.patch.dict(os.environ, runtime_env, clear=False), mock.patch(
             'app.services.job_queue.get_queue', return_value=mock_queue

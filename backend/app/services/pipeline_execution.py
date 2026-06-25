@@ -1,12 +1,22 @@
-import os
+from __future__ import annotations
+
 import json
+import os
 import shlex
 import shutil
+import subprocess
 from pathlib import Path
 
 import yaml
 
 from .execution_backends import build_backend_command_spec, resolve_backend_name
+from .runtime_resources import (
+    collect_appam_smk_runtime_metadata,
+    get_appam_smk_runtime_checks,
+    get_appam_smk_runtime_settings,
+    validate_appam_smk_runtime,
+)
+from .sample_validator import validate_appam_smk_manifest, validate_paleoproteomics_table
 from .workflow_runtime import get_workflow_stage_definitions
 from ..paths import (
     APPAM_PALEOPROTEOMICS_ROOT,
@@ -149,9 +159,14 @@ def _build_manifest_payload(project_id: str, tool_info: dict, params: dict, cont
         'mode': mode,
         'submitted_by': submitted_by,
         'parent_run_id': parent_run_id,
+        'preflight_id': context.get('preflight_id') or params.get('_preflight_id'),
         'backend': context['backend'],
         'dry_run': bool(params.get('dry_run')),
         'params': params,
+        'runtime': context.get('runtime_settings'),
+        'runtime_checks': context.get('runtime_checks'),
+        'runtime_metadata': context.get('runtime_metadata'),
+        'input_validation': context.get('input_validation'),
         'paths': {
             'config_path': str(context['config_path']),
             'log_path': str(context['log_path']),
@@ -301,37 +316,28 @@ def _appam_smk_context(project_id: str, job_id: str, params: dict, run_id: str, 
     sample_manifest = require_existing_file(resolve_project_path(project_id, params.get('sample_manifest', '')), 'APPAM-SMK sample manifest')
     raw_data_dir = require_existing_directory(resolve_project_path(project_id, params.get('raw_data_dir', '')), 'APPAM-SMK raw data directory')
 
-    metawrap_env = _required_config_value(params, 'metawrap_env', 'APPAM_SMK_METAWRAP_ENV')
-    pydamage_env = _required_config_value(params, 'pydamage_env', 'APPAM_SMK_PYDAMAGE_ENV')
-    checkm_db = _required_config_value(params, 'checkm_db', 'APPAM_SMK_CHECKM_DB')
-    gunc_db = _required_config_value(params, 'gunc_db', 'APPAM_SMK_GUNC_DB')
+    runtime_settings = get_appam_smk_runtime_settings(params)
+    runtime_checks = validate_appam_smk_runtime(runtime_settings)
+    input_validation = validate_appam_smk_manifest(project_id, str(params.get('sample_manifest', '')), str(params.get('raw_data_dir', '')))
+    if not input_validation.get('ok'):
+        details = '; '.join(check['message'] for check in input_validation.get('checks', []) if check.get('status') == 'error')
+        raise ValueError(f'APPAM-SMK input validation failed: {details}')
+    tools = runtime_settings['tools']
+    databases = runtime_settings['databases']
+    modules = runtime_settings['modules']
 
-    missing = []
-    if not metawrap_env:
-        missing.append('metawrap_env / APPAM_SMK_METAWRAP_ENV')
-    if not pydamage_env:
-        missing.append('pydamage_env / APPAM_SMK_PYDAMAGE_ENV')
-    if not checkm_db:
-        missing.append('checkm_db / APPAM_SMK_CHECKM_DB')
-    if not gunc_db:
-        missing.append('gunc_db / APPAM_SMK_GUNC_DB')
-    if missing:
-        raise ValueError('Missing APPAM-SMK runtime settings: ' + ', '.join(missing))
+    metawrap_env = tools['metawrap_env']
+    pydamage_env = tools['pydamage_env']
+    checkm1_db = databases['checkm1_db']
+    checkm2_db = databases['checkm2_db']
+    gunc_db = databases['gunc_db']
+    eggnog_db = databases['eggnog_db']
 
     profile = str(params.get('profile', 'local')).strip() or 'local'
     profile_dir = require_existing_directory(workflow_root / 'profiles' / profile, f'APPAM-SMK profile "{profile}"')
     snakemake_bin = get_snakemake_bin()
     cores = int(params.get('cores', 4))
     backend = resolve_backend_name(params.get('execution_backend') or os.getenv('APPAM_SMK_EXECUTION_BACKEND'), profile=profile)
-
-    if Path(str(checkm_db)).is_absolute():
-        require_existing_directory(Path(str(checkm_db)).resolve(), 'CheckM database')
-    if Path(str(gunc_db)).is_absolute():
-        require_existing_directory(Path(str(gunc_db)).resolve(), 'GUNC database')
-    if Path(str(metawrap_env)).is_absolute() and not Path(str(metawrap_env)).exists():
-        raise ValueError(f'MetaWRAP environment path not found: {metawrap_env}')
-    if Path(str(pydamage_env)).is_absolute() and not Path(str(pydamage_env)).exists():
-        raise ValueError(f'PyDamage environment path not found: {pydamage_env}')
 
     if mode == 'resume' and source_run:
         run_paths = {
@@ -364,14 +370,40 @@ def _appam_smk_context(project_id: str, job_id: str, params: dict, run_id: str, 
             'preprocess_method': params.get('preprocess_method', 'fastp'),
             'min_contig_len': int(params.get('min_contig_len', 500)),
             'use_ancient_contigs': bool(params.get('use_ancient_contigs', True)),
+            'annotation_threads': int(params.get('annotation_threads', 8)),
+            'abricate_db': params.get('abricate_db', 'vfdb'),
+            'abricate_minid': int(params.get('abricate_minid', 80)),
+            'abricate_mincov': int(params.get('abricate_mincov', 80)),
+            'enable_checkm2': bool(modules.get('enable_checkm2', True)),
+            'enable_gunc': bool(modules.get('enable_gunc', True)),
+            'enable_prokka': bool(modules.get('enable_prokka', True)),
+            'enable_eggnog': bool(modules.get('enable_eggnog', True)),
+            'enable_abricate': bool(modules.get('enable_abricate', True)),
+            'enable_rgi': bool(modules.get('enable_rgi', False)),
+            'enable_antismash': bool(modules.get('enable_antismash', True)),
         },
         'databases': {
-            'checkm_db': str(checkm_db),
+            'checkm_db': str(checkm1_db),
+            'checkm1_db': str(checkm1_db),
+            'checkm2_db': str(checkm2_db),
             'gunc_db': str(gunc_db),
+            'eggnog_db': str(eggnog_db),
+            'abricate_db': str(databases.get('abricate_db')),
+            'rgi_db_mode': str(databases.get('rgi_db_mode')),
+            'rgi_db': str(databases.get('rgi_db') or ''),
+            'antismash_db': str(databases.get('antismash_db')),
+            'prokka_db': str(databases.get('prokka_db')),
         },
         'tools': {
             'metawrap_env': str(metawrap_env),
             'pydamage_env': str(pydamage_env),
+            'checkm2_env': str(tools.get('checkm2_env')),
+            'gunc_env': str(tools.get('gunc_env')),
+            'prokka_env': str(tools.get('prokka_env')),
+            'eggnog_env': str(tools.get('eggnog_env')),
+            'abricate_env': str(tools.get('abricate_env')),
+            'rgi_env': str(tools.get('rgi_env')),
+            'antismash_env': str(tools.get('antismash_env')),
         },
     }
 
@@ -436,8 +468,15 @@ def _appam_smk_context(project_id: str, job_id: str, params: dict, run_id: str, 
         'raw_data_dir': raw_data_dir,
         'metawrap_env': str(metawrap_env),
         'pydamage_env': str(pydamage_env),
-        'checkm_db': str(checkm_db),
+        'checkm_db': str(checkm1_db),
+        'checkm1_db': str(checkm1_db),
+        'checkm2_db': str(checkm2_db),
         'gunc_db': str(gunc_db),
+        'eggnog_db': str(eggnog_db),
+        'runtime_settings': runtime_settings,
+        'runtime_checks': runtime_checks,
+        'runtime_metadata': collect_appam_smk_runtime_metadata(runtime_settings),
+        'input_validation': input_validation,
         'config_path': generated_config,
         'log_path': log_path,
         'run_paths': run_paths,
@@ -454,6 +493,10 @@ def _paleoproteomics_context(project_id: str, job_id: str, params: dict, run_id:
     snakefile = require_existing_file(workflow_root / 'workflow' / 'Snakefile', 'APPAM paleoproteomics Snakefile')
 
     sample_table = require_existing_file(resolve_project_path(project_id, params.get('sample_table', '')), 'Paleoproteomics sample table')
+    input_validation = validate_paleoproteomics_table(project_id, str(params.get('sample_table', '')))
+    if not input_validation.get('ok'):
+        details = '; '.join(check['message'] for check in input_validation.get('checks', []) if check.get('status') == 'error')
+        raise ValueError(f'Paleoproteomics input validation failed: {details}')
     fasta_path = require_existing_file(resolve_project_or_absolute_path(project_id, params.get('fasta_path', '')), 'Reference FASTA')
 
     dotnet_bin = resolve_executable(_required_config_value(params, 'dotnet_bin', 'APPAM_PALEO_DOTNET_BIN') or 'dotnet', 'dotnet')
@@ -565,6 +608,7 @@ def _paleoproteomics_context(project_id: str, job_id: str, params: dict, run_id:
         'snakefile': snakefile,
         'sample_table': sample_table,
         'fasta_path': fasta_path,
+        'input_validation': input_validation,
         'config_path': generated_config,
         'log_path': log_path,
         'run_paths': run_paths,
@@ -632,6 +676,7 @@ def _build_workflow_request(project_id: str, job_id: str, run_id: str, tool_info
             'backend': context['backend'],
             'submitted_by': submitted_by,
             'parent_run_id': source_run.get('id') if source_run else None,
+            'preflight_id': context.get('preflight_id') or params.get('_preflight_id'),
             'params': params,
             'config_path': str(context['config_path']),
             'manifest_path': str(manifest_path),
@@ -669,20 +714,88 @@ def _build_paleoproteomics_job(project_id: str, job_id: str, tool_info: dict, pa
     return _build_workflow_request(project_id, job_id, resolved_run_id, tool_info, params, context, submitted_by, source_run=source_run, mode=mode)
 
 
+def _preflight_dry_run_enabled() -> bool:
+    return os.getenv('APPAM_PREFLIGHT_DRY_RUN', 'true').strip().lower() not in {'0', 'false', 'no', 'off'}
+
+
+def _preflight_dry_run_timeout() -> int:
+    try:
+        return max(5, int(os.getenv('APPAM_PREFLIGHT_DRY_RUN_TIMEOUT', '120')))
+    except Exception:
+        return 120
+
+
+def _snakemake_dry_run_check(context: dict) -> dict:
+    if not _preflight_dry_run_enabled():
+        return {
+            'name': 'snakemake_dry_run',
+            'status': 'warn',
+            'message': 'Snakemake dry-run check is disabled by APPAM_PREFLIGHT_DRY_RUN.',
+        }
+
+    argv = [str(part) for part in context.get('argv') or []]
+    if '-n' not in argv and '--dry-run' not in argv:
+        argv.append('-n')
+    timeout = _preflight_dry_run_timeout()
+    try:
+        result = subprocess.run(
+            argv,
+            cwd=str(context['workflow_root']),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return {
+            'name': 'snakemake_dry_run',
+            'status': 'error',
+            'message': f'Snakemake dry-run timed out after {timeout}s.',
+        }
+    except Exception as exc:
+        return {
+            'name': 'snakemake_dry_run',
+            'status': 'error',
+            'message': f'Snakemake dry-run failed to start: {exc}',
+        }
+
+    output = (result.stdout or '').strip()
+    tail = '\n'.join(output.splitlines()[-12:])
+    if result.returncode == 0:
+        return {
+            'name': 'snakemake_dry_run',
+            'status': 'ok',
+            'message': 'Snakemake dry-run completed successfully.',
+            'details': tail,
+        }
+    return {
+        'name': 'snakemake_dry_run',
+        'status': 'error',
+        'message': f'Snakemake dry-run failed with exit code {result.returncode}.',
+        'details': tail,
+    }
+
+
 def _preflight_appam_smk(project_id: str, tool_info: dict, params: dict) -> dict:
     preview_run_id = 'preflight-preview'
-    context = _appam_smk_context(project_id, 'preflight', params, preview_run_id, write_files=False)
+    context = _appam_smk_context(project_id, 'preflight', params, preview_run_id, write_files=True)
+    checks = [
+        {'name': 'snakemake', 'status': 'ok', 'message': f'Snakemake resolved: {get_snakemake_bin()}'},
+        {'name': 'snakefile', 'status': 'ok', 'message': f'Snakefile found: {context["snakefile"]}'},
+        {'name': 'sample_manifest', 'status': 'ok', 'message': f'Sample manifest found: {context["sample_manifest"]}'},
+        {'name': 'raw_data_dir', 'status': 'ok', 'message': f'Raw data directory found: {context["raw_data_dir"]}'},
+        {'name': 'profile', 'status': 'ok', 'message': f'Profile ready: {context["profile"]}'},
+    ]
+    checks.extend(context.get('input_validation', {}).get('checks') or [])
+    checks.extend(context.get('runtime_checks') or [])
+    checks.append(_snakemake_dry_run_check(context))
+    ok = not any(check.get('status') == 'error' for check in checks)
     return {
-        'ok': True,
+        'ok': ok,
         'mode': 'snakemake',
         'workflow_id': context['workflow_id'],
-        'checks': [
-            {'name': 'snakemake', 'status': 'ok', 'message': f'Snakemake resolved: {get_snakemake_bin()}'},
-            {'name': 'snakefile', 'status': 'ok', 'message': f'Snakefile found: {context["snakefile"]}'},
-            {'name': 'sample_manifest', 'status': 'ok', 'message': f'Sample manifest found: {context["sample_manifest"]}'},
-            {'name': 'raw_data_dir', 'status': 'ok', 'message': f'Raw data directory found: {context["raw_data_dir"]}'},
-            {'name': 'profile', 'status': 'ok', 'message': f'Profile ready: {context["profile"]}'},
-        ],
+        'checks': checks,
         'preview': {
             'config_path': str(context['config_path']),
             'run_dir': str(context['run_paths']['run_dir']),
@@ -696,17 +809,21 @@ def _preflight_appam_smk(project_id: str, tool_info: dict, params: dict) -> dict
 
 def _preflight_paleoproteomics(project_id: str, tool_info: dict, params: dict) -> dict:
     preview_run_id = 'preflight-preview'
-    context = _paleoproteomics_context(project_id, 'preflight', params, preview_run_id, write_files=False)
+    context = _paleoproteomics_context(project_id, 'preflight', params, preview_run_id, write_files=True)
+    checks = [
+        {'name': 'snakemake', 'status': 'ok', 'message': f'Snakemake resolved: {get_snakemake_bin()}'},
+        {'name': 'snakefile', 'status': 'ok', 'message': f'Snakefile found: {context["snakefile"]}'},
+        {'name': 'sample_table', 'status': 'ok', 'message': f'Sample table found: {context["sample_table"]}'},
+        {'name': 'fasta_path', 'status': 'ok', 'message': f'Reference FASTA found: {context["fasta_path"]}'},
+    ]
+    checks.extend(context.get('input_validation', {}).get('checks') or [])
+    checks.append(_snakemake_dry_run_check(context))
+    ok = not any(check.get('status') == 'error' for check in checks)
     return {
-        'ok': True,
+        'ok': ok,
         'mode': 'snakemake',
         'workflow_id': context['workflow_id'],
-        'checks': [
-            {'name': 'snakemake', 'status': 'ok', 'message': f'Snakemake resolved: {get_snakemake_bin()}'},
-            {'name': 'snakefile', 'status': 'ok', 'message': f'Snakefile found: {context["snakefile"]}'},
-            {'name': 'sample_table', 'status': 'ok', 'message': f'Sample table found: {context["sample_table"]}'},
-            {'name': 'fasta_path', 'status': 'ok', 'message': f'Reference FASTA found: {context["fasta_path"]}'},
-        ],
+        'checks': checks,
         'preview': {
             'config_path': str(context['config_path']),
             'run_dir': str(context['run_paths']['run_dir']),
@@ -775,7 +892,7 @@ def generate_workflow_template(project_id: str, workflow_id: str, overwrite: boo
         if sample_table.exists() and not overwrite:
             raise ValueError(f'Template already exists: {sample_table}')
         sample_table.write_text(
-            'sample_id\traw_path\texperiment\tfraction\nsample1\traw_ms/sample1.RAW\tprojectA\t1\n',
+            'sample_id\tinput_path\texperiment\tfraction\nsample1\traw_ms/sample1.RAW\tprojectA\t1\n',
             encoding='utf-8',
         )
         fasta_path.write_text('>protein_1\nMPEPTIDESEQ\n', encoding='utf-8')
@@ -802,14 +919,10 @@ def runtime_health_for_workflow(workflow_id: str) -> dict:
         workflow_root = APPAM_SMK_ROOT
         require_existing_directory(workflow_root, 'APPAM-SMK root')
         require_existing_file(workflow_root / 'workflow' / 'Snakefile', 'APPAM-SMK Snakefile')
-        checks.extend([
-            {'name': 'workflow_root', 'status': 'ok', 'message': f'Workflow root ready: {workflow_root}'},
-            {'name': 'metawrap_env', 'status': 'ok', 'message': f"MetaWRAP setting: {_required_config_value({}, 'metawrap_env', 'APPAM_SMK_METAWRAP_ENV') or 'not set'}"},
-            {'name': 'pydamage_env', 'status': 'ok', 'message': f"PyDamage setting: {_required_config_value({}, 'pydamage_env', 'APPAM_SMK_PYDAMAGE_ENV') or 'not set'}"},
-            {'name': 'checkm_db', 'status': 'ok', 'message': f"CheckM DB: {_required_config_value({}, 'checkm_db', 'APPAM_SMK_CHECKM_DB') or 'not set'}"},
-            {'name': 'gunc_db', 'status': 'ok', 'message': f"GUNC DB: {_required_config_value({}, 'gunc_db', 'APPAM_SMK_GUNC_DB') or 'not set'}"},
-        ])
-        return {'ok': True, 'workflow_id': workflow_id, 'checks': checks}
+        checks.append({'name': 'workflow_root', 'status': 'ok', 'message': f'Workflow root ready: {workflow_root}'})
+        checks.extend(get_appam_smk_runtime_checks())
+        ok = not any(check.get('required') and check.get('status') == 'error' for check in checks)
+        return {'ok': ok, 'workflow_id': workflow_id, 'checks': checks}
 
     if workflow_id == 'appam-paleoproteomics':
         workflow_root = APPAM_PALEOPROTEOMICS_ROOT

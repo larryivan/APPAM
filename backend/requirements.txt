@@ -3,6 +3,8 @@ Flask-SocketIO==5.5.1
 requests==2.32.3
 flask_cors==6.0.1
 PyYAML==6.0.2
+redis>=5.0,<6
+rq>=2.0,<3
 # AI Assistant dependencies
 python-dotenv==1.0.1
 # System monitoring

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-06-26",
+  "notes": "Copy this file to APPAM_DB_MANIFEST or /databases/appam-db-manifest.json and fill exact versions after downloading databases.",
+  "resources": {
+    "checkm1_db": {
+      "version": "2015-01-16",
+      "path": "/databases/checkm"
+    },
+    "checkm2_db": {
+      "version": "downloaded-with-checkm2",
+      "path": "/databases/checkm2"
+    },
+    "gunc_db": {
+      "version": "progenomes_2.1",
+      "path": "/databases/gunc"
+    },
+    "eggnog_db": {
+      "version": "5.0.2",
+      "path": "/databases/eggnog"
+    },
+    "abricate_db": {
+      "version": "container-configured",
+      "builtin": true
+    },
+    "rgi_db": {
+      "version": "online-or-local",
+      "path": ""
+    },
+    "antismash_db": {
+      "version": "container-configured",
+      "builtin": true
+    },
+    "prokka_db": {
+      "version": "container-configured",
+      "builtin": true
+    }
+  }
+}

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from functools import wraps
 
 from flask import g, jsonify, session
@@ -11,6 +13,25 @@ PROJECT_ROLE_LEVELS = {
     'editor': 2,
     'owner': 3,
     'admin': 4,
+}
+
+ACTION_MIN_ROLES = {
+    'view_project': 'viewer',
+    'view_files': 'viewer',
+    'view_results': 'viewer',
+    'view_provenance': 'viewer',
+    'upload_files': 'editor',
+    'edit_files': 'editor',
+    'create_manifest': 'editor',
+    'run_workflow': 'editor',
+    'cancel_own_job': 'editor',
+    'manage_project': 'owner',
+    'manage_members': 'owner',
+    'delete_project': 'owner',
+    'open_terminal': 'admin',
+    'open_opencode': 'admin',
+    'view_worker': 'admin',
+    'manage_runtime': 'admin',
 }
 
 
@@ -54,6 +75,20 @@ def user_is_admin(user: dict | None = None) -> bool:
 
 def project_role_at_least(role: str | None, required_role: str) -> bool:
     return PROJECT_ROLE_LEVELS.get(role or '', 0) >= PROJECT_ROLE_LEVELS.get(required_role, 0)
+
+
+def can(user: dict | None, action: str, project: dict | None = None) -> bool:
+    if not user or user.get('status') != 'active':
+        return False
+    if user_is_admin(user):
+        return True
+    required_role = ACTION_MIN_ROLES.get(action)
+    if not required_role:
+        return False
+    if required_role == 'admin':
+        return False
+    role = project.get('access_role') if project else None
+    return project_role_at_least(role, required_role)
 
 
 def get_project_for_user(project_id: str, user: dict | None = None, min_role: str = 'viewer'):

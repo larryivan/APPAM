@@ -51,7 +51,7 @@
               </div>
               <span class="link-text">File Manager</span>
             </router-link>
-            <button class="nav-link nav-button" @click="openOpenCodeWindow">
+            <button v-if="isAdmin" class="nav-link nav-button" @click="openOpenCodeWindow">
               <div class="link-icon">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
@@ -63,7 +63,7 @@
         </div>
         
         <div
-          v-for="section in toolSections"
+          v-for="section in visibleToolSections"
           :key="section.id"
           class="nav-section"
         >
@@ -137,6 +137,39 @@
             </router-link>
           </div>
         </div>
+
+        <div v-if="isAdmin && advancedToolSections.length" class="nav-section">
+          <div class="section-header" @click="toggleSection('advanced-tools')">
+            <div class="section-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M12 1v6m0 6v6m11-11h-6m-6 0H1"></path>
+              </svg>
+            </div>
+            <span class="section-title">Advanced Tools</span>
+            <svg class="section-arrow" :class="{ rotated: !expandedSections['advanced-tools'] }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </div>
+          <div class="section-content" v-show="expandedSections['advanced-tools']">
+            <template v-for="section in advancedToolSections" :key="section.id">
+              <router-link
+                v-for="tool in section.tools"
+                :key="tool.id"
+                :to="getToolLink(tool)"
+                class="nav-link"
+              >
+                <div class="link-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M12 1v6m0 6v6m11-11h-6m-6 0H1"></path>
+                  </svg>
+                </div>
+                <span class="link-text">{{ tool.tool_name }}</span>
+              </router-link>
+            </template>
+          </div>
+        </div>
       </div>
       
       <!-- 折叠状态的快捷图标 -->
@@ -152,14 +185,14 @@
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
           </svg>
         </router-link>
-        <button class="shortcut-link" title="OpenCode" @click="openOpenCodeWindow">
+        <button v-if="isAdmin" class="shortcut-link" title="OpenCode" @click="openOpenCodeWindow">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
           </svg>
         </button>
         <div class="shortcut-divider"></div>
         <button
-          v-for="section in toolSections"
+          v-for="section in visibleToolSections"
           :key="section.id"
           class="shortcut-link"
           :title="section.title"
@@ -231,7 +264,7 @@
     <div v-if="!sidebarCollapsed && isMobile" class="mobile-overlay" @click="closeSidebar" @touchstart.passive="closeSidebar"></div>
 
     <!-- OpenCode floating button -->
-    <div class="opencode-trigger">
+    <div v-if="isAdmin" class="opencode-trigger">
       <button class="opencode-button" :class="{ active: isOpenCodeVisible }" @click="openOpenCodeWindow" title="OpenCode">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="8 6 2 12 8 18"></polyline>
@@ -242,13 +275,13 @@
     </div>
 
     <!-- OpenCode console -->
-    <FloatingOpenCodeTerminal ref="openCodeRef" />
+    <FloatingOpenCodeTerminal v-if="isAdmin" ref="openCodeRef" />
 
     <!-- 浮动系统监视器 -->
-    <FloatingSystemMonitor />
+    <FloatingSystemMonitor v-if="isAdmin" />
 
     <!-- 浮动终端 -->
-    <FloatingTerminal />
+    <FloatingTerminal v-if="isAdmin" />
 
   </div>
 </template>
@@ -259,6 +292,7 @@ import { useRoute, useRouter } from 'vue-router'
 import FloatingTerminal from '@/components/FloatingTerminal.vue'
 import FloatingOpenCodeTerminal from '@/components/FloatingOpenCodeTerminal.vue'
 import FloatingSystemMonitor from '@/components/FloatingSystemMonitor.vue'
+import { authState } from '@/lib/auth'
 
 const route = useRoute()
 const router = useRouter()
@@ -272,6 +306,9 @@ const openCodeRef = ref(null)
 const isOpenCodeVisible = computed(() => Boolean(openCodeRef.value?.isOpen?.value))
 const toolSections = ref([])
 const isWorkflowRoute = computed(() => route.name === 'WorkflowView')
+const isAdmin = computed(() => authState.user?.role === 'admin')
+const visibleToolSections = computed(() => toolSections.value.filter((section) => section.id === 'workflow-automation'))
+const advancedToolSections = computed(() => toolSections.value.filter((section) => section.id !== 'workflow-automation'))
 
 // 侧边栏展开状态
 const expandedSections = ref({
@@ -289,6 +326,7 @@ const getToolLink = (tool) => {
 const mergeExpandedSections = (savedState = {}) => {
   const nextState = {
     workspace: savedState.workspace ?? true,
+    'advanced-tools': savedState['advanced-tools'] ?? false,
   }
   toolSections.value.forEach((section) => {
     nextState[section.id] = savedState[section.id] ?? true
