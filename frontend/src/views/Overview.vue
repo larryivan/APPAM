@@ -334,7 +334,6 @@ const projectId = computed(() => route.params.id)
 
 // 项目信息
 const project = ref(null)
-const projectLoading = ref(true)
 const dashboard = ref(null)
 const dashboardLoading = ref(false)
 
@@ -363,7 +362,6 @@ const logsContainer = ref(null)
 const autoScroll = ref(true)
 const hasNewLogs = ref(false)
 const newLogsCount = ref(0)
-const lastScrollTop = ref(0)
 const selectedLogLine = ref(-1)
 
 const syncModalLock = (isOpen) => {
@@ -382,7 +380,6 @@ const dashboardMetrics = computed(() => (dashboard.value?.metrics || []).slice(0
 // 方法
 const fetchProjectInfo = async () => {
   try {
-    projectLoading.value = true
     const response = await fetch(`/api/projects/${projectId.value}`)
     if (response.ok) {
       project.value = await response.json()
@@ -391,8 +388,6 @@ const fetchProjectInfo = async () => {
     }
   } catch (error) {
     console.error('Error fetching project info:', error)
-  } finally {
-    projectLoading.value = false
   }
 }
 

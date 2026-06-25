@@ -769,6 +769,9 @@ async function runWorkflow(forceDryRun) {
     const firstError = (preflightResult.checks || []).find((check) => check.status === 'error')
     throw new Error(firstError?.message || 'Preflight failed')
   }
+  if (preflightResult.preflight_id) {
+    payload._preflight_id = preflightResult.preflight_id
+  }
   const response = await fetch(`/api/pipeline/${projectId.value}/run/${workflowTool.value.id}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

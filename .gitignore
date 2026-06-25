@@ -58,6 +58,7 @@ projects/*/
 !projects/.gitkeep
 
 # 临时文件
+tmp/
 temp_files/
 *.tmp
 *.temp
@@ -170,4 +171,4 @@ Desktop.ini
 
 # 配置文件（保留模板）
 config.env
-local_config.py 
+local_config.py

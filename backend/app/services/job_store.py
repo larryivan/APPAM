@@ -373,7 +373,7 @@ def replace_workflow_metrics(run_id: str, metrics: list[dict]) -> None:
         conn.close()
 
 
-def _params_hash(params: dict | None) -> str:
+def workflow_params_hash(params: dict | None) -> str:
     serialized = json.dumps(params or {}, sort_keys=True, ensure_ascii=False, default=str)
     return hashlib.sha256(serialized.encode('utf-8')).hexdigest()
 
@@ -401,7 +401,7 @@ def create_workflow_preflight(
                 result.get('workflow_id'),
                 tool_name,
                 1 if result.get('ok') else 0,
-                _params_hash(params),
+                workflow_params_hash(params),
                 json.dumps(result.get('checks') or [], ensure_ascii=False),
                 json.dumps(result.get('preview') or {}, ensure_ascii=False),
                 submitted_by,

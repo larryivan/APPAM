@@ -1,4 +1,3 @@
-import os
 import uuid
 import zipfile
 from io import BytesIO
@@ -31,18 +30,18 @@ from app.services.job_store import (
     get_active_job,
     get_active_workflow_run,
     get_latest_job,
+    get_workflow_preflight,
     get_workflow_run,
     list_workflow_preflights,
     list_jobs,
     list_process_history,
     list_workflow_runs,
+    workflow_params_hash,
 )
 from app.services.tool_library import get_tool_definition
 
 
 pipeline_bp = Blueprint('pipeline_bp', __name__)
-
-BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 
 @pipeline_bp.url_value_preprocessor
@@ -287,30 +286,41 @@ def run_tool_endpoint(project_id, tool_name):
         }), 400
 
     if tool_info.get('kind') == 'workflow':
-        try:
-            preflight_result = preflight_job_request(project_id, tool_info, params)
-        except ValueError as exc:
-            return jsonify({'error': str(exc)}), 400
-        except Exception as exc:
-            return jsonify({'error': f'Failed to run preflight: {exc}'}), 500
-        if not preflight_result.get('ok'):
-            failed_preflight = create_workflow_preflight(
+        preflight_id = str(params.get('_preflight_id') or '').strip()
+        preflight = get_workflow_preflight(preflight_id) if preflight_id else None
+        params_for_hash = {key: value for key, value in params.items() if key != '_preflight_id'}
+        preflight_matches = bool(
+            preflight
+            and preflight.get('project_id') == project_id
+            and preflight.get('tool_name') == display_tool_name
+            and preflight.get('ok')
+            and preflight.get('params_hash') == workflow_params_hash(params_for_hash)
+        )
+        if not preflight_matches:
+            try:
+                preflight_result = preflight_job_request(project_id, tool_info, params_for_hash)
+            except ValueError as exc:
+                return jsonify({'error': str(exc)}), 400
+            except Exception as exc:
+                return jsonify({'error': f'Failed to run preflight: {exc}'}), 500
+            if not preflight_result.get('ok'):
+                failed_preflight = create_workflow_preflight(
+                    project_id,
+                    display_tool_name,
+                    preflight_result,
+                    params=params_for_hash,
+                    submitted_by=current_user()['id'],
+                )
+                preflight_result['preflight_id'] = failed_preflight.get('id')
+                return jsonify({'error': 'Preflight failed', 'preflight': preflight_result}), 400
+            preflight = create_workflow_preflight(
                 project_id,
                 display_tool_name,
                 preflight_result,
-                params=params,
+                params=params_for_hash,
                 submitted_by=current_user()['id'],
             )
-            preflight_result['preflight_id'] = failed_preflight.get('id')
-            return jsonify({'error': 'Preflight failed', 'preflight': preflight_result}), 400
-        preflight = create_workflow_preflight(
-            project_id,
-            display_tool_name,
-            preflight_result,
-            params=params,
-            submitted_by=current_user()['id'],
-        )
-        params = dict(params)
+        params = dict(params_for_hash)
         params['_preflight_id'] = preflight.get('id')
 
     job_id = uuid.uuid4().hex
