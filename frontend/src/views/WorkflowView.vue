@@ -748,6 +748,13 @@ function syncDisplayRun() {
     displayRun.value = null
     return
   }
+  if (route.query.run) {
+    const selected = workflowRuns.value.find((run) => run.id === route.query.run)
+    if (selected) {
+      displayRun.value = selected
+      return
+    }
+  }
   if (currentProjectTask.value.workflow_run_id) {
     const active = workflowRuns.value.find((run) => run.id === currentProjectTask.value.workflow_run_id)
     if (active) {
@@ -1238,6 +1245,7 @@ watch(
     inputDataDir.value = ''
     inputValidation.value = null
     actionError.value = ''
+    activeTab.value = ['logs', 'history', 'results'].includes(route.query.tab) ? route.query.tab : 'history'
     await refreshAll()
     selectedNodeId.value = runtimeState.value.currentStageId || workflow.value.nodes[0]?.id || null
   },
@@ -1249,6 +1257,19 @@ watch(
   (stageId) => {
     if (stageId && !selectedNodeId.value) {
       selectedNodeId.value = stageId
+    }
+  },
+)
+
+watch(
+  () => [route.query.tab, route.query.run],
+  () => {
+    if (['logs', 'history', 'results'].includes(route.query.tab)) {
+      activeTab.value = route.query.tab
+    }
+    syncDisplayRun()
+    if (activeTab.value === 'logs') {
+      fetchLogsForRun(displayRun.value)
     }
   },
 )

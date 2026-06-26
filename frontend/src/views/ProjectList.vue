@@ -109,6 +109,23 @@
             <label for="description">Project Description</label>
             <textarea v-model="newProject.description" id="description" placeholder="Describe the project goals and content..."></textarea>
           </div>
+          <div class="form-group">
+            <label>Analysis Type</label>
+            <div class="analysis-picker">
+              <label :class="{ active: newProject.analysis_workflow === 'appam-smk' }">
+                <input v-model="newProject.analysis_workflow" type="radio" value="appam-smk">
+                <span>APPAM-SMK</span>
+              </label>
+              <label :class="{ active: newProject.analysis_workflow === 'appam-paleoproteomics' }">
+                <input v-model="newProject.analysis_workflow" type="radio" value="appam-paleoproteomics">
+                <span>Paleoproteomics</span>
+              </label>
+              <label :class="{ active: newProject.analysis_workflow === '' }">
+                <input v-model="newProject.analysis_workflow" type="radio" value="">
+                <span>Later</span>
+              </label>
+            </div>
+          </div>
           <div class="form-actions">
             <button type="button" @click="closeCreateModal" class="cancel-btn">Cancel</button>
             <button type="submit" class="submit-btn">Create Project</button>
@@ -274,7 +291,8 @@ const showMembersModal = ref(false);
 const newProject = ref({
   name: '',
   creator: authState.user?.display_name || authState.user?.username || '',
-  description: ''
+  description: '',
+  analysis_workflow: 'appam-smk'
 });
 
 const editingProject = ref({});
@@ -375,15 +393,23 @@ const createProject = async () => {
   if (!newProject.value.name.trim()) return;
   
   try {
+    const { analysis_workflow, ...projectPayload } = newProject.value;
     const response = await fetch('/api/projects/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newProject.value)
+      body: JSON.stringify(projectPayload)
     });
     const createdProject = await response.json();
+    if (!response.ok) {
+      throw new Error(createdProject.error || 'Failed to create project');
+    }
     projects.value.unshift(createdProject);
     closeCreateModal();
-    router.push({ name: 'Workspace', params: { id: createdProject.id } });
+    if (analysis_workflow) {
+      router.push({ name: 'WorkflowView', params: { id: createdProject.id, workflowId: analysis_workflow } });
+    } else {
+      router.push({ name: 'Overview', params: { id: createdProject.id } });
+    }
   } catch (error) {
     console.error('Error creating project:', error);
   }
@@ -558,7 +584,8 @@ const closeCreateModal = () => {
   newProject.value = {
     name: '',
     creator: authState.user?.display_name || authState.user?.username || '',
-    description: ''
+    description: '',
+    analysis_workflow: 'appam-smk'
   };
 };
 
@@ -1089,6 +1116,39 @@ onMounted(() => {
   resize: vertical;
 }
 
+.analysis-picker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.analysis-picker label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  margin: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  color: var(--gray-600);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+}
+
+.analysis-picker label.active {
+  border-color: rgba(var(--accent-rgb), 0.3);
+  background: rgba(var(--accent-rgb), 0.08);
+  color: var(--primary-700);
+}
+
+.analysis-picker input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .form-hint {
   display: block;
   margin-top: 5px;
@@ -1375,6 +1435,10 @@ onMounted(() => {
 
   .member-controls {
     justify-content: space-between;
+  }
+
+  .analysis-picker {
+    grid-template-columns: 1fr;
   }
 }
 

@@ -53,6 +53,57 @@
         </div>
       </div>
 
+      <div class="overview-card launchpad-card">
+        <div class="card-header launchpad-header">
+          <div>
+            <h3>Start Analysis</h3>
+            <span class="launchpad-state">{{ launchpadState }}</span>
+          </div>
+          <router-link :to="`/workspace/${$route.params.id}/filemanager`" class="action-btn secondary">
+            Files
+          </router-link>
+        </div>
+        <div class="workflow-choice-grid">
+          <article
+            v-for="choice in workflowChoices"
+            :key="choice.id"
+            class="workflow-choice"
+            :class="choice.accent"
+          >
+            <div class="workflow-choice-top">
+              <div>
+                <span class="choice-kind">{{ choice.kind }}</span>
+                <h4>{{ choice.label }}</h4>
+              </div>
+              <span class="workflow-run-state" :class="latestRunsByWorkflow[choice.id]?.status || 'new'">
+                {{ workflowRunStatus(choice.id) }}
+              </span>
+            </div>
+            <div class="workflow-choice-meta">
+              <span v-if="latestRunsByWorkflow[choice.id]">
+                {{ formatDateTime(latestRunsByWorkflow[choice.id].created_at) }}
+              </span>
+              <span v-else>Not started</span>
+            </div>
+            <div class="workflow-choice-actions">
+              <router-link
+                :to="{ name: 'WorkflowView', params: { id: projectId, workflowId: choice.id } }"
+                class="action-btn primary"
+              >
+                Setup
+              </router-link>
+              <router-link
+                v-if="latestRunsByWorkflow[choice.id]"
+                :to="{ name: 'WorkflowView', params: { id: projectId, workflowId: choice.id }, query: { run: latestRunsByWorkflow[choice.id].id, tab: 'results' } }"
+                class="action-btn secondary"
+              >
+                Results
+              </router-link>
+            </div>
+          </article>
+        </div>
+      </div>
+
       <div class="overview-card dashboard-card">
         <div class="card-header">
           <h3>Workflow Readiness</h3>
@@ -95,13 +146,72 @@
         </div>
       </div>
 
+      <div class="overview-card result-center-card">
+        <div class="card-header">
+          <h3>Result Center</h3>
+          <button @click="fetchWorkflowRuns" class="refresh-btn" :class="{ loading: workflowRunsLoading }">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+          </button>
+        </div>
+
+        <div v-if="recentResultRuns.length" class="result-run-grid">
+          <article v-for="run in recentResultRuns" :key="run.id" class="result-run-card">
+            <div class="result-run-top">
+              <div>
+                <strong>{{ workflowLabel(run.workflow_id) }}</strong>
+                <span>{{ formatDateTime(run.created_at) }}</span>
+              </div>
+              <span class="status-badge compact" :class="run.status">
+                <span class="status-dot"></span>
+                {{ getStatusText(run.status) }}
+              </span>
+            </div>
+            <div class="result-metric-row" v-if="runMetricPreview(run).length">
+              <span v-for="metric in runMetricPreview(run)" :key="`${run.id}-${metric.id || metric.metric_name}`">
+                {{ metric.metric_name || metric.name }} · {{ formatMetric(metric) }}
+              </span>
+            </div>
+            <div v-else class="result-metric-row muted">
+              <span>{{ artifactCount(run) }} artifacts</span>
+            </div>
+            <div class="result-run-actions">
+              <router-link
+                :to="{ name: 'WorkflowView', params: { id: projectId, workflowId: run.workflow_id }, query: { run: run.id, tab: 'results' } }"
+                class="mini-action"
+              >
+                Open
+              </router-link>
+              <a :href="provenanceBundleUrl(run)" class="mini-action" download>
+                Bundle
+              </a>
+            </div>
+          </article>
+        </div>
+
+        <div v-else class="result-empty">
+          <p>No workflow results yet.</p>
+        </div>
+      </div>
+
       <!-- 系统性能监控 -->
       <SystemPerformance />
 
       <!-- 当前进程状态卡片 -->
       <div class="overview-card">
         <div class="card-header">
-          <h3>Current Process Status</h3>
+          <div>
+            <h3>Job Center</h3>
+            <div class="job-summary">
+              <span>Queued {{ jobSummary.queued }}</span>
+              <span>Running {{ jobSummary.running }}</span>
+              <span>Done {{ jobSummary.completed }}</span>
+              <span>Failed {{ jobSummary.failed }}</span>
+            </div>
+          </div>
           <button @click="refreshStatus" class="refresh-btn" :class="{ loading: statusLoading }">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="23 4 23 10 17 10"></polyline>
@@ -175,7 +285,7 @@
       <!-- 进程历史记录卡片 -->
       <div class="overview-card">
         <div class="card-header">
-          <h3>Process History</h3>
+          <h3>Job Queue</h3>
           <div class="header-controls">
             <select v-model="historyFilter" class="filter-select">
               <option value="all">All Status</option>
@@ -348,6 +458,8 @@ const lastTaskFingerprint = ref('')
 const processHistory = ref([])
 const historyFilter = ref('all')
 const historyLoading = ref(false)
+const workflowRuns = ref([])
+const workflowRunsLoading = ref(false)
 
 // 日志查看
 const showLogsModal = ref(false)
@@ -378,6 +490,52 @@ const filteredHistory = computed(() => {
 })
 const dashboardMetrics = computed(() => (dashboard.value?.metrics || []).slice(0, 8))
 const dashboardNotes = computed(() => dashboard.value?.recommendations || [])
+const workflowChoices = computed(() => [
+  {
+    id: 'appam-smk',
+    label: 'APPAM-SMK',
+    kind: 'Metagenomics',
+    accent: 'green',
+  },
+  {
+    id: 'appam-paleoproteomics',
+    label: 'Paleoproteomics',
+    kind: 'Proteomics',
+    accent: 'blue',
+  },
+])
+const latestRunsByWorkflow = computed(() => {
+  const mapping = {}
+  for (const run of workflowRuns.value) {
+    if (!mapping[run.workflow_id]) {
+      mapping[run.workflow_id] = run
+    }
+  }
+  return mapping
+})
+const recentResultRuns = computed(() => {
+  return workflowRuns.value
+    .filter((run) => ['completed', 'failed', 'canceled'].includes(run.status) || (run.artifacts || []).length || (run.metrics || []).length)
+    .slice(0, 6)
+})
+const jobSummary = computed(() => {
+  const counts = { queued: 0, running: 0, completed: 0, failed: 0 }
+  for (const item of processHistory.value) {
+    if (item.status === 'queued') counts.queued += 1
+    if (item.status === 'starting' || item.status === 'running') counts.running += 1
+    if (item.status === 'completed') counts.completed += 1
+    if (item.status === 'failed') counts.failed += 1
+  }
+  return counts
+})
+const launchpadState = computed(() => {
+  if (currentTask.value?.status && currentTask.value.status !== 'not_found') {
+    return getStatusText(currentTask.value.status)
+  }
+  if (dashboard.value?.readiness?.has_completed_run) return 'Results ready'
+  if (dashboard.value?.readiness?.has_passed_preflight) return 'Preflight passed'
+  return 'Ready'
+})
 
 const preflightSummary = computed(() => {
   const preflight = dashboard.value?.latest_preflight
@@ -477,6 +635,21 @@ const fetchProcessHistory = async () => {
     console.error('Error fetching process history:', error)
   } finally {
     historyLoading.value = false
+  }
+}
+
+const fetchWorkflowRuns = async () => {
+  try {
+    workflowRunsLoading.value = true
+    const response = await fetch(`/api/pipeline/${projectId.value}/workflow-runs?limit=12`)
+    if (response.ok) {
+      const payload = await response.json()
+      workflowRuns.value = payload.workflow_runs || []
+    }
+  } catch (error) {
+    console.error('Error fetching workflow runs:', error)
+  } finally {
+    workflowRunsLoading.value = false
   }
 }
 
@@ -783,8 +956,8 @@ const formatDuration = (seconds) => {
 }
 
 const formatMetric = (metric) => {
-  const value = metric.value
-  const text = metric.text
+  const value = metric.value ?? metric.metric_value
+  const text = metric.text ?? metric.metric_text
   const unit = metric.unit || ''
   if (value !== null && value !== undefined && value !== '') {
     const numeric = Number(value)
@@ -792,6 +965,33 @@ const formatMetric = (metric) => {
     return `${formatted}${unit}`
   }
   return text || 'Recorded'
+}
+
+const workflowLabel = (workflowId) => {
+  const mapping = {
+    'appam-smk': 'APPAM-SMK',
+    'appam-paleoproteomics': 'Paleoproteomics',
+  }
+  return mapping[workflowId] || workflowId || 'Workflow'
+}
+
+const workflowRunStatus = (workflowId) => {
+  const run = latestRunsByWorkflow.value[workflowId]
+  if (!run) return 'New'
+  return getStatusText(run.status)
+}
+
+const runMetricPreview = (run) => {
+  return (run?.metrics || []).slice(0, 4)
+}
+
+const artifactCount = (run) => {
+  return run?.artifacts?.length || 0
+}
+
+const provenanceBundleUrl = (run) => {
+  if (!run?.id) return '#'
+  return `/api/pipeline/${projectId.value}/workflow-runs/${run.id}/provenance-bundle`
 }
 
 // 定时刷新当前状态
@@ -802,12 +1002,14 @@ onMounted(() => {
   fetchDashboard()
   fetchCurrentStatus()
   fetchProcessHistory()
+  fetchWorkflowRuns()
   
   // 每5秒刷新一次状态与历史
   statusInterval = setInterval(() => {
     fetchCurrentStatus()
     fetchDashboard()
     fetchProcessHistory()
+    fetchWorkflowRuns()
   }, 5000)
 })
 
@@ -951,6 +1153,120 @@ watch(
   background: var(--gray-200);
 }
 
+.launchpad-card {
+  display: grid;
+  gap: var(--spacing-4);
+}
+
+.launchpad-header {
+  align-items: flex-start;
+}
+
+.launchpad-state {
+  display: inline-flex;
+  margin-top: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-xl);
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--primary-700);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+}
+
+.workflow-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--spacing-4);
+}
+
+.workflow-choice {
+  display: grid;
+  gap: var(--spacing-4);
+  padding: var(--spacing-4);
+  border-radius: var(--radius-lg);
+  border: var(--border-width) solid var(--gray-200);
+  background: var(--gray-50);
+}
+
+.workflow-choice.green {
+  border-color: rgba(34, 197, 94, 0.18);
+  background: linear-gradient(180deg, rgba(240, 253, 244, 0.8), #fff);
+}
+
+.workflow-choice.blue {
+  border-color: rgba(37, 99, 235, 0.16);
+  background: linear-gradient(180deg, rgba(239, 246, 255, 0.82), #fff);
+}
+
+.workflow-choice-top,
+.result-run-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-3);
+}
+
+.choice-kind {
+  display: block;
+  color: var(--gray-500);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  text-transform: uppercase;
+}
+
+.workflow-choice h4 {
+  margin: 4px 0 0;
+  color: var(--gray-800);
+  font-size: var(--text-xl);
+}
+
+.workflow-run-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: var(--radius-xl);
+  background: var(--gray-100);
+  color: var(--gray-600);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  white-space: nowrap;
+}
+
+.workflow-run-state.completed {
+  background: var(--success-50);
+  color: var(--success-600);
+}
+
+.workflow-run-state.failed,
+.workflow-run-state.error {
+  background: var(--error-50);
+  color: var(--error-600);
+}
+
+.workflow-run-state.running,
+.workflow-run-state.starting {
+  background: var(--primary-100);
+  color: var(--primary-700);
+}
+
+.workflow-run-state.queued {
+  background: var(--warning-50);
+  color: var(--warning-600);
+}
+
+.workflow-choice-meta {
+  color: var(--gray-500);
+  font-size: var(--text-sm);
+}
+
+.workflow-choice-actions,
+.result-run-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2);
+}
+
 /* 项目详情 */
 .detail-grid {
   display: grid;
@@ -1071,6 +1387,90 @@ watch(
   color: var(--gray-700);
   font-size: var(--text-xs);
   font-weight: var(--font-medium);
+}
+
+.result-center-card {
+  display: grid;
+  gap: var(--spacing-3);
+}
+
+.result-run-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--spacing-3);
+}
+
+.result-run-card {
+  display: grid;
+  gap: var(--spacing-3);
+  padding: var(--spacing-4);
+  border-radius: var(--radius-lg);
+  background: var(--gray-50);
+  border: var(--border-width) solid var(--gray-200);
+}
+
+.result-run-top strong {
+  display: block;
+  color: var(--gray-800);
+}
+
+.result-run-top span {
+  color: var(--gray-500);
+  font-size: var(--text-xs);
+}
+
+.status-badge.compact {
+  padding: 3px 9px;
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.result-metric-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2);
+}
+
+.result-metric-row span {
+  padding: 4px 9px;
+  border-radius: var(--radius-xl);
+  background: white;
+  border: var(--border-width) solid var(--gray-200);
+  color: var(--gray-700);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+}
+
+.result-metric-row.muted span {
+  color: var(--gray-500);
+}
+
+.result-empty {
+  padding: var(--spacing-6);
+  border-radius: var(--radius-lg);
+  background: var(--gray-50);
+  color: var(--gray-500);
+  text-align: center;
+}
+
+.result-empty p {
+  margin: 0;
+}
+
+.job-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2);
+  margin-top: var(--spacing-2);
+}
+
+.job-summary span {
+  padding: 4px 9px;
+  border-radius: var(--radius-xl);
+  background: var(--gray-100);
+  color: var(--gray-600);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
 }
 
 /* 进程状态 */
@@ -1363,9 +1763,12 @@ watch(
   border: none;
   border-radius: 999px;
   padding: 6px 10px;
+  background: var(--gray-100);
+  color: var(--gray-700);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .mini-action.danger {
