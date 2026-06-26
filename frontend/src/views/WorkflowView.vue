@@ -15,8 +15,11 @@
           <span class="status-dot"></span>
           <span>{{ statusText }}</span>
         </div>
-        <button class="hero-btn primary" @click="openRunDialog" :disabled="disableRunActions">
-          Run Workflow
+        <button class="hero-btn primary" @click="handleOneClickDryRun" :disabled="disableRunActions || !hasInputSetup">
+          Prepare + Dry Run
+        </button>
+        <button class="hero-btn secondary" @click="openRunDialog" :disabled="disableRunActions">
+          Run...
         </button>
         <button
           v-if="activeWorkflowRun"
@@ -48,13 +51,90 @@
       Another task is active in this project: <strong>{{ currentProjectTask.tool }}</strong>. Workflow execution is locked until it finishes.
     </div>
 
+    <section v-if="hasInputSetup" class="workflow-input-card">
+      <div class="panel-header compact">
+        <div>
+          <h2>Input Setup</h2>
+          <p>{{ inputSetupSubtitle }}</p>
+        </div>
+        <div class="input-actions">
+          <button class="hero-btn primary" @click="handleOneClickDryRun" :disabled="disableRunActions || loadingState">
+            Prepare + Dry Run
+          </button>
+          <button class="hero-btn secondary" @click="handlePrepareInputs" :disabled="loadingState">
+            Prepare Table
+          </button>
+          <button class="hero-btn subtle" @click="handleValidateInputs" :disabled="loadingState || !preparedTablePath">
+            Validate
+          </button>
+        </div>
+      </div>
+
+      <div class="input-setup-row">
+        <button class="file-picker-btn compact" @click="openInputDirPicker">
+          {{ inputDataDir || defaultInputDir }}
+        </button>
+        <span class="setup-state" :class="inputSetupState">
+          {{ inputSetupStatus || defaultInputStatus }}
+        </span>
+        <span v-if="preparedTablePath" class="setup-path mono">{{ preparedTablePath }}</span>
+      </div>
+
+      <div v-if="workflow.id === 'appam-paleoproteomics'" class="input-setup-row reference-row">
+        <button
+          class="file-picker-btn compact"
+          @click="openFilePicker({ name: 'fasta_path', type: 'file', extensions: ['.fasta', '.fa', '.faa'] })"
+        >
+          {{ formValues.fasta_path || 'Reference FASTA' }}
+        </button>
+        <span class="setup-state" :class="formValues.fasta_path ? 'ok' : 'error'">
+          {{ formValues.fasta_path ? 'Reference set' : 'Reference required' }}
+        </span>
+      </div>
+
+      <div v-if="detectedSamples.length" class="sample-table-wrap">
+        <table class="sample-table">
+          <thead>
+            <tr v-if="workflow.id === 'appam-smk'">
+              <th>Sample</th>
+              <th>R1</th>
+              <th>R2</th>
+              <th>Status</th>
+            </tr>
+            <tr v-else>
+              <th>Sample</th>
+              <th>Input</th>
+              <th>Type</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="sample in detectedSamples" :key="sample.sample_id">
+              <template v-if="workflow.id === 'appam-smk'">
+                <td>{{ sample.sample_id }}</td>
+                <td class="mono compact-cell">{{ sample.forward_reads || '-' }}</td>
+                <td class="mono compact-cell">{{ sample.reverse_reads || '-' }}</td>
+                <td>
+                  <span class="sample-state" :class="{ ok: sample.forward_reads && sample.reverse_reads, error: !(sample.forward_reads && sample.reverse_reads) }">
+                    {{ sample.forward_reads && sample.reverse_reads ? 'Ready' : 'Pair missing' }}
+                  </span>
+                </td>
+              </template>
+              <template v-else>
+                <td>{{ sample.sample_id }}</td>
+                <td class="mono compact-cell">{{ sample.input_path }}</td>
+                <td>{{ sample.input_path?.toLowerCase().endsWith('.d') ? 'Bruker' : 'Thermo' }}</td>
+              </template>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="workflow-graph-card">
       <div class="panel-header">
         <div>
           <h2>Workflow Map</h2>
-          <p>
-            The graph stays central and the current path carries the data flow animation.
-          </p>
+          <p>Live workflow status.</p>
         </div>
         <div class="graph-side">
           <div class="graph-meta-bar">
@@ -187,7 +267,7 @@
           <div>
             <div class="workflow-kicker">Run Workflow</div>
             <h3>{{ workflow.title }}</h3>
-            <p>Only parameters are shown here. The main page stays focused on execution.</p>
+            <p>Review inputs and options.</p>
           </div>
           <button class="dialog-close" @click="closeRunDialog" aria-label="Close dialog">×</button>
         </div>
@@ -203,25 +283,6 @@
             >
               {{ preset.label }}
             </button>
-          </div>
-
-          <div v-if="showManifestTools" class="manifest-tools">
-            <div class="manifest-copy">
-              <strong>Input Manifest</strong>
-              <span>{{ manifestStatus || 'No scan yet' }}</span>
-            </div>
-            <div class="manifest-actions">
-              <button class="hero-btn secondary" @click="handleScanData" :disabled="!canPrepareManifest || loadingState">
-                Scan Data
-              </button>
-              <button class="hero-btn subtle" @click="handleCreateManifest" :disabled="!canPrepareManifest || loadingState">
-                Create Manifest
-              </button>
-            </div>
-            <div v-if="manifestScan" class="manifest-counts">
-              <span>{{ manifestScan.counts?.fastq_samples || 0 }} FASTQ samples</span>
-              <span>{{ manifestScan.counts?.complete_fastq_pairs || 0 }} complete pairs</span>
-            </div>
           </div>
 
           <div v-for="param in visibleParameters" :key="param.name" class="compact-field dialog-field">
@@ -332,6 +393,8 @@ const tempFileSelection = ref(null)
 const runtimeHealth = ref(null)
 const manifestStatus = ref('')
 const manifestScan = ref(null)
+const inputDataDir = ref('')
+const inputValidation = ref(null)
 
 let refreshTimer = null
 
@@ -382,13 +445,56 @@ const disableRunActions = computed(() => {
 const canRetryRun = computed(() => Boolean(displayRun.value && !['queued', 'starting', 'running'].includes(displayRun.value.status)))
 const canResumeRun = computed(() => Boolean(displayRun.value && ['failed', 'canceled'].includes(displayRun.value.status)))
 const runtimeHealthChecks = computed(() => runtimeHealth.value?.checks || [])
-const showManifestTools = computed(() => workflow.value?.id === 'appam-smk')
-const canPrepareManifest = computed(() => Boolean(showManifestTools.value && formValues.value.raw_data_dir))
+const hasInputSetup = computed(() => ['appam-smk', 'appam-paleoproteomics'].includes(workflow.value?.id))
+const defaultInputDir = computed(() => {
+  if (workflow.value?.id === 'appam-paleoproteomics') return 'raw_ms'
+  return 'raw'
+})
+const defaultTablePath = computed(() => {
+  if (workflow.value?.id === 'appam-paleoproteomics') return 'workflow_templates/appam-paleoproteomics/samples.tsv'
+  return 'workflow_templates/appam-smk/samples.tsv'
+})
+const preparedTablePath = computed(() => {
+  if (workflow.value?.id === 'appam-paleoproteomics') return formValues.value.sample_table
+  return formValues.value.sample_manifest
+})
+const inputSetupSubtitle = computed(() => {
+  if (workflow.value?.id === 'appam-paleoproteomics') return 'RAW/.d files and sample table'
+  return 'FASTQ pairs and sample table'
+})
+const detectedSamples = computed(() => {
+  if (workflow.value?.id === 'appam-paleoproteomics') return manifestScan.value?.proteomics_samples || []
+  return manifestScan.value?.fastq_samples || []
+})
+const defaultInputStatus = computed(() => {
+  const count = detectedSamples.value.length
+  if (!count) return 'No samples scanned'
+  if (workflow.value?.id === 'appam-smk') {
+    const complete = manifestScan.value?.counts?.complete_fastq_pairs || 0
+    return `${complete}/${count} pairs ready`
+  }
+  return `${count} sample${count === 1 ? '' : 's'} ready`
+})
+const inputSetupStatus = computed(() => {
+  if (manifestStatus.value) return manifestStatus.value
+  if (!inputValidation.value) return ''
+  if (inputValidation.value.ok) {
+    const count = inputValidation.value.samples?.length || 0
+    return `${count} sample${count === 1 ? '' : 's'} validated`
+  }
+  const firstError = (inputValidation.value.checks || []).find((check) => check.status === 'error')
+  return compactCheckMessage(firstError)
+})
+const inputSetupState = computed(() => {
+  if (inputValidation.value) return inputValidation.value.ok ? 'ok' : 'error'
+  if (workflow.value?.id === 'appam-smk' && detectedSamples.value.length) {
+    return (manifestScan.value?.counts?.complete_fastq_pairs || 0) === detectedSamples.value.length ? 'ok' : 'error'
+  }
+  return detectedSamples.value.length ? 'ok' : ''
+})
 const basicParameterNames = computed(() => {
   if (workflow.value?.id === 'appam-smk') {
     return new Set([
-      'sample_manifest',
-      'raw_data_dir',
       'profile',
       'cores',
       'preprocess_method',
@@ -404,7 +510,6 @@ const basicParameterNames = computed(() => {
   }
   if (workflow.value?.id === 'appam-paleoproteomics') {
     return new Set([
-      'sample_table',
       'fasta_path',
       'cores',
       'match_between_runs',
@@ -529,6 +634,17 @@ function formatValue(value) {
   return value || ''
 }
 
+function compactCheckMessage(check) {
+  if (!check) return 'Validation failed'
+  if (check.name === 'sample_manifest' || check.name === 'sample_table') return 'Sample table not found'
+  if (check.name === 'raw_data_dir') return 'Data folder not found'
+  if (check.name === 'sample_rows') return 'No samples in table'
+  if (check.name === 'sample_table_columns') return check.message || 'Sample table columns missing'
+  if (/_R[12]$/i.test(check.name || '')) return `${check.name} missing`
+  if (String(check.message || '').startsWith('Input missing')) return `${check.name} input missing`
+  return check.message || 'Validation failed'
+}
+
 function applyPreset(preset) {
   activePresetId.value = preset.id
   formValues.value = {
@@ -537,6 +653,28 @@ function applyPreset(preset) {
   }
   if (Object.prototype.hasOwnProperty.call(preset.values, 'dry_run')) {
     runDialogDryRun.value = Boolean(preset.values.dry_run)
+  }
+}
+
+function applyWorkflowDefaults() {
+  if (workflow.value?.id === 'appam-smk') {
+    if (!formValues.value.raw_data_dir) {
+      formValues.value.raw_data_dir = 'raw'
+    }
+    if (!formValues.value.sample_manifest) {
+      formValues.value.sample_manifest = defaultTablePath.value
+    }
+    inputDataDir.value = formValues.value.raw_data_dir || defaultInputDir.value
+    return
+  }
+  if (workflow.value?.id === 'appam-paleoproteomics') {
+    if (!formValues.value.sample_table) {
+      formValues.value.sample_table = defaultTablePath.value
+    }
+    if (!formValues.value.fasta_path) {
+      formValues.value.fasta_path = 'workflow_templates/appam-paleoproteomics/reference.fasta'
+    }
+    inputDataDir.value = inputDataDir.value || defaultInputDir.value
   }
 }
 
@@ -563,6 +701,7 @@ async function fetchWorkflowTool() {
   workflowTool.value = nextTool || null
   if (nextTool) {
     formValues.value = initWorkflowFormValues(nextTool.parameters || [])
+    applyWorkflowDefaults()
   }
 }
 
@@ -687,52 +826,201 @@ async function safeFetchHealth() {
   }
 }
 
-async function handleScanData() {
-  if (!canPrepareManifest.value) return
-  actionError.value = ''
-  manifestStatus.value = ''
-  manifestScan.value = null
-  try {
-    const response = await fetch(
-      `/api/pipeline/${projectId.value}/data/scan?path=${encodeURIComponent(formValues.value.raw_data_dir)}`,
-    )
-    const payload = await response.json()
-    if (!response.ok) {
-      throw new Error(payload.error || 'Failed to scan data')
+function workflowDataCandidates() {
+  if (!workflow.value) return ['.']
+  const candidates = [
+    inputDataDir.value,
+    formValues.value.raw_data_dir,
+    defaultInputDir.value,
+  ]
+  if (workflow.value.id === 'appam-smk') {
+    candidates.push('workflow_templates/appam-smk/raw_fastq', 'workflow_templates/appam-smk', '.')
+  } else if (workflow.value.id === 'appam-paleoproteomics') {
+    candidates.push('workflow_templates/appam-paleoproteomics/raw_ms', 'workflow_templates/appam-paleoproteomics', '.')
+  }
+  return [...new Set(candidates.map((value) => String(value || '').trim()).filter(Boolean))]
+}
+
+function readySampleCount(scan) {
+  if (!scan) return 0
+  if (workflow.value?.id === 'appam-paleoproteomics') {
+    return scan.proteomics_samples?.length || 0
+  }
+  return scan.counts?.complete_fastq_pairs || 0
+}
+
+function parentPath(path) {
+  const value = String(path || '').replace(/\\/g, '/')
+  const index = value.lastIndexOf('/')
+  if (index <= 0) return index === 0 ? '/' : '.'
+  return value.slice(0, index)
+}
+
+function inferInputRootFromScan(scan) {
+  if (!scan) return ''
+  if (workflow.value?.id === 'appam-smk') {
+    const parents = new Set()
+    for (const sample of scan.fastq_samples || []) {
+      if (!sample.forward_reads || !sample.reverse_reads) continue
+      const forwardParent = parentPath(sample.forward_reads)
+      const reverseParent = parentPath(sample.reverse_reads)
+      if (forwardParent === reverseParent) {
+        parents.add(forwardParent)
+      }
     }
-    manifestScan.value = payload
-    manifestStatus.value = `${payload.counts?.complete_fastq_pairs || 0}/${payload.counts?.fastq_samples || 0} complete FASTQ pairs`
+    return parents.size === 1 ? [...parents][0] : ''
+  }
+  if (workflow.value?.id === 'appam-paleoproteomics') {
+    const parents = new Set((scan.proteomics_samples || []).map((sample) => parentPath(sample.input_path)))
+    return parents.size === 1 ? [...parents][0] : ''
+  }
+  return ''
+}
+
+async function scanInputData(path) {
+  const response = await fetch(`/api/pipeline/${projectId.value}/data/scan?path=${encodeURIComponent(path || '.')}`)
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(payload.error || `Failed to scan ${path || '.'}`)
+  }
+  return payload
+}
+
+async function scanBestInputDir() {
+  let firstError = null
+  let lastSuccess = null
+  for (const candidate of workflowDataCandidates()) {
+    try {
+      const scan = await scanInputData(candidate)
+      lastSuccess = scan
+      if (readySampleCount(scan) > 0) return scan
+    } catch (error) {
+      firstError ||= error
+    }
+  }
+  if (lastSuccess) return lastSuccess
+  throw firstError || new Error('No input directory found')
+}
+
+async function validatePreparedInputs({ throwOnError = false } = {}) {
+  if (!hasInputSetup.value) return null
+  const payload = {
+    workflow_id: workflow.value.id,
+  }
+  if (workflow.value.id === 'appam-smk') {
+    payload.sample_manifest = formValues.value.sample_manifest
+    payload.raw_data_dir = formValues.value.raw_data_dir
+  } else {
+    payload.sample_table = formValues.value.sample_table
+  }
+  const response = await fetch(`/api/pipeline/${projectId.value}/data/validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const result = await response.json().catch(() => ({}))
+  if (!response.ok && result.error) {
+    throw new Error(result.error)
+  }
+  inputValidation.value = result
+  if (result.ok) {
+    const count = result.samples?.length || 0
+    manifestStatus.value = `${count} sample${count === 1 ? '' : 's'} ready`
+  } else {
+    const firstError = (result.checks || []).find((check) => check.status === 'error')
+    manifestStatus.value = compactCheckMessage(firstError)
+    if (throwOnError) {
+      throw new Error(manifestStatus.value)
+    }
+  }
+  return result
+}
+
+async function prepareInputTable({ overwrite = true } = {}) {
+  if (!hasInputSetup.value) return null
+  manifestStatus.value = ''
+  inputValidation.value = null
+
+  const scan = await scanBestInputDir()
+  const inferredRoot = inferInputRootFromScan(scan)
+  inputDataDir.value = inferredRoot || scan.root || inputDataDir.value || defaultInputDir.value
+
+  const count = readySampleCount(scan)
+  if (count < 1) {
+    const label = workflow.value.id === 'appam-paleoproteomics' ? 'RAW/.d files' : 'complete FASTQ pairs'
+    throw new Error(`No ${label} found in ${inputDataDir.value}`)
+  }
+  manifestScan.value = inferredRoot && inferredRoot !== scan.root ? await scanInputData(inferredRoot) : scan
+
+  const body = {
+    workflow_id: workflow.value.id,
+    output_path: preparedTablePath.value || defaultTablePath.value,
+    overwrite,
+  }
+  if (workflow.value.id === 'appam-smk') {
+    formValues.value.raw_data_dir = inputDataDir.value
+    body.raw_data_dir = inputDataDir.value
+  } else {
+    body.data_dir = inputDataDir.value
+  }
+
+  const response = await fetch(`/api/pipeline/${projectId.value}/data/create-manifest`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(payload.error || 'Failed to prepare sample table')
+  }
+
+  if (workflow.value.id === 'appam-smk') {
+    formValues.value.sample_manifest = payload.path
+  } else {
+    formValues.value.sample_table = payload.path
+  }
+  manifestScan.value = payload.scan || scan
+  manifestStatus.value = `${payload.samples_written || count} sample${(payload.samples_written || count) === 1 ? '' : 's'} ready`
+  await validatePreparedInputs({ throwOnError: true })
+  return payload
+}
+
+async function handlePrepareInputs() {
+  actionError.value = ''
+  loadingState.value = true
+  try {
+    await prepareInputTable({ overwrite: true })
   } catch (error) {
     showActionError(error)
+  } finally {
+    loadingState.value = false
   }
 }
 
-async function handleCreateManifest() {
-  if (!canPrepareManifest.value) return
+async function handleValidateInputs() {
   actionError.value = ''
-  manifestStatus.value = ''
+  loadingState.value = true
   try {
-    const outputPath = formValues.value.sample_manifest || 'workflow_templates/appam-smk/samples.tsv'
-    const response = await fetch(`/api/pipeline/${projectId.value}/data/create-manifest`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        workflow_id: 'appam-smk',
-        raw_data_dir: formValues.value.raw_data_dir,
-        output_path: outputPath,
-        overwrite: false,
-      }),
-    })
-    const payload = await response.json()
-    if (!response.ok) {
-      throw new Error(payload.error || 'Failed to create manifest')
-    }
-    formValues.value.sample_manifest = payload.path
-    manifestScan.value = payload.scan || null
-    manifestStatus.value = `Manifest created: ${payload.path}`
+    await validatePreparedInputs({ throwOnError: true })
   } catch (error) {
     showActionError(error)
+  } finally {
+    loadingState.value = false
   }
+}
+
+async function handleOneClickDryRun() {
+  actionError.value = ''
+  loadingState.value = true
+  try {
+    await prepareInputTable({ overwrite: true })
+  } catch (error) {
+    showActionError(error)
+    loadingState.value = false
+    return
+  }
+  loadingState.value = false
+  await handleRun(true)
 }
 
 function validateRequiredFields() {
@@ -910,9 +1198,25 @@ function openFilePicker(param) {
   showFilePicker.value = true
 }
 
+function openInputDirPicker() {
+  currentPickerParam.value = { name: '__input_data_dir', type: 'directory' }
+  tempFileSelection.value = inputDataDir.value || defaultInputDir.value
+  showFilePicker.value = true
+}
+
 function closeFilePicker() {
   if (currentPickerParam.value && tempFileSelection.value !== null) {
-    formValues.value[currentPickerParam.value.name] = tempFileSelection.value
+    if (currentPickerParam.value.name === '__input_data_dir') {
+      inputDataDir.value = tempFileSelection.value
+      manifestStatus.value = ''
+      manifestScan.value = null
+      inputValidation.value = null
+      if (workflow.value?.id === 'appam-smk') {
+        formValues.value.raw_data_dir = tempFileSelection.value
+      }
+    } else {
+      formValues.value[currentPickerParam.value.name] = tempFileSelection.value
+    }
   }
   showFilePicker.value = false
   currentPickerParam.value = null
@@ -931,6 +1235,8 @@ watch(
     showAdvancedParams.value = false
     manifestStatus.value = ''
     manifestScan.value = null
+    inputDataDir.value = ''
+    inputValidation.value = null
     actionError.value = ''
     await refreshAll()
     selectedNodeId.value = runtimeState.value.currentStageId || workflow.value.nodes[0]?.id || null
@@ -1216,12 +1522,18 @@ onUnmounted(() => {
   color: #6d28d9;
 }
 
+.workflow-input-card,
 .workflow-graph-card,
 .workflow-activity-card {
   background: rgba(255, 255, 255, 0.88);
   border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 22px;
   box-shadow: 0 14px 30px rgba(15, 23, 42, 0.05);
+}
+
+.workflow-input-card {
+  margin: 14px 24px 0;
+  overflow: hidden;
 }
 
 .workflow-graph-card {
@@ -1245,6 +1557,119 @@ onUnmounted(() => {
   margin: 4px 0 0;
   color: #64748b;
   font-size: 0.92rem;
+}
+
+.panel-header.compact {
+  align-items: center;
+  padding-bottom: 14px;
+}
+
+.input-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.input-setup-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px 14px;
+}
+
+.input-setup-row.reference-row {
+  padding-top: 0;
+}
+
+.file-picker-btn.compact {
+  min-height: 36px;
+  border-radius: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setup-state,
+.sample-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.14);
+  color: #475569;
+  font-size: 0.76rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.setup-state.ok,
+.sample-state.ok {
+  background: rgba(55, 168, 102, 0.14);
+  color: #166534;
+}
+
+.setup-state.error {
+  background: rgba(220, 38, 38, 0.12);
+  color: #b91c1c;
+}
+
+.sample-state.error {
+  background: rgba(220, 38, 38, 0.1);
+  color: #b91c1c;
+}
+
+.setup-path {
+  min-width: 0;
+  color: #64748b;
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.sample-table-wrap {
+  max-height: 260px;
+  margin: 0 18px 18px;
+  overflow: auto;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: #fff;
+}
+
+.sample-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+}
+
+.sample-table th,
+.sample-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  text-align: left;
+  font-size: 0.82rem;
+  vertical-align: top;
+}
+
+.sample-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+}
+
+.sample-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.compact-cell {
+  max-width: 360px;
+  color: #475569;
+  overflow-wrap: anywhere;
 }
 
 .graph-side {
@@ -1568,15 +1993,6 @@ onUnmounted(() => {
   border: 1px solid rgba(148, 163, 184, 0.14);
 }
 
-.manifest-tools {
-  display: grid;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 18px;
-  background: rgba(248, 250, 252, 0.94);
-  border: 1px solid rgba(148, 163, 184, 0.16);
-}
-
 .preset-strip {
   display: flex;
   flex-wrap: wrap;
@@ -1606,39 +2022,6 @@ onUnmounted(() => {
   width: 100%;
   min-height: 40px;
   background: rgba(148, 163, 184, 0.08);
-}
-
-.manifest-copy {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  color: #64748b;
-  font-size: 0.84rem;
-}
-
-.manifest-copy strong {
-  color: #0f172a;
-  font-size: 0.92rem;
-}
-
-.manifest-actions,
-.manifest-counts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.manifest-counts span {
-  display: inline-flex;
-  align-items: center;
-  min-height: 26px;
-  padding: 0 9px;
-  border-radius: 999px;
-  background: rgba(47, 111, 237, 0.08);
-  color: #1d4ed8;
-  font-size: 0.76rem;
-  font-weight: 700;
 }
 
 .run-mode-toggle {
@@ -1844,6 +2227,7 @@ onUnmounted(() => {
     max-width: 100%;
   }
 
+  .workflow-input-card,
   .workflow-graph-card {
     margin-left: 16px;
     margin-right: 16px;
@@ -1856,6 +2240,14 @@ onUnmounted(() => {
   .panel-header {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .input-actions {
+    justify-content: flex-start;
+  }
+
+  .input-setup-row {
+    grid-template-columns: 1fr;
   }
 
   .graph-side,

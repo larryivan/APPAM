@@ -67,18 +67,18 @@
         <div class="dashboard-grid">
           <div class="readiness-tile" :class="{ ok: dashboard?.readiness?.has_passed_preflight }">
             <span class="tile-label">Latest Preflight</span>
-            <strong>{{ dashboard?.latest_preflight ? (dashboard.latest_preflight.ok ? 'Passed' : 'Failed') : 'Missing' }}</strong>
-            <small>{{ formatDateTime(dashboard?.latest_preflight?.created_at) }}</small>
+            <strong>{{ preflightSummary.value }}</strong>
+            <small>{{ preflightSummary.detail }}</small>
           </div>
           <div class="readiness-tile" :class="{ ok: dashboard?.readiness?.has_completed_run }">
             <span class="tile-label">Workflow Runs</span>
-            <strong>{{ dashboard?.latest_run?.status ? getStatusText(dashboard.latest_run.status) : 'No Run' }}</strong>
-            <small>{{ dashboard?.latest_run?.workflow_id || 'No workflow history' }}</small>
+            <strong>{{ workflowRunSummary.value }}</strong>
+            <small>{{ workflowRunSummary.detail }}</small>
           </div>
           <div class="readiness-tile" :class="{ ok: dashboard?.readiness?.database_manifest_found }">
             <span class="tile-label">Database Manifest</span>
-            <strong>{{ dashboard?.database_manifest?.found ? 'Recorded' : 'Inferred' }}</strong>
-            <small>{{ dashboard?.readiness?.database_resources_present || 0 }}/{{ dashboard?.readiness?.database_resources_total || 0 }} resources</small>
+            <strong>{{ databaseSummary.value }}</strong>
+            <small>{{ databaseSummary.detail }}</small>
           </div>
         </div>
 
@@ -89,8 +89,9 @@
           </div>
         </div>
 
-        <div v-if="dashboard?.recommendations?.length" class="dashboard-notes">
-          <div v-for="note in dashboard.recommendations" :key="note" class="dashboard-note">{{ note }}</div>
+        <div v-if="dashboardNotes.length" class="dashboard-notes">
+          <span class="dashboard-note-label">Next</span>
+          <span v-for="note in dashboardNotes" :key="note" class="dashboard-note">{{ note }}</span>
         </div>
       </div>
 
@@ -376,6 +377,39 @@ const filteredHistory = computed(() => {
   return processHistory.value.filter(item => item.status === historyFilter.value)
 })
 const dashboardMetrics = computed(() => (dashboard.value?.metrics || []).slice(0, 8))
+const dashboardNotes = computed(() => dashboard.value?.recommendations || [])
+
+const preflightSummary = computed(() => {
+  const preflight = dashboard.value?.latest_preflight
+  if (!preflight) {
+    return { value: 'Not run', detail: 'Inputs unchecked' }
+  }
+  return {
+    value: preflight.ok ? 'Passed' : 'Failed',
+    detail: formatDateTime(preflight.created_at),
+  }
+})
+
+const workflowRunSummary = computed(() => {
+  const run = dashboard.value?.latest_run
+  if (!run) {
+    return { value: 'None', detail: 'New project' }
+  }
+  return {
+    value: getStatusText(run.status),
+    detail: run.workflow_id || formatDateTime(run.created_at),
+  }
+})
+
+const databaseSummary = computed(() => {
+  const found = Boolean(dashboard.value?.database_manifest?.found)
+  const present = dashboard.value?.readiness?.database_resources_present || 0
+  const total = dashboard.value?.readiness?.database_resources_total || 0
+  return {
+    value: found ? 'Recorded' : 'No manifest',
+    detail: total ? `${present}/${total} resources detected` : 'No resources detected',
+  }
+})
 
 // 方法
 const fetchProjectInfo = async () => {
@@ -952,19 +986,19 @@ watch(
 
 .dashboard-card {
   display: grid;
-  gap: var(--spacing-4);
+  gap: var(--spacing-3);
 }
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: var(--spacing-3);
 }
 
 .readiness-tile {
   display: grid;
   gap: var(--spacing-1);
-  padding: var(--spacing-4);
+  padding: var(--spacing-3);
   border-radius: var(--radius-md);
   background: var(--gray-50);
   border: var(--border-width) solid var(--gray-200);
@@ -984,11 +1018,12 @@ watch(
 
 .readiness-tile strong {
   color: var(--gray-800);
-  font-size: var(--text-xl);
+  font-size: var(--text-lg);
 }
 
 .readiness-tile small {
   color: var(--gray-500);
+  font-size: var(--text-sm);
 }
 
 .metric-strip {
@@ -1016,16 +1051,25 @@ watch(
 }
 
 .dashboard-notes {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--spacing-2);
 }
 
+.dashboard-note-label {
+  color: var(--gray-500);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  text-transform: uppercase;
+}
+
 .dashboard-note {
-  padding: var(--spacing-3);
-  border-radius: var(--radius-md);
-  background: var(--warning-50);
-  color: var(--warning-700);
-  font-size: var(--text-sm);
+  padding: 4px 10px;
+  border-radius: var(--radius-xl);
+  background: var(--gray-100);
+  color: var(--gray-700);
+  font-size: var(--text-xs);
   font-weight: var(--font-medium);
 }
 

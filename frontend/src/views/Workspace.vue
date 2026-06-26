@@ -138,7 +138,7 @@
           </div>
         </div>
 
-        <div v-if="isAdmin && advancedToolSections.length" class="nav-section">
+        <div v-if="advancedToolSections.length" class="nav-section">
           <div class="section-header" @click="toggleSection('advanced-tools')">
             <div class="section-icon">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

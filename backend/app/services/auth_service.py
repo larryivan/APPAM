@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import secrets
 import uuid
@@ -16,6 +17,7 @@ PROJECT_MEMBER_ROLES = {'viewer', 'editor', 'owner'}
 LOGIN_RATE_LIMIT_WINDOW_MINUTES = 15
 LOGIN_RATE_LIMIT_MAX_BY_USERNAME = 5
 LOGIN_RATE_LIMIT_MAX_BY_IP = 20
+TRUE_VALUES = {'1', 'true', 'yes', 'on'}
 
 
 class AuthRateLimitError(ValueError):
@@ -74,6 +76,135 @@ def validate_display_name(display_name: str) -> str:
     if len(display_name) > MAX_DISPLAY_NAME_LENGTH:
         raise ValueError(f'Display name must be at most {MAX_DISPLAY_NAME_LENGTH} characters long.')
     return display_name
+
+
+def _parse_bootstrap_admins_json(raw_value: str) -> list[dict]:
+    try:
+        payload = json.loads(raw_value)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f'APPAM_BOOTSTRAP_ADMINS_JSON is invalid JSON: {exc}') from exc
+    if not isinstance(payload, list):
+        raise ValueError('APPAM_BOOTSTRAP_ADMINS_JSON must be a JSON array.')
+    specs = []
+    for index, entry in enumerate(payload, start=1):
+        if not isinstance(entry, dict):
+            raise ValueError(f'APPAM_BOOTSTRAP_ADMINS_JSON entry {index} must be an object.')
+        specs.append({
+            'username': entry.get('username', ''),
+            'password': entry.get('password', ''),
+            'display_name': entry.get('display_name', ''),
+        })
+    return specs
+
+
+def _parse_bootstrap_admins(raw_value: str) -> list[dict]:
+    specs = []
+    for index, chunk in enumerate(re.split(r'[;\n]+', raw_value.strip()), start=1):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        parts = [part.strip() for part in chunk.split(':', 2)]
+        if len(parts) < 2:
+            raise ValueError(
+                f'APPAM_BOOTSTRAP_ADMINS entry {index} must use username:password[:display_name].'
+            )
+        specs.append({
+            'username': parts[0],
+            'password': parts[1],
+            'display_name': parts[2] if len(parts) > 2 else '',
+        })
+    return specs
+
+
+def _normalize_bootstrap_admins(specs: list[dict]) -> list[dict]:
+    normalized = []
+    seen_usernames = set()
+    for index, spec in enumerate(specs, start=1):
+        username = validate_username(spec.get('username', ''))
+        if username.lower() in seen_usernames:
+            raise ValueError(f'Duplicate bootstrap admin username: {username}')
+        seen_usernames.add(username.lower())
+        normalized.append({
+            'username': username,
+            'password': validate_password(spec.get('password', '')),
+            'display_name': validate_display_name(spec.get('display_name', '')),
+        })
+    return normalized
+
+
+def parse_bootstrap_admins_from_env() -> list[dict]:
+    json_value = os.getenv('APPAM_BOOTSTRAP_ADMINS_JSON', '').strip()
+    simple_value = os.getenv('APPAM_BOOTSTRAP_ADMINS', '').strip()
+    if json_value:
+        return _normalize_bootstrap_admins(_parse_bootstrap_admins_json(json_value))
+    if simple_value:
+        return _normalize_bootstrap_admins(_parse_bootstrap_admins(simple_value))
+    return []
+
+
+def ensure_bootstrap_admins(specs: list[dict], *, reset_passwords: bool = False) -> list[dict]:
+    normalized_specs = _normalize_bootstrap_admins(specs)
+    if not normalized_specs:
+        return []
+
+    results = []
+    conn = get_db_connection()
+    try:
+        for spec in normalized_specs:
+            existing = conn.execute(
+                'SELECT * FROM users WHERE username = ?',
+                (spec['username'],),
+            ).fetchone()
+            if existing:
+                updates = {
+                    'role': 'admin',
+                    'status': 'active',
+                    'display_name': spec['display_name'] or existing['display_name'] or '',
+                }
+                if reset_passwords:
+                    updates['password_hash'] = generate_password_hash(spec['password'])
+                sets = ', '.join(f"{column} = ?" for column in updates)
+                conn.execute(
+                    f'UPDATE users SET {sets} WHERE id = ?',
+                    list(updates.values()) + [existing['id']],
+                )
+                action = 'updated'
+            else:
+                user_id = str(uuid.uuid4())
+                conn.execute(
+                    '''
+                    INSERT INTO users (id, username, display_name, password_hash, role, status)
+                    VALUES (?, ?, ?, ?, 'admin', 'active')
+                    ''',
+                    (
+                        user_id,
+                        spec['username'],
+                        spec['display_name'],
+                        generate_password_hash(spec['password']),
+                    ),
+                )
+                action = 'created'
+
+            row = conn.execute(
+                'SELECT * FROM users WHERE username = ?',
+                (spec['username'],),
+            ).fetchone()
+            user = _sanitize_user(row)
+            user['bootstrap_action'] = action
+            results.append(user)
+        conn.commit()
+        return results
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def bootstrap_admin_users_from_env() -> list[dict]:
+    specs = parse_bootstrap_admins_from_env()
+    reset_passwords = os.getenv('APPAM_BOOTSTRAP_ADMIN_RESET_PASSWORDS', 'false').strip().lower() in TRUE_VALUES
+    return ensure_bootstrap_admins(specs, reset_passwords=reset_passwords)
 
 
 def count_users(active_only: bool = False) -> int:

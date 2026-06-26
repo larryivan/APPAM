@@ -55,15 +55,13 @@ def build_project_dashboard(project_id: str) -> dict:
 
     recommendations = []
     if not preflights:
-        recommendations.append('Run a workflow preflight before launching publication-grade jobs.')
+        recommendations.append('Run preflight')
     elif not latest_preflight.get('ok'):
-        recommendations.append('Latest preflight failed; resolve input/runtime checks before running.')
-    if not runs:
-        recommendations.append('No workflow run has been recorded for this project yet.')
-    elif latest_run.get('status') == 'failed':
-        recommendations.append(f"Latest workflow failed: {latest_run.get('failure_label') or 'review logs and preflight checks'}.")
+        recommendations.append('Fix preflight')
+    if latest_run and latest_run.get('status') == 'failed':
+        recommendations.append(f"Review failed run: {latest_run.get('failure_label') or 'logs'}.")
     if not database_manifest.get('found'):
-        recommendations.append('Add appam-db-manifest.json under the database root to record database versions.')
+        recommendations.append('Add database manifest')
 
     return {
         'active_job': active_job,

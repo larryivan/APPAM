@@ -24,9 +24,11 @@ def create_app():
 
     from .database import init_db
     from .auth import load_current_user, current_user
+    from .services.auth_service import bootstrap_admin_users_from_env
 
     # Initialize the database
     init_db()
+    bootstrap_admin_users_from_env()
 
     @app.before_request
     def enforce_authentication():

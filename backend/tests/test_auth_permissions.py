@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import sys
@@ -33,6 +34,12 @@ class AuthPermissionApiTests(unittest.TestCase):
         }
 
     def setUp(self):
+        for name in (
+            'APPAM_BOOTSTRAP_ADMINS',
+            'APPAM_BOOTSTRAP_ADMINS_JSON',
+            'APPAM_BOOTSTRAP_ADMIN_RESET_PASSWORDS',
+        ):
+            os.environ.pop(name, None)
         db_path = Path(DATABASE_FILE)
         if db_path.exists():
             db_path.unlink()
@@ -78,6 +85,60 @@ class AuthPermissionApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 201, response.get_data(as_text=True))
         return response.get_json()
+
+    def test_bootstrap_admins_from_environment(self):
+        db_path = Path(DATABASE_FILE)
+        if db_path.exists():
+            db_path.unlink()
+
+        bootstrap_admins = [
+            {
+                'username': 'labadmin',
+                'password': 'labpassword123',
+                'display_name': 'Lab Admin',
+            },
+            {
+                'username': 'piadmin',
+                'password': 'pipassword123',
+                'display_name': 'PI Admin',
+            },
+        ]
+        with mock.patch.dict(
+            os.environ,
+            {'APPAM_BOOTSTRAP_ADMINS_JSON': json.dumps(bootstrap_admins)},
+            clear=False,
+        ):
+            app = create_app()
+            app.config.update(TESTING=True)
+            client = app.test_client()
+
+        conn = get_db_connection()
+        try:
+            rows = conn.execute(
+                '''
+                SELECT username, display_name, role, status
+                FROM users
+                ORDER BY username
+                '''
+            ).fetchall()
+        finally:
+            conn.close()
+
+        users = {row['username']: dict(row) for row in rows}
+        self.assertEqual(users['labadmin']['role'], 'admin')
+        self.assertEqual(users['labadmin']['status'], 'active')
+        self.assertEqual(users['piadmin']['display_name'], 'PI Admin')
+
+        for username, password in [
+            ('labadmin', 'labpassword123'),
+            ('piadmin', 'pipassword123'),
+        ]:
+            response = client.post(
+                '/api/auth/login',
+                json={'username': username, 'password': password},
+            )
+            self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
+            self.logout(client)
 
     def test_profile_and_password_management(self):
         user = self.register(self.client, 'adminuser', display_name='Admin User')
@@ -375,6 +436,8 @@ class AuthPermissionApiTests(unittest.TestCase):
         raw_data_dir = project_dir / 'raw'
         sample_manifest.write_text('sample_id\nsample1\n', encoding='utf-8')
         raw_data_dir.mkdir(exist_ok=True)
+        (raw_data_dir / 'sample1_R1.fastq.gz').write_text('@sample1/1\nACGT\n+\n!!!!\n', encoding='utf-8')
+        (raw_data_dir / 'sample1_R2.fastq.gz').write_text('@sample1/2\nTGCA\n+\n!!!!\n', encoding='utf-8')
         metawrap_env = Path(TEST_TEMP_DIR) / 'envs' / 'metawrap'
         pydamage_env = Path(TEST_TEMP_DIR) / 'envs' / 'pydamage'
         checkm2_env = Path(TEST_TEMP_DIR) / 'envs' / 'checkm2'
@@ -519,6 +582,7 @@ class AuthPermissionApiTests(unittest.TestCase):
 
         paleoproteomics_table = project_dir / 'proteomics_samples.tsv'
         paleoproteomics_table.write_text('sample_id\tinput_path\texperiment\tfraction\nS1\tdata.RAW\tprojectA\t1\n', encoding='utf-8')
+        (project_dir / 'data.RAW').write_text('raw data placeholder', encoding='utf-8')
 
         with mock.patch.dict(os.environ, runtime_env, clear=False), mock.patch(
             'app.services.job_queue.get_queue', return_value=mock_queue
