@@ -913,7 +913,7 @@ const showParameterFillSuccess = (summary = '', warnings = []) => {
   if (warnings.length > 0) {
     warningsHtml = `
       <div class="warnings">
-        <small>⚠️ Notes:</small>
+        <small>Notes:</small>
         ${warnings.map(w => `<small>• ${w}</small>`).join('')}
       </div>
     `;
@@ -2122,7 +2122,7 @@ html, body {
   gap: 16px;
   padding: 16px 20px;
   border-bottom: 1px solid var(--border-color-light);
-  background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.12), rgba(255, 255, 255, 0.9));
+  background: var(--surface-2);
 }
 
 .suggestion-header h4 {

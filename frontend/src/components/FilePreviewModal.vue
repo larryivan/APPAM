@@ -18,7 +18,7 @@
               class="action-btn edit-btn"
               title="Edit File"
             >
-              ✏️ Edit
+              <Icon name="pencil" :size="15" /> Edit
             </button>
             <button 
               v-if="editMode" 
@@ -27,7 +27,7 @@
               :disabled="!hasChanges"
               title="Save Changes"
             >
-              💾 Save
+              <Icon name="save" :size="15" /> Save
             </button>
             <button 
               v-if="editMode" 
@@ -35,14 +35,14 @@
               class="action-btn cancel-btn"
               title="Cancel Edit"
             >
-              ❌ Cancel
+              <Icon name="x" :size="15" /> Cancel
             </button>
             <button 
               @click="downloadFile" 
               class="action-btn download-btn"
               title="Download File"
             >
-              📥 Download
+              <Icon name="download" :size="15" /> Download
             </button>
             <button 
               @click="closeModal" 
@@ -100,9 +100,9 @@
           <!-- Image preview -->
           <div v-if="previewData.type === 'image'" class="image-preview">
             <div class="image-controls">
-              <button @click="zoomIn" class="zoom-btn">🔍+</button>
-              <button @click="zoomOut" class="zoom-btn">🔍-</button>
-              <button @click="resetZoom" class="zoom-btn">🔄</button>
+              <button @click="zoomIn" class="zoom-btn" title="Zoom in"><Icon name="zoom-in" :size="15" /></button>
+              <button @click="zoomOut" class="zoom-btn" title="Zoom out"><Icon name="zoom-out" :size="15" /></button>
+              <button @click="resetZoom" class="zoom-btn" title="Reset zoom"><Icon name="rotate-ccw" :size="15" /></button>
               <span class="zoom-level">{{ Math.round(zoomLevel * 100) }}%</span>
             </div>
             <div class="image-container" @wheel="handleImageWheel">
@@ -173,9 +173,9 @@
             <div class="code-header">
               <span class="language-tag">{{ previewData.language || 'text' }}</span>
               <div class="code-controls">
-                <button @click="copyToClipboard" class="control-btn">📋 Copy</button>
+                <button @click="copyToClipboard" class="control-btn"><Icon name="copy" :size="14" /> Copy</button>
                 <button @click="toggleWordWrap" class="control-btn">
-                  {{ wordWrap ? '📄' : '📜' }} {{ wordWrap ? 'Unwrap' : 'Wrap' }}
+                  <Icon :name="wordWrap ? 'wrap-text' : 'align-justify'" :size="14" /> {{ wordWrap ? 'Unwrap' : 'Wrap' }}
                 </button>
               </div>
             </div>
@@ -187,13 +187,13 @@
             <div class="json-header">
               <span class="language-tag">JSON</span>
               <div class="json-controls">
-                <button @click="formatJson" class="control-btn">🔧 Format</button>
-                <button @click="compactJson" class="control-btn">📦 Compact</button>
-                <button @click="validateJson" class="control-btn">✅ Validate</button>
+                <button @click="formatJson" class="control-btn"><Icon name="wand-sparkles" :size="14" /> Format</button>
+                <button @click="compactJson" class="control-btn"><Icon name="minimize-2" :size="14" /> Compact</button>
+                <button @click="validateJson" class="control-btn"><Icon name="circle-check" :size="14" /> Validate</button>
               </div>
             </div>
             <div v-if="jsonError" class="json-error">
-              ❌ Invalid JSON: {{ jsonError }}
+              <Icon name="circle-x" :size="14" /> Invalid JSON: {{ jsonError }}
             </div>
             <pre class="code-content json"><code>{{ formattedJson || previewData.content }}</code></pre>
           </div>
@@ -209,7 +209,7 @@
             <!-- Large file warning and options -->
             <div v-if="previewData.too_large" class="large-file-warning">
               <div class="warning-content">
-                <div class="warning-icon">⚠️</div>
+                <div class="warning-icon"><Icon name="triangle-alert" :size="24" /></div>
                 <div class="warning-text">
                   <h4>Large File Detected</h4>
                   <p>This file ({{ formatSize(previewData.file_size) }}) is too large for full preview. Choose an option:</p>
@@ -217,13 +217,13 @@
               </div>
               <div class="large-file-actions">
                 <button @click="loadFileHead" class="action-btn primary" :disabled="loadingHead">
-                  {{ loadingHead ? 'Loading...' : '📄 Preview First 1000 Lines' }}
+                  <Icon v-if="!loadingHead" name="file-text" :size="15" /> {{ loadingHead ? 'Loading...' : 'Preview First 1000 Lines' }}
                 </button>
                 <button @click="loadFileSample" class="action-btn" :disabled="loadingSample">
-                  {{ loadingSample ? 'Loading...' : '🎯 Load Sample Data' }}
+                  <Icon v-if="!loadingSample" name="target" :size="15" /> {{ loadingSample ? 'Loading...' : 'Load Sample Data' }}
                 </button>
                 <button @click="downloadFile" class="action-btn">
-                  📥 Download Full File
+                  <Icon name="download" :size="15" /> Download Full File
                 </button>
               </div>
               <div v-if="sampledData.content" class="sampled-preview">
@@ -241,54 +241,54 @@
                   :class="['tab-btn', { active: bioTab === 'statistics' }]"
                   @click="bioTab = 'statistics'"
                 >
-                  📊 Statistics
+                  <Icon name="chart-bar" :size="14" /> Statistics
                 </button>
                 <button 
                   :class="['tab-btn', { active: bioTab === 'sequences' }]"
                   @click="bioTab = 'sequences'"
                   v-if="previewData.file_format === 'fasta' || previewData.file_format === 'fastq'"
                 >
-                  🧬 Sequences
+                  <Icon name="dna" :size="14" /> Sequences
                 </button>
                 <button 
                   :class="['tab-btn', { active: bioTab === 'variants' }]"
                   @click="bioTab = 'variants'"
                   v-if="previewData.file_format === 'vcf'"
                 >
-                  🧬 Variants
+                  <Icon name="dna" :size="14" /> Variants
                 </button>
                 <button 
                   :class="['tab-btn', { active: bioTab === 'annotations' }]"
                   @click="bioTab = 'annotations'"
                   v-if="previewData.file_format === 'gff' || previewData.file_format === 'gtf'"
                 >
-                  📝 Annotations
+                  <Icon name="file-pen" :size="14" /> Annotations
                 </button>
                 <button 
                   :class="['tab-btn', { active: bioTab === 'regions' }]"
                   @click="bioTab = 'regions'"
                   v-if="previewData.file_format === 'bed'"
                 >
-                  📍 Regions
+                  <Icon name="map-pin" :size="14" /> Regions
                 </button>
                 <button 
                   :class="['tab-btn', { active: bioTab === 'alignments' }]"
                   @click="bioTab = 'alignments'"
                   v-if="previewData.file_format === 'sam' || previewData.file_format === 'bam'"
                 >
-                  🎯 Alignments
+                  <Icon name="target" :size="14" /> Alignments
                 </button>
                 <button 
                   :class="['tab-btn', { active: bioTab === 'visualization' }]"
                   @click="bioTab = 'visualization'"
                 >
-                  📈 Visualization
+                  <Icon name="chart-line" :size="14" /> Visualization
                 </button>
                 <button 
                   :class="['tab-btn', { active: bioTab === 'content' }]"
                   @click="bioTab = 'content'"
                 >
-                  📄 Raw Content
+                  <Icon name="file-text" :size="14" /> Raw Content
                 </button>
               </div>
               
@@ -568,7 +568,7 @@
               <span class="language-tag">{{ previewData.delimiter === '\t' ? 'TSV' : 'CSV' }}</span>
               <div class="csv-controls">
                 <button @click="toggleTableView" class="control-btn">
-                  {{ showTableView ? '📄' : '📊' }} {{ showTableView ? 'Raw' : 'Table' }}
+                  <Icon :name="showTableView ? 'file-text' : 'table'" :size="14" /> {{ showTableView ? 'Raw' : 'Table' }}
                 </button>
               </div>
             </div>
@@ -599,7 +599,7 @@
             <!-- Large file warning for non-bio files -->
             <div v-if="previewData.too_large || (previewData.error && previewData.error.includes('too large'))" class="large-file-warning">
               <div class="warning-content">
-                <div class="warning-icon">⚠️</div>
+                <div class="warning-icon"><Icon name="triangle-alert" :size="24" /></div>
                 <div class="warning-text">
                   <h4>Large File Detected</h4>
                   <p>This file ({{ formatSize(previewData.file_size || 0) }}) is too large for full preview. Choose an option:</p>
@@ -607,10 +607,10 @@
               </div>
               <div class="large-file-actions">
                 <button @click="loadFileHead" class="action-btn primary" :disabled="loadingHead">
-                  {{ loadingHead ? 'Loading...' : '📄 Preview First 1000 Lines' }}
+                  <Icon v-if="!loadingHead" name="file-text" :size="15" /> {{ loadingHead ? 'Loading...' : 'Preview First 1000 Lines' }}
                 </button>
                 <button @click="downloadFile" class="action-btn">
-                  📥 Download Full File
+                  <Icon name="download" :size="15" /> Download Full File
                 </button>
               </div>
               <div v-if="sampledData.content" class="sampled-preview">

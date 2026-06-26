@@ -127,10 +127,10 @@ useResizeObserver(diagramRef, () => {
 <style scoped>
 .workflow-diagram {
   height: 680px;
-  border-radius: 24px;
+  border-radius: var(--radius-md);
   overflow: hidden;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98));
-  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.1);
+  background: var(--surface-1);
+  box-shadow: inset 0 0 0 1px var(--border-color-light);
 }
 
 .workflow-flow {

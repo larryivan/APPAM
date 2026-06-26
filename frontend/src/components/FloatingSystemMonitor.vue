@@ -443,7 +443,7 @@ onUnmounted(() => {
 
 /* 头部 */
 .monitor-header {
-  background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.12) 0%, rgba(255, 255, 255, 0.96) 85%);
+  background: var(--surface-2);
   color: var(--gray-900);
   padding: 12px 16px;
   display: flex;

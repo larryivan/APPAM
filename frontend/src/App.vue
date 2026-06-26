@@ -42,10 +42,10 @@ onMounted(() => {
   --primary-color: var(--primary-500);
   --secondary-color: #0ea5e9;
   
-  /* 渐变色系统 */
-  --gradient-primary: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%);
-  --gradient-secondary: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
-  --gradient-accent: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%);
+  /* 渐变色系统 —— 扁平化:全部退化为纯色,保留变量名以兼容旧引用 */
+  --gradient-primary: var(--primary-600);
+  --gradient-secondary: var(--primary-500);
+  --gradient-accent: #0f766e;
   
   /* 中性色系统 */
   --gray-50: #f7f8fb;
@@ -129,13 +129,13 @@ onMounted(() => {
   --radius-xl: 1.75rem;   /* 28px */
   --radius-full: 9999px;
   
-  /* 阴影系统 */
-  --shadow-xs: 0 1px 2px rgb(15 23 42 / 0.04);
-  --shadow-sm: 0 4px 10px rgb(15 23 42 / 0.08);
-  --shadow-base: 0 8px 18px rgb(15 23 42 / 0.1);
-  --shadow-md: 0 12px 24px rgb(15 23 42 / 0.14);
-  --shadow-lg: 0 18px 40px rgb(15 23 42 / 0.18);
-  --shadow-xl: 0 30px 60px rgb(15 23 42 / 0.22);
+  /* 阴影系统 —— 扁平化:大幅降低强度,趋向发丝投影 */
+  --shadow-xs: 0 1px 2px rgb(15 23 42 / 0.03);
+  --shadow-sm: 0 1px 3px rgb(15 23 42 / 0.05);
+  --shadow-base: 0 2px 6px rgb(15 23 42 / 0.06);
+  --shadow-md: 0 4px 12px rgb(15 23 42 / 0.08);
+  --shadow-lg: 0 8px 24px rgb(15 23 42 / 0.10);
+  --shadow-xl: 0 12px 32px rgb(15 23 42 / 0.12);
   
   /* 边框系统 */
   --border-width: 1px;
@@ -194,9 +194,6 @@ html {
 body {
   margin: 0;
   background-color: var(--surface-0);
-  background-image:
-    radial-gradient(1200px 800px at -10% -20%, rgba(var(--accent-rgb), 0.08) 0%, transparent 60%),
-    radial-gradient(1000px 600px at 110% -10%, rgba(14, 165, 233, 0.08) 0%, transparent 55%);
   color: var(--gray-900);
   font-size: var(--text-base);
   font-weight: var(--font-normal);
@@ -305,15 +302,12 @@ h1, h2, h3, .display-text {
 }
 
 .btn-primary {
-  background: var(--gradient-primary);
+  background: var(--primary-600);
   color: white;
-  box-shadow: 0 8px 16px rgba(var(--accent-rgb), 0.2);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 12px 24px rgba(var(--accent-rgb), 0.24);
+  background: var(--primary-700);
 }
 
 .btn-secondary {
@@ -336,6 +330,33 @@ h1, h2, h3, .display-text {
   background: var(--surface-2);
   color: var(--gray-800);
 }
+
+.btn-danger {
+  background: var(--error-500);
+  color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--error-600);
+}
+
+/* 尺寸修饰符 */
+.btn-sm {
+  padding: var(--spacing-2) var(--spacing-3);
+  font-size: var(--text-xs);
+}
+
+.btn-lg {
+  padding: var(--spacing-3) var(--spacing-5);
+  font-size: var(--text-base);
+}
+
+/* 纯图标按钮 */
+.btn-icon {
+  padding: var(--spacing-2);
+  aspect-ratio: 1;
+}
+.btn-icon.btn-sm { padding: var(--spacing-1); }
 
 /* 输入框基础样式 */
 .input {
@@ -372,6 +393,48 @@ h1, h2, h3, .display-text {
 
 .card:hover {
   box-shadow: var(--shadow-base);
+}
+
+/* 统一状态标签 (status pill) —— 低饱和底色 + 同色系文字,取代各处大色块 */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: 2px var(--spacing-3);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  line-height: 1.6;
+  border-radius: var(--radius-full);
+  background: var(--surface-2);
+  color: var(--gray-600);
+  white-space: nowrap;
+}
+.pill .pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: currentColor;
+  flex-shrink: 0;
+}
+.pill--success { background: var(--success-50); color: var(--success-600); }
+.pill--running,
+.pill--info    { background: var(--primary-50); color: var(--primary-600); }
+.pill--warning { background: var(--warning-50); color: var(--warning-600); }
+.pill--danger,
+.pill--error   { background: var(--error-50); color: var(--error-600); }
+.pill--muted   { background: var(--surface-2); color: var(--gray-500); }
+
+/* 软色徽章 (类别标记),如工作流类型 */
+.badge-soft {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  padding: 2px var(--spacing-2);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  border-radius: var(--radius-sm);
+  background: var(--primary-50);
+  color: var(--primary-700);
 }
 
 /* Modal base styles */

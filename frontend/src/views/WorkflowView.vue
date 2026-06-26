@@ -1292,8 +1292,8 @@ onUnmounted(() => {
 <style scoped>
 .workflow-view {
   min-height: 100%;
-  background: linear-gradient(180deg, #f6f8fb 0%, #eef3f8 100%);
-  color: #0f172a;
+  background: var(--surface-0);
+  color: var(--gray-900);
 }
 
 .workflow-hero {
@@ -1431,7 +1431,7 @@ onUnmounted(() => {
 }
 
 .hero-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
+  filter: brightness(0.97);
 }
 
 .hero-btn:disabled {
@@ -1440,15 +1440,19 @@ onUnmounted(() => {
 }
 
 .hero-btn.primary {
-  background: linear-gradient(135deg, #2154b7 0%, #2f6fed 100%);
+  background: var(--primary-600);
   color: #fff;
-  box-shadow: 0 16px 28px rgba(47, 111, 237, 0.2);
+}
+
+.hero-btn.primary:hover:not(:disabled) {
+  background: var(--primary-700);
+  filter: none;
 }
 
 .hero-btn.secondary {
-  background: #fff;
-  color: #0f172a;
-  border: 1px solid rgba(148, 163, 184, 0.26);
+  background: var(--surface-1);
+  color: var(--gray-900);
+  border: 1px solid var(--border-color);
 }
 
 .hero-btn.subtle {
@@ -2151,8 +2155,7 @@ onUnmounted(() => {
 }
 
 .history-card:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 14px 24px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--shadow-sm);
 }
 
 .artifact-card {

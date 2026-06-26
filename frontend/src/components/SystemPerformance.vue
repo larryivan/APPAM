@@ -25,7 +25,7 @@
     </div>
 
     <div v-else-if="error" class="error-state">
-      <div class="error-icon">⚠️</div>
+      <div class="error-icon"><Icon name="triangle-alert" :size="32" :stroke-width="1.5" /></div>
       <p>{{ error }}</p>
       <button @click="refreshData" class="btn btn-primary retry-btn">Retry</button>
     </div>
@@ -34,7 +34,7 @@
       <!-- System Status Overview -->
       <div class="status-overview">
         <div class="status-card cpu" :class="getStatusClass(systemInfo.cpu?.usage_percent)">
-          <div class="status-icon">🖥️</div>
+          <div class="status-icon"><Icon name="cpu" :size="20" /></div>
           <div class="status-info">
             <div class="status-value">{{ systemInfo.cpu?.usage_percent?.toFixed(1) || '0' }}%</div>
             <div class="status-label">CPU Usage</div>
@@ -50,7 +50,7 @@
         </div>
 
         <div class="status-card memory" :class="getStatusClass(systemInfo.memory?.usage_percent)">
-          <div class="status-icon">💾</div>
+          <div class="status-icon"><Icon name="memory-stick" :size="20" /></div>
           <div class="status-info">
             <div class="status-value">{{ systemInfo.memory?.usage_percent?.toFixed(1) || '0' }}%</div>
             <div class="status-label">Memory Usage</div>
@@ -66,7 +66,7 @@
         </div>
 
         <div class="status-card disk" :class="getDiskStatusClass()">
-          <div class="status-icon">💽</div>
+          <div class="status-icon"><Icon name="hard-drive" :size="20" /></div>
           <div class="status-info">
             <div class="status-value">{{ getTotalDiskUsage().toFixed(1) }}%</div>
             <div class="status-label">Disk Usage</div>
@@ -82,7 +82,7 @@
         </div>
 
         <div class="status-card load" :class="getLoadStatusClass()">
-          <div class="status-icon">⚡</div>
+          <div class="status-icon"><Icon name="activity" :size="20" /></div>
           <div class="status-info">
             <div class="status-value">{{ (systemInfo.load?.load_1min || 0).toFixed(2) }}</div>
             <div class="status-label">System Load</div>

@@ -68,9 +68,9 @@
               <p class="hint" v-if="extensions.length > 0 && !selectDirectories">Supported file types: {{ extensions.join(', ') }}</p>
               <p class="hint">Current directory: {{ currentPath }}</p>
               <div class="interaction-hints">
-                <p class="hint">💡 Double-click directories to navigate deeper</p>
-                <p class="hint" v-if="selectDirectories">📁 Click directories to select, or use "Select This Directory" button above</p>
-                <p class="hint" v-else>📄 Click files to select</p>
+                <p class="hint"><Icon name="lightbulb" :size="14" /> Double-click directories to navigate deeper</p>
+                <p class="hint" v-if="selectDirectories"><Icon name="folder" :size="14" /> Click directories to select, or use "Select This Directory" button above</p>
+                <p class="hint" v-else><Icon name="file" :size="14" /> Click files to select</p>
               </div>
               <details class="debug-info">
                 <summary>Debug Info ({{ files.length }} items)</summary>
@@ -110,8 +110,8 @@
               <div class="file-info">
                 <div class="file-name">
                   {{ file.name }}
-                  <span v-if="file.is_dir" class="nav-hint">🔽</span>
-                  <span v-if="isFileValid(file)" class="select-hint">✓</span>
+                  <span v-if="file.is_dir" class="nav-hint"><Icon name="chevron-down" :size="13" /></span>
+                  <span v-if="isFileValid(file)" class="select-hint"><Icon name="check" :size="13" /></span>
                 </div>
                 <div class="file-meta">
                   <span v-if="!file.is_dir">{{ formatSize(file.size) }}</span>
@@ -474,7 +474,7 @@ loadFiles();
 }
 
 .breadcrumb-item:first-child:hover {
-  background: linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%);
+  background: var(--primary-700);
   color: white;
   border-color: transparent;
 }
@@ -779,7 +779,7 @@ loadFiles();
 }
 
 .btn-confirm:hover:not(:disabled) {
-  background: linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%);
+  background: var(--primary-700);
 }
 
 .btn-confirm:disabled {

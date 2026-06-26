@@ -3,35 +3,34 @@
     <div class="project-list-content">
       <main class="pl-main">
       <!-- 精简头部 -->
-      <div class="page-header">
-        <div class="header-left">
-          <div>
-            <h1>Projects</h1>
-            <div class="header-meta">
-              <span class="project-count">{{ filteredProjects.length }} projects</span>
-              <span class="current-user">Signed in as {{ userDisplayName }}</span>
-            </div>
-          </div>
-        </div>
-        <button @click="showCreateModal = true" class="create-btn">
-          <span class="btn-icon">+</span>
-          New Project
-        </button>
-      </div>
-      
+      <PageHeader eyebrow="Workspace" title="Projects">
+        <template #meta>
+          <span class="project-count">{{ filteredProjects.length }} projects</span>
+          <span class="current-user">Signed in as {{ userDisplayName }}</span>
+        </template>
+        <template #actions>
+          <button @click="showCreateModal = true" class="btn btn-primary">
+            <Icon name="plus" :size="16" />
+            New project
+          </button>
+        </template>
+      </PageHeader>
+
       <!-- 搜索和筛选区 -->
       <div class="controls-bar">
         <div class="search-box">
-          <span class="search-icon">🔍</span>
-          <input 
-            v-model="searchQuery" 
-            type="text" 
+          <Icon name="search" :size="16" class="search-icon" />
+          <input
+            v-model="searchQuery"
+            type="text"
             placeholder="Search project name, creator or description..."
             class="search-input"
           >
-          <button v-if="searchQuery" @click="clearSearch" class="clear-btn">×</button>
+          <button v-if="searchQuery" @click="clearSearch" class="clear-btn" aria-label="Clear search">
+            <Icon name="x" :size="14" />
+          </button>
         </div>
-        
+
         <div class="sort-controls">
           <label class="sort-label">Sort:</label>
           <select v-model="sortBy" class="sort-select">
@@ -40,27 +39,27 @@
             <option value="name">Name</option>
           </select>
           <button @click="toggleSortOrder" class="sort-order-btn" :title="sortOrder === 'desc' ? 'Descending' : 'Ascending'">
-            {{ sortOrder === 'desc' ? '↓' : '↑' }}
+            <Icon :name="sortOrder === 'desc' ? 'arrow-down' : 'arrow-up'" :size="15" />
           </button>
         </div>
-        
+
         <div class="view-controls">
-          <button 
-            @click="viewMode = 'grid'" 
+          <button
+            @click="viewMode = 'grid'"
             :class="['view-btn', { active: viewMode === 'grid' }]"
             title="Grid View"
-          >▦</button>
-          <button 
-            @click="viewMode = 'list'" 
+          ><Icon name="layout-grid" :size="15" /></button>
+          <button
+            @click="viewMode = 'list'"
             :class="['view-btn', { active: viewMode === 'list' }]"
             title="List View"
-          >☰</button>
+          ><Icon name="list" :size="15" /></button>
         </div>
       </div>
 
       <!-- 项目列表 -->
       <div v-if="filteredProjects.length === 0" class="empty-state">
-        <div class="empty-icon">📁</div>
+        <div class="empty-icon"><Icon name="folder-open" :size="40" :stroke-width="1.5" /></div>
         <h3>No Projects</h3>
         <p v-if="searchQuery">No projects found matching "{{ searchQuery }}"</p>
         <p v-else>Create your first project to get started</p>
@@ -81,9 +80,9 @@
           </div>
           <div class="project-actions">
             <button @click="openWorkspace(project.id)" class="open-btn">Open</button>
-            <button v-if="canManageProject(project)" @click="openMembersModal(project)" class="share-btn" title="Manage Members">👥</button>
-            <button v-if="canManageProject(project)" @click="openEditModal(project)" class="edit-btn" title="Edit Project">✏️</button>
-            <button v-if="canManageProject(project)" @click="deleteProject(project.id)" class="delete-btn" title="Delete Project">🗑️</button>
+            <button v-if="canManageProject(project)" @click="openMembersModal(project)" class="share-btn" title="Manage Members"><Icon name="users" :size="15" /></button>
+            <button v-if="canManageProject(project)" @click="openEditModal(project)" class="edit-btn" title="Edit Project"><Icon name="pencil" :size="15" /></button>
+            <button v-if="canManageProject(project)" @click="deleteProject(project.id)" class="delete-btn" title="Delete Project"><Icon name="trash-2" :size="15" /></button>
           </div>
         </div>
       </div>
@@ -277,6 +276,7 @@
 import { ref, onMounted, computed, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import { authState } from '../lib/auth'
+import PageHeader from '../components/ui/PageHeader.vue'
 
 const projects = ref([]);
 const router = useRouter();
@@ -902,9 +902,8 @@ onMounted(() => {
 }
 
 .project-card:hover {
-  border-color: rgba(var(--accent-rgb), 0.28);
-  box-shadow: var(--shadow-base);
-  transform: translateY(-2px);
+  border-color: var(--border-color-dark);
+  box-shadow: var(--shadow-sm);
 }
 
 /* 网格视图样式 */
@@ -1191,7 +1190,7 @@ onMounted(() => {
 }
 
 .submit-btn:hover {
-  background: linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%);
+  background: var(--primary-700);
 }
 
 /* 项目详情样式 */
@@ -1233,7 +1232,7 @@ onMounted(() => {
 }
 
 .primary-btn:hover {
-  background: linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%);
+  background: var(--primary-700);
 }
 
 .secondary-btn {

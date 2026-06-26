@@ -591,26 +591,26 @@
     <!-- Right-click menu -->
     <div v-if="contextMenu.show" class="context-menu" :class="{ mobile: isMobile }" :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }">
       <div class="context-item" @click="openItem" v-if="contextMenu.item">
-        <span class="icon">👁️</span> Open
+        <span class="icon"><Icon name="eye" :size="15" /></span> Open
       </div>
       <div class="context-item" @click="copySelected" v-if="selectedItems.length > 0">
-        <span class="icon">📋</span> Copy
+        <span class="icon"><Icon name="copy" :size="15" /></span> Copy
       </div>
       <div class="context-item" @click="cutSelected" v-if="selectedItems.length > 0">
-        <span class="icon">✂️</span> Cut
+        <span class="icon"><Icon name="scissors" :size="15" /></span> Cut
       </div>
       <div class="context-item" @click="pasteItems" v-if="clipboard.length > 0 && clipboardOperation">
-        <span class="icon">📋</span> Paste ({{ clipboardOperation === 'copy' ? 'Copy' : 'Move' }} {{ clipboard.length }} items)
+        <span class="icon"><Icon name="clipboard-paste" :size="15" /></span> Paste ({{ clipboardOperation === 'copy' ? 'Copy' : 'Move' }} {{ clipboard.length }} items)
       </div>
       <div class="context-item" @click="downloadSelected" v-if="selectedItems.length > 0">
-        <span class="icon">📥</span> Download
+        <span class="icon"><Icon name="download" :size="15" /></span> Download
       </div>
       <hr v-if="selectedItems.length > 0" class="context-divider">
       <div class="context-item" @click="showRenameModal = true" v-if="selectedItems.length === 1">
-        <span class="icon">✏️</span> Rename
+        <span class="icon"><Icon name="pencil" :size="15" /></span> Rename
       </div>
       <div class="context-item danger" @click="deleteSelected" v-if="selectedItems.length > 0">
-        <span class="icon">🗑</span> Delete
+        <span class="icon"><Icon name="trash-2" :size="15" /></span> Delete
       </div>
       <hr class="context-divider">
       <div class="context-item" @click="showFileDetails" v-if="selectedItems.length === 1">
@@ -2160,7 +2160,7 @@ onUnmounted(() => {
 }
 
 .action-btn.primary:hover {
-  background: linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%);
+  background: var(--primary-700);
   box-shadow: 0 10px 18px rgba(var(--accent-rgb), 0.2);
 }
 
@@ -2692,7 +2692,7 @@ onUnmounted(() => {
 }
 
 .upload-btn:hover {
-  background: linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%);
+  background: var(--primary-700);
   transform: translateY(-1px);
   box-shadow: 0 10px 18px rgba(var(--accent-rgb), 0.2);
 }
@@ -2835,7 +2835,7 @@ onUnmounted(() => {
 }
 
 .btn-primary:hover {
-  background: linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%);
+  background: var(--primary-700);
   transform: translateY(-1px);
   box-shadow: 0 10px 18px rgba(var(--accent-rgb), 0.2);
 }

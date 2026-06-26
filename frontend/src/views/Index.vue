@@ -20,22 +20,22 @@
         <h2>主要功能</h2>
         <div class="features-grid">
           <div class="feature-card">
-            <div class="feature-icon">📊</div>
+            <div class="feature-icon"><Icon name="layout-dashboard" :size="28" :stroke-width="1.5" /></div>
             <h3>项目管理</h3>
             <p>创建、管理和跟踪您的项目进度</p>
           </div>
           <div class="feature-card">
-            <div class="feature-icon">🛠️</div>
+            <div class="feature-icon"><Icon name="wrench" :size="28" :stroke-width="1.5" /></div>
             <h3>流水线工具</h3>
             <p>使用强大的流水线工具进行数据处理</p>
           </div>
           <div class="feature-card">
-            <div class="feature-icon">💬</div>
+            <div class="feature-icon"><Icon name="message-circle" :size="28" :stroke-width="1.5" /></div>
             <h3>智能聊天</h3>
             <p>与AI助手交流，获得即时帮助</p>
           </div>
           <div class="feature-card">
-            <div class="feature-icon">🌐</div>
+            <div class="feature-icon"><Icon name="globe" :size="28" :stroke-width="1.5" /></div>
             <h3>网络驱动</h3>
             <p>强大的网络爬虫和数据收集工具</p>
           </div>
@@ -79,9 +79,7 @@ import { authState } from '../lib/auth'
   content: '';
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(800px 400px at 15% 0%, rgba(var(--accent-rgb), 0.18) 0%, transparent 60%),
-    radial-gradient(700px 360px at 85% 20%, rgba(14, 165, 233, 0.12) 0%, transparent 55%);
+  background: var(--primary-50);
   pointer-events: none;
 }
 
@@ -128,16 +126,13 @@ import { authState } from '../lib/auth'
 }
 
 .btn-primary {
-  background: var(--gradient-primary);
+  background: var(--primary-600);
   color: white;
   border-color: transparent;
-  box-shadow: 0 10px 20px rgba(var(--accent-rgb), 0.22);
 }
 
 .btn-primary:hover {
-  background: linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  background: var(--primary-700);
 }
 
 .btn-secondary {

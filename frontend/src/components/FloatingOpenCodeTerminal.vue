@@ -577,7 +577,7 @@ onUnmounted(() => {
 
 /* 标题栏 */
 .terminal-header {
-  background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.12) 0%, rgba(255, 255, 255, 0.96) 85%);
+  background: var(--surface-2);
   color: var(--gray-900);
   padding: 12px 16px;
   display: flex;
@@ -788,7 +788,7 @@ onUnmounted(() => {
   padding: 16px 20px;
   cursor: default;
   user-select: none;
-  background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.12) 0%, rgba(255, 255, 255, 0.96) 85%);
+  background: var(--surface-2);
   border-bottom: var(--border-width) solid var(--border-color-light);
 }
 

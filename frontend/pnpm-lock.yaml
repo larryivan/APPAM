@@ -38,6 +38,9 @@ importers:
       highlight.js:
         specifier: ^11.9.0
         version: 11.11.1
+      lucide-vue-next:
+        specifier: ^1.0.0
+        version: 1.0.0(vue@3.5.17)
       marked:
         specifier: ^13.0.1
         version: 13.0.3
@@ -718,6 +721,12 @@ packages:
   internmap@2.0.3:
     resolution: {integrity: sha512-5Hh7Y1wQbvY5ooGgPbDaL5iYLAPzMTUrjMulskHLH6wnv/A+1q5rgEaiuqEjB+oxGXIVZs1FF+R/KPN3ZSQYYg==}
     engines: {node: '>=12'}
+
+  lucide-vue-next@1.0.0:
+    resolution: {integrity: sha512-V6SPvx1IHTj/UY+FrIYWV5faISsPSb8BnWSFDxAtezWKvWc9ZZ40PDrdu1/Qb5vg4lHWr1hs1BAMGVGm6V1Xdg==}
+    deprecated: Package deprecated. Please use @lucide/vue instead.
+    peerDependencies:
+      vue: '>=3.0.1'
 
   magic-string@0.30.17:
     resolution: {integrity: sha512-sNPKHvyjVf7gyjwS4xGTaW/mCnF8wnjtifKBEhxfZ7E/S8tQ0rssrwGNn6q8JH/ohItJfSQp9mBtQYuTlH5QnA==}
@@ -1501,6 +1510,10 @@ snapshots:
       safer-buffer: 2.1.2
 
   internmap@2.0.3: {}
+
+  lucide-vue-next@1.0.0(vue@3.5.17):
+    dependencies:
+      vue: 3.5.17
 
   magic-string@0.30.17:
     dependencies:

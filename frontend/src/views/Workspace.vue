@@ -826,8 +826,7 @@ onUnmounted(() => {
 }
 
 .ai-sidebar-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .workspace-sidebar.collapsed .ai-sidebar-btn span {
@@ -933,8 +932,7 @@ onUnmounted(() => {
 }
 
 .opencode-button:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
   background: var(--surface-2);
 }
 
@@ -979,7 +977,7 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, transparent 50%);
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 16px;
   transition: opacity 0.3s;
   opacity: 0;
@@ -1022,7 +1020,7 @@ onUnmounted(() => {
   right: 8px;
   width: 12px;
   height: 12px;
-  background: linear-gradient(135deg, #ff6b6b, #ff5722);
+  background: var(--error-500);
   border-radius: 50%;
   border: 2px solid white;
   animation: pulse 2s infinite;
@@ -1088,7 +1086,7 @@ onUnmounted(() => {
     z-index: 200;
     transform: translateX(-100%);
     transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    background: linear-gradient(180deg, var(--surface-1) 0%, var(--surface-2) 100%);
+    background: var(--surface-1);
     box-shadow: none;
     border-top-right-radius: 20px;
     border-bottom-right-radius: 20px;
@@ -1125,10 +1123,7 @@ onUnmounted(() => {
   }
   
   .workspace-sidebar.mobile .logo-text {
-    background: linear-gradient(135deg, #ffffff, #e2e8f0);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: #ffffff;
   }
   
   .workspace-sidebar.mobile .sidebar-toggle-btn {

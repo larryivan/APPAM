@@ -4,13 +4,13 @@
       <!-- 浮动侧边导航 -->
       <nav class="doc-sidebar" :class="{ 'sidebar-hidden': !sidebarExpanded }">
         <div class="nav-toggle" @click="toggleSidebar">
-          <span class="nav-icon">{{ sidebarExpanded ? '✕' : '📑' }}</span>
+          <span class="nav-icon"><Icon :name="sidebarExpanded ? 'x' : 'list'" :size="18" /></span>
         </div>
         <div class="nav-content">
           <div class="nav-header">
             <span>Contents</span>
             <button class="close-btn" @click="closeSidebar" title="关闭目录">
-              <span>✕</span>
+              <Icon name="x" :size="16" />
             </button>
           </div>
           <ul class="nav-list">
@@ -39,7 +39,7 @@
              <p>Loading documentation...</p>
            </div>
            <div v-else-if="error" class="error-state">
-             <h3>⚠️ Loading Failed</h3>
+             <h3><Icon name="triangle-alert" :size="18" /> Loading Failed</h3>
              <p>{{ error }}</p>
              <button @click="loadMarkdown" class="retry-btn">Retry</button>
            </div>

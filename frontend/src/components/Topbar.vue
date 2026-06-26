@@ -247,7 +247,7 @@ watch(() => route.fullPath, handleRouteChange);
 
 <style scoped>
 .topbar {
-  background: rgba(255, 255, 255, 0.82);
+  background: var(--surface-1);
   border-bottom: var(--border-width) solid var(--border-color-light);
   padding: 0 var(--spacing-4);
   position: fixed;
@@ -255,8 +255,6 @@ watch(() => route.fullPath, handleRouteChange);
   left: 0;
   right: 0;
   z-index: var(--z-fixed); /* 确保topbar在最上层 */
-  box-shadow: var(--shadow-xs);
-  backdrop-filter: blur(12px);
 }
 
 .topbar-content {
@@ -380,9 +378,12 @@ watch(() => route.fullPath, handleRouteChange);
 }
 
 .auth-btn.primary {
-  background: var(--gradient-primary);
+  background: var(--primary-600);
   color: white;
-  box-shadow: var(--shadow-sm);
+}
+
+.auth-btn.primary:hover {
+  background: var(--primary-700);
 }
 
 .auth-btn.secondary {
@@ -408,7 +409,6 @@ watch(() => route.fullPath, handleRouteChange);
 .nav-item:hover {
   background: var(--surface-2);
   color: var(--gray-900);
-  transform: translateY(-1px);
 }
 
 .nav-item.active {
@@ -898,56 +898,6 @@ watch(() => route.fullPath, handleRouteChange);
   
   .nav-item {
     padding: var(--spacing-3) var(--spacing-5);
-  }
-}
-
-/* 深色模式支持 */
-@media (prefers-color-scheme: dark) {
-  .topbar {
-    background: var(--gray-900);
-    border-bottom-color: var(--gray-700);
-  }
-  
-  .logo-title {
-    color: var(--gray-100);
-  }
-  
-  .nav-item {
-    color: var(--gray-300);
-  }
-  
-  .nav-item:hover {
-    background: var(--gray-800);
-    color: var(--gray-100);
-  }
-  
-  .mobile-menu-btn:hover {
-    background: var(--gray-800);
-  }
-  
-  .hamburger-line {
-    background: var(--gray-300);
-  }
-  
-  .mobile-nav {
-    background: var(--gray-900);
-    border-bottom-color: var(--gray-700);
-  }
-  
-  .mobile-nav-item {
-    color: var(--gray-300);
-  }
-  
-  .mobile-nav-item:hover {
-    background: var(--gray-800);
-    color: var(--gray-100);
-    border-color: var(--gray-600);
-  }
-  
-  .mobile-nav-item.active {
-    background: var(--primary-900);
-    color: var(--primary-200);
-    border-color: var(--primary-700);
   }
 }
 </style>

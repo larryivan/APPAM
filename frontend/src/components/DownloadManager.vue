@@ -622,7 +622,7 @@ onUnmounted(() => {
 }
 
 .add-btn:hover {
-  background: linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%);
+  background: var(--primary-700);
 }
 
 .download-header .close-btn:hover {
@@ -894,7 +894,7 @@ onUnmounted(() => {
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%);
+  background: var(--primary-700);
 }
 
 .btn-primary:disabled {

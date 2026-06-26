@@ -223,7 +223,7 @@
         
         <div class="process-status">
           <div v-if="currentTask.status === 'not_found'" class="status-empty">
-            <div class="empty-icon">⚡</div>
+            <div class="empty-icon"><Icon name="zap" :size="32" :stroke-width="1.5" /></div>
             <p>No running processes</p>
             <p class="sub-text">All tasks completed or not started yet</p>
           </div>
@@ -306,7 +306,7 @@
           </div>
           
           <div v-else-if="filteredHistory.length === 0" class="history-empty">
-            <div class="empty-icon">📋</div>
+            <div class="empty-icon"><Icon name="clipboard-list" :size="32" :stroke-width="1.5" /></div>
             <p>No history records</p>
             <p class="sub-text">Process history will appear here after execution</p>
           </div>
@@ -1190,12 +1190,12 @@ watch(
 
 .workflow-choice.green {
   border-color: rgba(34, 197, 94, 0.18);
-  background: linear-gradient(180deg, rgba(240, 253, 244, 0.8), #fff);
+  background: var(--success-50);
 }
 
 .workflow-choice.blue {
   border-color: rgba(37, 99, 235, 0.16);
-  background: linear-gradient(180deg, rgba(239, 246, 255, 0.82), #fff);
+  background: var(--primary-50);
 }
 
 .workflow-choice-top,
@@ -2040,8 +2040,7 @@ watch(
 
 .new-logs-indicator:hover {
   background: var(--primary-700);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-xl);
+  box-shadow: var(--shadow-md);
 }
 
 @keyframes bounceIn {
@@ -2080,7 +2079,7 @@ watch(
 }
 
 .close-modal-btn:hover {
-  background: linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%);
+  background: var(--primary-700);
 }
 
 /* 响应式设计 */

@@ -12,7 +12,7 @@
     @dragleave="handleDragLeave"
   >
     <div v-if="!isUploading" class="upload-content">
-      <div class="upload-icon">📁</div>
+      <div class="upload-icon"><Icon name="folder-up" :size="40" :stroke-width="1.5" /></div>
       <div class="upload-text">
         <p class="primary-text">Drop files here to upload</p>
         <p class="secondary-text">or <button @click="$refs.fileInput.click()" class="browse-btn">browse files</button></p>
@@ -46,7 +46,7 @@
           }"
         >
           <div class="file-info">
-            <span class="file-icon">{{ getFileIcon(file.name) }}</span>
+            <span class="file-icon"><Icon :name="getFileIcon(file.name)" :size="16" /></span>
             <span class="file-name">{{ file.name }}</span>
             <span class="file-size">{{ formatSize(file.size) }}</span>
           </div>
@@ -55,8 +55,8 @@
               <div class="progress-fill" :style="{ width: file.progress + '%' }"></div>
             </div>
             <span class="status-icon">
-              <span v-if="file.status === 'completed'">✅</span>
-              <span v-else-if="file.status === 'error'">❌</span>
+              <Icon v-if="file.status === 'completed'" name="circle-check" :size="16" class="status-ok" />
+              <Icon v-else-if="file.status === 'error'" name="circle-x" :size="16" class="status-err" />
               <span v-else class="spinner-small"></span>
             </span>
           </div>
@@ -224,21 +224,21 @@ const getFileIcon = (fileName) => {
   const ext = fileName.split('.').pop()?.toLowerCase() || ''
   const iconMap = {
     // Images
-    png: '🖼️', jpg: '🖼️', jpeg: '🖼️', gif: '🖼️', svg: '🖼️', webp: '🖼️',
+    png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', svg: 'image', webp: 'image',
     // Documents
-    pdf: '📄', doc: '📄', docx: '📄', txt: '📄', md: '📄',
+    pdf: 'file-text', doc: 'file-text', docx: 'file-text', txt: 'file-text', md: 'file-text',
     // Spreadsheets
-    xls: '📊', xlsx: '📊', csv: '📊',
+    xls: 'file-spreadsheet', xlsx: 'file-spreadsheet', csv: 'file-spreadsheet',
     // Archives
-    zip: '📦', tar: '📦', gz: '📦', rar: '📦', 
+    zip: 'file-archive', tar: 'file-archive', gz: 'file-archive', rar: 'file-archive',
     // Code
-    js: '📜', ts: '📜', py: '🐍', java: '☕', html: '🌐', css: '🎨',
+    js: 'file-code', ts: 'file-code', py: 'file-code', java: 'file-code', html: 'file-code', css: 'file-code',
     // Media
-    mp4: '🎥', avi: '🎥', mov: '🎥', mp3: '🎵', wav: '🎵',
+    mp4: 'file-video', avi: 'file-video', mov: 'file-video', mp3: 'file-music', wav: 'file-music',
     // Bioinformatics
-    fasta: '🧬', fastq: '🧬', vcf: '🧬', gff: '🧬', bed: '🧬'
+    fasta: 'dna', fastq: 'dna', vcf: 'dna', gff: 'dna', bed: 'dna'
   }
-  return iconMap[ext] || '📄'
+  return iconMap[ext] || 'file'
 }
 
 const formatSize = (bytes) => {
@@ -352,7 +352,7 @@ const formatSize = (bytes) => {
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #10b981, #34d399);
+  background: var(--success-500);
   transition: width 0.3s ease;
   border-radius: inherit;
 }
@@ -434,6 +434,9 @@ const formatSize = (bytes) => {
   min-width: 20px;
   text-align: center;
 }
+
+.status-icon .status-ok { color: var(--success-500); }
+.status-icon .status-err { color: var(--error-500); }
 
 .spinner-small {
   display: inline-block;
