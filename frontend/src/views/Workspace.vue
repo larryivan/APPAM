@@ -51,7 +51,7 @@
               </div>
               <span class="link-text">File Manager</span>
             </router-link>
-            <button v-if="isAdmin" class="nav-link nav-button" @click="openOpenCodeWindow">
+            <button v-if="openCodeEnabled" class="nav-link nav-button" @click="openOpenCodeWindow">
               <div class="link-icon">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
@@ -185,7 +185,7 @@
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
           </svg>
         </router-link>
-        <button v-if="isAdmin" class="shortcut-link" title="OpenCode" @click="openOpenCodeWindow">
+        <button v-if="openCodeEnabled" class="shortcut-link" title="OpenCode" @click="openOpenCodeWindow">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
           </svg>
@@ -264,7 +264,7 @@
     <div v-if="!sidebarCollapsed && isMobile" class="mobile-overlay" @click="closeSidebar" @touchstart.passive="closeSidebar"></div>
 
     <!-- OpenCode floating button -->
-    <div v-if="isAdmin" class="opencode-trigger">
+    <div v-if="openCodeEnabled && !isMobile" class="opencode-trigger">
       <button class="opencode-button" :class="{ active: isOpenCodeVisible }" @click="openOpenCodeWindow" title="OpenCode">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="8 6 2 12 8 18"></polyline>
@@ -275,13 +275,13 @@
     </div>
 
     <!-- OpenCode console -->
-    <FloatingOpenCodeTerminal v-if="isAdmin" ref="openCodeRef" />
+    <FloatingOpenCodeTerminal v-if="openCodeEnabled && !isMobile" ref="openCodeRef" />
 
     <!-- 浮动系统监视器 -->
-    <FloatingSystemMonitor v-if="isAdmin" />
+    <FloatingSystemMonitor v-if="isAdmin && !isMobile" />
 
     <!-- 浮动终端 -->
-    <FloatingTerminal v-if="isAdmin" />
+    <FloatingTerminal v-if="isAdmin && !isMobile" />
 
   </div>
 </template>
@@ -307,6 +307,8 @@ const isOpenCodeVisible = computed(() => Boolean(openCodeRef.value?.isOpen?.valu
 const toolSections = ref([])
 const isWorkflowRoute = computed(() => route.name === 'WorkflowView')
 const isAdmin = computed(() => authState.user?.role === 'admin')
+const opencodeAvailable = ref(false)
+const openCodeEnabled = computed(() => isAdmin.value && opencodeAvailable.value)
 const visibleToolSections = computed(() => toolSections.value.filter((section) => section.id === 'workflow-automation'))
 const advancedToolSections = computed(() => toolSections.value.filter((section) => section.id !== 'workflow-automation'))
 
@@ -361,6 +363,17 @@ const openOpenCodeWindow = () => {
   openCodeRef.value?.openWindow?.()
   if (isMobile.value) {
     closeSidebar()
+  }
+}
+
+const checkOpenCodeAvailability = async () => {
+  if (!isAdmin.value) return
+  try {
+    const response = await fetch('/api/parameter-fill/health')
+    const payload = await response.json()
+    opencodeAvailable.value = response.ok && payload.available === true
+  } catch (error) {
+    opencodeAvailable.value = false
   }
 }
 
@@ -473,7 +486,7 @@ const handleResize = () => {
 
 onMounted(async () => {
   handleResize()
-  await loadToolSections()
+  await Promise.all([loadToolSections(), checkOpenCodeAvailability()])
   window.addEventListener('resize', handleResize)
   
   // 添加触摸事件监听器
@@ -1187,13 +1200,37 @@ onUnmounted(() => {
     margin-left: 0;
     min-height: 100vh;
     position: relative;
+    padding-top: 48px;
+    box-sizing: border-box;
   }
   
   .content-wrapper {
     border-radius: 0;
     padding: 0;
-    height: 100vh;
+    height: calc(100vh - 48px);
     overflow-y: auto;
+  }
+
+  .mobile-sidebar-trigger {
+    position: absolute;
+    top: 6px;
+    bottom: auto;
+    left: 12px;
+    width: 72px;
+    height: 36px;
+    flex-direction: row;
+    gap: 5px;
+    border-radius: 8px;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .mobile-sidebar-trigger .trigger-icon {
+    margin-bottom: 0;
+  }
+
+  .mobile-sidebar-trigger .trigger-hint {
+    font-size: 10px;
+    letter-spacing: 0;
   }
   
   /* 增强遮罩层 */
@@ -1231,11 +1268,12 @@ onUnmounted(() => {
   }
   
   .mobile-sidebar-trigger {
-    width: 48px;
-    height: 48px;
-    bottom: 16px;
-    left: 16px;
-    border-radius: 12px;
+    top: 6px;
+    bottom: auto;
+    left: 12px;
+    width: 72px;
+    height: 36px;
+    border-radius: 8px;
   }
   
   .trigger-hint {

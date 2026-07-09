@@ -32,6 +32,8 @@ class RenderMqparTests(unittest.TestCase):
             "match_between_runs": True,
             "enzymes": ["Trypsin/P", "LysC"],
             "enzyme_mode": 4,
+            "max_missed_cleavages": 2,
+            "maxquant_version": "2.8.1.0",
             "fixed_modifications": ["Carbamidomethyl (C)"],
             "variable_modifications": [
                 "Oxidation (M)",
@@ -352,6 +354,26 @@ class RenderMqparTests(unittest.TestCase):
                     output_path=tmp_path / "all_samples.mqpar.xml",
                 )
 
+    def test_render_mqpar_rejects_unsafe_sample_id(self):
+        module = load_render_mqpar_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            input_path = tmp_path / "S5.RAW"
+            input_path.write_text("raw5", encoding="utf-8")
+            samples_path = self.write_samples_tsv(
+                tmp_path,
+                [("../S5", str(input_path), "S5", "1")],
+            )
+
+            with self.assertRaisesRegex(ValueError, "invalid sample_id"):
+                module.render_mqpar(
+                    samples_path=samples_path,
+                    config_path=FIXTURE_DIR / "test_config.yaml",
+                    template_path=FIXTURE_DIR / "test_mqpar.template.xml",
+                    mzml_dir=Path("results/mzml"),
+                    output_path=tmp_path / "all_samples.mqpar.xml",
+                )
+
     def test_render_mqpar_rejects_empty_experiment(self):
         module = load_render_mqpar_module()
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -384,6 +406,41 @@ class RenderMqparTests(unittest.TestCase):
             )
 
             with self.assertRaisesRegex(ValueError, "invalid fraction for sample S7"):
+                module.render_mqpar(
+                    samples_path=samples_path,
+                    config_path=FIXTURE_DIR / "test_config.yaml",
+                    template_path=FIXTURE_DIR / "test_mqpar.template.xml",
+                    mzml_dir=Path("results/mzml"),
+                    output_path=tmp_path / "all_samples.mqpar.xml",
+                )
+
+    def test_render_mqpar_rejects_fraction_outside_short_range(self):
+        module = load_render_mqpar_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            input_path = tmp_path / "S8.RAW"
+            input_path.write_text("raw8", encoding="utf-8")
+            samples_path = self.write_samples_tsv(
+                tmp_path,
+                [("S8", str(input_path), "S8", "32768")],
+            )
+
+            with self.assertRaisesRegex(ValueError, "outside the MaxQuant short range"):
+                module.render_mqpar(
+                    samples_path=samples_path,
+                    config_path=FIXTURE_DIR / "test_config.yaml",
+                    template_path=FIXTURE_DIR / "test_mqpar.template.xml",
+                    mzml_dir=Path("results/mzml"),
+                    output_path=tmp_path / "all_samples.mqpar.xml",
+                )
+
+    def test_render_mqpar_rejects_empty_sample_table(self):
+        module = load_render_mqpar_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            samples_path = self.write_samples_tsv(tmp_path, [])
+
+            with self.assertRaisesRegex(ValueError, "has no sample rows"):
                 module.render_mqpar(
                     samples_path=samples_path,
                     config_path=FIXTURE_DIR / "test_config.yaml",
@@ -460,6 +517,8 @@ class RenderMqparTests(unittest.TestCase):
             self.assertEqual(root.findtext(".//fastaFiles/FastaFileInfo/fastaFilePath"), "/data/reference/proteins.fasta")
             self.assertEqual(root.findtext(".//matchBetweenRuns"), "True")
             self.assertEqual(root.findtext(".//parameterGroups/parameterGroup/enzymeMode"), "4")
+            self.assertEqual(root.findtext(".//parameterGroups/parameterGroup/maxMissedCleavages"), "2")
+            self.assertEqual(root.findtext(".//maxQuantVersion"), "2.8.1.0")
             self.assertEqual(
                 [element.text for element in root.findall(".//parameterGroups/parameterGroup/enzymes/string")],
                 ["Trypsin/P", "LysC"],
@@ -523,6 +582,7 @@ class RenderMqparTests(unittest.TestCase):
             self.assertEqual(len(groups), 2)
             for group in groups:
                 self.assertEqual(group.findtext("./enzymeMode"), "4")
+                self.assertEqual(group.findtext("./maxMissedCleavages"), "2")
                 self.assertEqual(
                     [element.text for element in group.findall("./enzymes/string")],
                     ["Trypsin/P", "LysC"],

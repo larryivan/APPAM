@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS projects (
     name TEXT NOT NULL,
     description TEXT,
     creator TEXT,
+    analysis_workflow TEXT,
     owner_id TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -208,6 +209,30 @@ CREATE TABLE IF NOT EXISTS workflow_artifacts (
     FOREIGN KEY (run_id) REFERENCES workflow_runs (id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS download_tasks (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    submitted_by TEXT,
+    url TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    relative_path TEXT NOT NULL DEFAULT '',
+    concurrent INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL,
+    progress REAL NOT NULL DEFAULT 0,
+    downloaded_size INTEGER NOT NULL DEFAULT 0,
+    total_size INTEGER NOT NULL DEFAULT 0,
+    speed REAL NOT NULL DEFAULT 0,
+    time_remaining REAL,
+    error TEXT,
+    file_path TEXT,
+    destination_path TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    finished_at TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+    FOREIGN KEY (submitted_by) REFERENCES users (id) ON DELETE SET NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_project_members_user ON project_members (user_id);
 CREATE INDEX IF NOT EXISTS idx_auth_audit_username_created_at ON auth_audit_log (username, created_at);
 CREATE INDEX IF NOT EXISTS idx_auth_audit_ip_created_at ON auth_audit_log (ip_address, created_at);
@@ -220,6 +245,7 @@ CREATE INDEX IF NOT EXISTS idx_workflow_metrics_run_group ON workflow_metrics (r
 CREATE INDEX IF NOT EXISTS idx_workflow_stage_states_run_order ON workflow_stage_states (run_id, stage_order);
 CREATE INDEX IF NOT EXISTS idx_workflow_run_events_run_created_at ON workflow_run_events (run_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_workflow_artifacts_run_created_at ON workflow_artifacts (run_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_download_tasks_project_updated_at ON download_tasks (project_id, updated_at);
 '''
 
 
@@ -228,6 +254,8 @@ def get_db_connection():
     conn = sqlite3.connect(DATABASE_FILE, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA foreign_keys = ON')
+    conn.execute('PRAGMA busy_timeout = 30000')
+    conn.execute('PRAGMA synchronous = NORMAL')
     return conn
 
 
@@ -259,6 +287,7 @@ def init_db():
 
     conn = get_db_connection()
     try:
+        conn.execute('PRAGMA journal_mode = WAL')
         conn.executescript(DB_SCHEMA)
         migrate_db(conn)
         conn.commit()
@@ -284,6 +313,7 @@ def migrate_db(conn: sqlite3.Connection | None = None):
         _migrate_workflow_stage_states_table(connection)
         _migrate_workflow_run_events_table(connection)
         _migrate_workflow_artifacts_table(connection)
+        _migrate_download_tasks_table(connection)
         _backfill_owner_memberships(connection)
         _backfill_process_history_submitters(connection)
         connection.commit()
@@ -329,6 +359,7 @@ def _migrate_projects_table(conn: sqlite3.Connection) -> None:
                 name TEXT NOT NULL,
                 description TEXT,
                 creator TEXT,
+                analysis_workflow TEXT,
                 owner_id TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -342,6 +373,8 @@ def _migrate_projects_table(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE projects ADD COLUMN description TEXT")
     if not column_exists(conn, 'projects', 'creator'):
         conn.execute("ALTER TABLE projects ADD COLUMN creator TEXT")
+    if not column_exists(conn, 'projects', 'analysis_workflow'):
+        conn.execute("ALTER TABLE projects ADD COLUMN analysis_workflow TEXT")
     if not column_exists(conn, 'projects', 'created_at'):
         conn.execute("ALTER TABLE projects ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     if not column_exists(conn, 'projects', 'last_accessed'):
@@ -754,6 +787,58 @@ def _migrate_workflow_artifacts_table(conn: sqlite3.Connection) -> None:
                 conn.execute(column_sql)
 
     conn.execute("CREATE INDEX IF NOT EXISTS idx_workflow_artifacts_run_created_at ON workflow_artifacts (run_id, created_at)")
+
+
+def _migrate_download_tasks_table(conn: sqlite3.Connection) -> None:
+    if not table_exists(conn, 'download_tasks'):
+        conn.execute(
+            '''
+            CREATE TABLE download_tasks (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                submitted_by TEXT,
+                url TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                relative_path TEXT NOT NULL DEFAULT '',
+                concurrent INTEGER NOT NULL DEFAULT 1,
+                status TEXT NOT NULL,
+                progress REAL NOT NULL DEFAULT 0,
+                downloaded_size INTEGER NOT NULL DEFAULT 0,
+                total_size INTEGER NOT NULL DEFAULT 0,
+                speed REAL NOT NULL DEFAULT 0,
+                time_remaining REAL,
+                error TEXT,
+                file_path TEXT,
+                destination_path TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                finished_at TIMESTAMP,
+                FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+                FOREIGN KEY (submitted_by) REFERENCES users (id) ON DELETE SET NULL
+            )
+            '''
+        )
+    else:
+        for column_name, column_sql in (
+            ('submitted_by', "ALTER TABLE download_tasks ADD COLUMN submitted_by TEXT"),
+            ('relative_path', "ALTER TABLE download_tasks ADD COLUMN relative_path TEXT NOT NULL DEFAULT ''"),
+            ('concurrent', "ALTER TABLE download_tasks ADD COLUMN concurrent INTEGER NOT NULL DEFAULT 1"),
+            ('progress', "ALTER TABLE download_tasks ADD COLUMN progress REAL NOT NULL DEFAULT 0"),
+            ('downloaded_size', "ALTER TABLE download_tasks ADD COLUMN downloaded_size INTEGER NOT NULL DEFAULT 0"),
+            ('total_size', "ALTER TABLE download_tasks ADD COLUMN total_size INTEGER NOT NULL DEFAULT 0"),
+            ('speed', "ALTER TABLE download_tasks ADD COLUMN speed REAL NOT NULL DEFAULT 0"),
+            ('time_remaining', "ALTER TABLE download_tasks ADD COLUMN time_remaining REAL"),
+            ('error', "ALTER TABLE download_tasks ADD COLUMN error TEXT"),
+            ('file_path', "ALTER TABLE download_tasks ADD COLUMN file_path TEXT"),
+            ('destination_path', "ALTER TABLE download_tasks ADD COLUMN destination_path TEXT"),
+            ('created_at', "ALTER TABLE download_tasks ADD COLUMN created_at TIMESTAMP"),
+            ('updated_at', "ALTER TABLE download_tasks ADD COLUMN updated_at TIMESTAMP"),
+            ('finished_at', "ALTER TABLE download_tasks ADD COLUMN finished_at TIMESTAMP"),
+        ):
+            if not column_exists(conn, 'download_tasks', column_name):
+                conn.execute(column_sql)
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_download_tasks_project_updated_at ON download_tasks (project_id, updated_at)")
 
 
 def _backfill_owner_memberships(conn: sqlite3.Connection) -> None:

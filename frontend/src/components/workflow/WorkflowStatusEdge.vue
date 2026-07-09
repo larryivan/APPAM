@@ -137,7 +137,7 @@ const edgeVars = computed(() => ({
 
 const packets = computed(() => {
   const state = props.data?.state || 'pending'
-  if (state === 'optional' || state === 'failed' || state === 'canceled' || state === 'pending' || state === 'idle') {
+  if (['optional', 'skipped', 'interrupted', 'failed', 'canceled', 'pending', 'idle'].includes(state)) {
     return []
   }
 
@@ -186,7 +186,9 @@ const packets = computed(() => {
 
 .edge-main.state-pending,
 .edge-main.state-idle,
-.edge-main.state-optional {
+.edge-main.state-optional,
+.edge-main.state-skipped,
+.edge-main.state-interrupted {
   stroke: rgba(148, 163, 184, 0.74);
   opacity: 0.4;
 }
@@ -229,7 +231,9 @@ const packets = computed(() => {
 
 .edge-flow.state-pending,
 .edge-flow.state-idle,
-.edge-flow.state-optional {
+.edge-flow.state-optional,
+.edge-flow.state-skipped,
+.edge-flow.state-interrupted {
   opacity: 0;
 }
 
@@ -260,7 +264,9 @@ const packets = computed(() => {
 
 .flow-packet.state-pending,
 .flow-packet.state-idle,
-.flow-packet.state-optional {
+.flow-packet.state-optional,
+.flow-packet.state-skipped,
+.flow-packet.state-interrupted {
   opacity: 0;
   fill: rgba(148, 163, 184, 0.88);
 }

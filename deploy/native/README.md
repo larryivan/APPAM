@@ -1,0 +1,88 @@
+# Native Mamba deployment
+
+This is the recommended path on hosts where Docker is unavailable inside an LXC/container. It keeps the Web application on port `25078` and binds the backend to localhost on `25079`.
+
+## 1. Install environments
+
+Run as the unprivileged service account:
+
+```bash
+cd /srv/appam/APPAM
+./deploy/native/install-environments.sh
+```
+
+Add `--with-paleoproteomics` only when Thermo/Bruker conversion and MaxQuant are needed. MaxQuant itself and ThermoRawFileParser remain separately licensed/vendor-delivered tools and must be placed on the server explicitly.
+
+## 2. Generate the runtime environment
+
+```bash
+./deploy/native/render-env.sh \
+  --db-root "$HOME/db" \
+  --projects-root "$HOME/appam-data/projects" \
+  --web-origin "http://SERVER_NAME_OR_IP:25078" \
+  --maxquant-root "$HOME/MaxQuant_v2.8.1.0"
+```
+
+Keep `deploy/native/appam.env` mode `0600` and never commit it. Create the first administrator with a hidden password prompt:
+
+```bash
+./deploy/native/manage.sh create-admin --username labadmin --display-name "Lab administrator"
+```
+
+`APPAM_BOOTSTRAP_ADMINS_JSON` remains available for unattended provisioning, but the interactive command avoids retaining a plaintext password in the environment file.
+
+## 3. Build the Web UI
+
+```bash
+cd frontend
+mamba run -n appam-web pnpm install --frozen-lockfile
+mamba run -n appam-web pnpm build
+```
+
+## 4. Start and verify
+
+Foreground smoke test:
+
+```bash
+cd /srv/appam/APPAM
+./deploy/native/run-backend.sh
+```
+
+The script runs one Gunicorn `gthread` worker with configurable threads. One process is intentional: Socket.IO terminal sessions and the embedded SQLite queue are process-local. Use the Redis/RQ mode before designing a multi-process deployment.
+
+In another shell:
+
+```bash
+curl -fsS http://127.0.0.1:25079/api/health
+./deploy/native/manage.sh doctor
+```
+
+The `doctor` command and the Web Admin Center use the same checks. Fix core blockers before accepting jobs, then complete the database version manifest before creating publication runs.
+
+For persistence, adapt `appam-backend.service.example` to the actual checkout path and install it as a system or user service. Adapt `nginx-appam.conf.example`, enable it in nginx, and place TLS in front of port `25078` for non-local access.
+
+## 5. Database layout
+
+The generated environment expects:
+
+```text
+~/db/checkm2
+~/db/gunc
+~/db/eggnog
+~/db/gtdbtk_r226
+~/db/krakenuniq_refseq_bav
+```
+
+`~/db/checkm` is optional and only needed for CheckM1 or MetaWRAP refinement. KrakenUniq is optional when its advanced read-taxonomy tool is not used. Create `~/db/appam-db-manifest.json` from `docker/database-manifest.example.json` and replace placeholders with exact releases and download dates.
+
+RGI command-line analysis requires CARD reference data even without `--local`. Use `global` mode only after loading CARD into the RGI environment; use `local` mode with `APPAM_SMK_RGI_DB` pointing to a directory prepared by `rgi load --local`.
+
+## Operational notes
+
+- The local SQLite queue is suitable for one APPAM backend process on a small laboratory server.
+- Use the Redis/RQ deployment when multiple worker processes or multiple hosts are required.
+- `APPAM_MAX_GLOBAL_QUEUED`, `APPAM_MAX_PROJECT_QUEUED`, and `APPAM_MAX_USER_QUEUED` cap queued work; dry runs are included.
+- `APPAM_MAX_REQUEST_BYTES` must remain larger than `APPAM_MAX_UPLOAD_CHUNK_BYTES` to allow multipart overhead. The defaults are 17 MiB and 16 MiB; the Web UI uploads 5 MiB chunks.
+- URL download state is persisted in SQLite. Incomplete transfers are restored as paused after a restart; terminal history is removed after `APPAM_DOWNLOAD_HISTORY_DAYS` (30 by default).
+- Project inputs and run snapshots live under `APPAM_PROJECTS_ROOT`; back up that directory together with `APPAM_DB_PATH`.
+- The generated Snakemake profiles activate the exact environment prefixes recorded in each run config.

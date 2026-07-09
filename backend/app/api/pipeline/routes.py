@@ -14,6 +14,7 @@ from app.services.pipeline_execution import (
     generate_workflow_template,
     preflight_job_request,
     runtime_health_for_workflow,
+    validate_parameter_values,
 )
 from app.services.sample_validator import (
     scan_project_data,
@@ -93,34 +94,14 @@ def _queue_job_from_request(project_id: str, display_tool_name: str, job_request
 
 
 def validate_tool_params(tool_info: dict, params: dict) -> list[str]:
-    validation_errors = []
-    for p in tool_info['parameters']:
-        param_name = p['name']
-        param_value = params.get(param_name)
-
-        if p.get('required', False) and not param_value:
-            validation_errors.append(f"Required parameter '{param_name}' is missing")
-
-        if param_value and p.get('options'):
-            if isinstance(param_value, list):
-                for value in param_value:
-                    if value not in p['options']:
-                        validation_errors.append(f"Parameter '{param_name}' value '{value}' is not in allowed options: {p['options']}")
-            elif param_value not in p['options']:
-                validation_errors.append(f"Parameter '{param_name}' value '{param_value}' is not in allowed options: {p['options']}")
-
-        if param_value and p.get('type') == 'integer':
-            try:
-                int(param_value)
-            except (ValueError, TypeError):
-                validation_errors.append(f"Parameter '{param_name}' must be an integer")
-
-        if param_value and p.get('type') == 'float':
-            try:
-                float(param_value)
-            except (ValueError, TypeError):
-                validation_errors.append(f"Parameter '{param_name}' must be a float")
-    return validation_errors
+    errors = validate_parameter_values(tool_info, params)
+    user = current_user() or {}
+    if user.get('role') != 'admin':
+        for parameter in tool_info.get('parameters') or []:
+            value = params.get(parameter['name'])
+            if parameter.get('admin_only') and value not in (None, '', []):
+                errors.append(f"Parameter '{parameter['name']}' is restricted to administrators")
+    return errors
 
 
 @pipeline_bp.route('/<project_id>/data/scan')
@@ -203,26 +184,19 @@ def _get_limit(env_name: str, default: int) -> int:
         return default
 
 
-def _enforce_queue_limits(project_id: str, submitted_by: str, is_dry_run: bool):
-    if is_dry_run:
-        return None
-
-    max_project_running = _get_limit('APPAM_MAX_PROJECT_RUNNING', 1)
+def _enforce_queue_limits(project_id: str, submitted_by: str):
+    max_global_queued = _get_limit('APPAM_MAX_GLOBAL_QUEUED', 100)
     max_project_queued = _get_limit('APPAM_MAX_PROJECT_QUEUED', 10)
-    max_user_running = _get_limit('APPAM_MAX_USER_RUNNING', 1)
     max_user_queued = _get_limit('APPAM_MAX_USER_QUEUED', 10)
 
-    project_running = count_jobs(project_id=project_id, statuses=('starting', 'running'))
+    global_queued = count_jobs(statuses=('queued',))
     project_queued = count_jobs(project_id=project_id, statuses=('queued',))
-    user_running = count_jobs(submitted_by=submitted_by, statuses=('starting', 'running'))
     user_queued = count_jobs(submitted_by=submitted_by, statuses=('queued',))
 
-    if max_project_running >= 0 and project_running >= max_project_running:
-        return jsonify({'error': f'Project running limit reached ({max_project_running}).'}), 409
+    if max_global_queued >= 0 and global_queued >= max_global_queued:
+        return jsonify({'error': f'Global queue limit reached ({max_global_queued}). Wait for capacity.'}), 409
     if max_project_queued >= 0 and project_queued >= max_project_queued:
         return jsonify({'error': f'Project queued limit reached ({max_project_queued}). Cancel queued jobs or wait.'}), 409
-    if max_user_running >= 0 and user_running >= max_user_running:
-        return jsonify({'error': f'User running limit reached ({max_user_running}).'}), 409
     if max_user_queued >= 0 and user_queued >= max_user_queued:
         return jsonify({'error': f'User queued limit reached ({max_user_queued}). Cancel queued jobs or wait.'}), 409
     return None
@@ -237,6 +211,8 @@ def preflight_tool_endpoint(project_id, tool_name):
     tool_info = get_tool_definition(tool_name)
     if not tool_info:
         return jsonify({'error': f'Tool "{tool_name}" not found in library.'}), 404
+    if tool_info.get('admin_only') and current_user().get('role') != 'admin':
+        return jsonify({'error': 'This tool is restricted to administrators.'}), 403
 
     params = request.get_json() or {}
     validation_errors = validate_tool_params(tool_info, params)
@@ -270,13 +246,15 @@ def run_tool_endpoint(project_id, tool_name):
         return editor_error
 
     params = request.get_json() or {}
-    limit_error = _enforce_queue_limits(project_id, current_user()['id'], bool(params.get('dry_run')))
+    limit_error = _enforce_queue_limits(project_id, current_user()['id'])
     if limit_error:
         return limit_error
 
     tool_info = get_tool_definition(tool_name)
     if not tool_info:
         return jsonify({'error': f'Tool "{tool_name}" not found in library.'}), 404
+    if tool_info.get('admin_only') and current_user().get('role') != 'admin':
+        return jsonify({'error': 'This tool is restricted to administrators.'}), 403
     display_tool_name = tool_info.get('tool_name', tool_name)
 
     validation_errors = validate_tool_params(tool_info, params)
@@ -391,14 +369,14 @@ def task_status(project_id):
 
 @pipeline_bp.route('/<project_id>/history')
 def process_history(project_id):
-    limit = request.args.get('limit', 20, type=int)
+    limit = min(max(request.args.get('limit', 20, type=int) or 20, 1), 200)
     history = list_process_history(project_id, limit=limit)
     return jsonify(history)
 
 
 @pipeline_bp.route('/<project_id>/jobs')
 def job_history(project_id):
-    limit = request.args.get('limit', 20, type=int)
+    limit = min(max(request.args.get('limit', 20, type=int) or 20, 1), 200)
     status = request.args.get('status')
     jobs = list_jobs(project_id, limit=limit, status=status)
     return jsonify(jobs)
@@ -407,15 +385,21 @@ def job_history(project_id):
 @pipeline_bp.route('/<project_id>/workflow-runs')
 def workflow_runs(project_id):
     workflow_id = request.args.get('workflow_id')
-    limit = request.args.get('limit', 20, type=int)
-    runs = list_workflow_runs(project_id, workflow_id=workflow_id, limit=limit)
+    limit = min(max(request.args.get('limit', 20, type=int) or 20, 1), 200)
+    include_results = request.args.get('include_results', 'true').strip().lower() not in {'0', 'false', 'no'}
+    runs = list_workflow_runs(
+        project_id,
+        workflow_id=workflow_id,
+        limit=limit,
+        include_results=include_results,
+    )
     return jsonify({'workflow_runs': runs})
 
 
 @pipeline_bp.route('/<project_id>/preflights')
 def workflow_preflights(project_id):
     workflow_id = request.args.get('workflow_id')
-    limit = request.args.get('limit', 10, type=int)
+    limit = min(max(request.args.get('limit', 10, type=int) or 10, 1), 100)
     return jsonify({'preflights': list_workflow_preflights(project_id, workflow_id=workflow_id, limit=limit)})
 
 
@@ -460,10 +444,15 @@ def workflow_run_provenance_bundle(project_id, run_id):
             if path.is_file():
                 archive.write(path, f'run/{label}')
         manifest = provenance.get('manifest') or {}
-        params = manifest.get('params') or {}
-        for label, value in (
-            ('samples.tsv', params.get('sample_manifest') or params.get('sample_table')),
-        ):
+        manifest_paths = manifest.get('paths') or {}
+        effective_config = manifest.get('effective_config') or {}
+        resolved_input = (
+            manifest_paths.get('resolved_sample_manifest')
+            or manifest_paths.get('resolved_sample_table')
+            or effective_config.get('samples_file')
+            or effective_config.get('sample_table')
+        )
+        for label, value in (('samples.resolved.tsv', resolved_input),):
             if not value:
                 continue
             path = Path(value)

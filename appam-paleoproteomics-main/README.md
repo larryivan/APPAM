@@ -1,269 +1,93 @@
-# appam-paleoproteomics
+# APPAM paleoproteomics
 
-Snakemake workflow for converting Thermo `.RAW` files and Bruker `.d` folders to mzML, then running MaxQuant on the full batch.
+This Snakemake workflow converts Thermo `.RAW` files and Bruker `.d` directories to mzML, renders one batch MaxQuant parameter file, runs MaxQuant, and generates descriptive paleoproteomics QC.
 
-## Inputs
+It is an optional APPAM workflow. Deamidation and identification counts are reported descriptively; they are not, by themselves, evidence of peptide antiquity or authenticity.
 
-`config/samples.tsv` is the sample manifest. Required columns:
+## Input table
+
+`config/samples.tsv` requires:
 
 ```tsv
 sample_id	input_path	experiment	fraction
+S1	raw_ms/S1.RAW	projectA	1
+S2	raw_ms/S2.d	projectA	2
 ```
 
-`sample_id` must be unique. `experiment` groups related files. `fraction` is required and must be an integer.
+Sample IDs must be unique. `experiment` must be non-empty and `fraction` must be an integer. Standalone Snakemake runs may use absolute paths or paths relative to the table. Web runs require sample inputs inside the project workspace and permit the reference FASTA inside either the project or `APPAM_DATABASES_ROOT`; every run snapshots resolved paths for resume/retry and provenance export.
 
-The checked-in sample table points to fixture inputs under `.test/data/example_inputs` so repository-level dry-runs work without editing paths first.
+## Frozen search parameters
 
-`config/README.md` documents the required sample table schema, the `config.yaml` keys, and how the tracked `workflow/templates/mqpar.template.xml` is turned into the runtime `results/maxquant/mqpar/all_samples.mqpar.xml`.
+`config/config.yaml` records:
 
-## Configuration
+- the existing rule runtime environment prefix;
+- FASTA and mqpar template paths;
+- enzymes and enzyme mode;
+- fixed and variable modifications;
+- peptide, protein, and site FDR;
+- minimum peptide length and mass tolerances;
+- match-between-runs and contaminant settings;
+- exact converter, .NET, and MaxQuant executable paths.
 
-Use `config/config.yaml` for workflow and MaxQuant settings. The important keys are:
-
-- `sample_table`
-- `mqpar_template`
-- `results_dir`
-- `maxquant_output_dir`
-- `threads`
-- `fasta_path`
-- `match_between_runs`
-- `enzymes`
-- `enzyme_mode`
-- `fixed_modifications`
-- `variable_modifications`
-- `peptide_fdr`
-- `protein_fdr`
-- `site_fdr`
-- `include_contaminants`
-- `min_peptide_length`
-- `first_search_tol`
-- `main_search_tol`
-- `dotnet_bin`
-- `maxquant_cmd_dll`
-- `thermo_raw_file_parser`
-- `timsconvert_bin`
-- `openms_fileconverter`
-
-The default paths are:
-
-- `sample_table: config/samples.tsv`
-- `mqpar_template: workflow/templates/mqpar.template.xml`
-- `dotnet_bin: dotnet`
-- `maxquant_cmd_dll: /opt/tools/MaxQuant_v2.7.5.0/bin/MaxQuantCmd.dll`
-- `thermo_raw_file_parser: ThermoRawFileParser`
-- `timsconvert_bin: timsconvert`
-- `openms_fileconverter: FileConverter`
-
-For machine-specific overrides, keep a local file such as `config/config.local.yaml` and run Snakemake with `--configfile config/config.local.yaml`. Files matching `*.local.yaml` are ignored by Git, so local paths and private settings will not be committed.
-
-The workflow passes Snakemake's loaded `config` object into the mqpar renderer, so no separate YAML parser dependency is required. Run all commands from the repository root.
+For local changes, use an ignored `config/config.local.yaml` rather than editing tracked defaults.
+The tracked MaxQuant template is `workflow/templates/mqpar.template.xml`.
 
 ## Run
 
-Dry-run the workflow:
-
 ```bash
-snakemake -n --cores 1
+snakemake --configfile config/config.local.yaml --cores 4 --sdm conda --dry-run
+snakemake --configfile config/config.local.yaml --cores 4 --sdm conda
 ```
 
-Snakemake will automatically discover `workflow/Snakefile` from the repository root.
+Snakemake discovers `workflow/Snakefile` from the repository root.
 
-Show the rendered shell commands:
+## Outputs
 
-```bash
-snakemake -n -p --cores 1 results/maxquant/combined/txt/proteinGroups.txt
-```
+- `results/thermo/` and `results/bruker/`: converter intermediates.
+- `results/mzml/`: normalized mzML inputs.
+- `results/maxquant/mqpar/all_samples.mqpar.xml`: rendered batch search config.
+- `results/maxquant/combined/txt/proteinGroups.txt`
+- `results/maxquant/combined/txt/peptides.txt`
+- `results/maxquant/combined/txt/evidence.txt`
+- `results/reports/paleoproteomics-qc.json`
+- `results/reports/paleoproteomics-qc.html`
 
-Run the full pipeline:
+The QC report counts identified groups/peptides/evidence, reverse and contaminant records, raw-file coverage, and available deamidation fields. Authentication, taxonomic interpretation, and contamination assessment still require study-specific controls and expert review.
 
-```bash
-snakemake --cores 1
-```
+## Runtime
 
-Run with a local override config:
+Required software:
 
-```bash
-snakemake --configfile config/config.local.yaml --cores 4
-```
+- Snakemake and Python
+- ThermoRawFileParser
+- timsconvert
+- OpenMS `FileConverter`
+- .NET runtime
+- MaxQuant `MaxQuantCmd.dll`
+
+APPAM uses the stable convention `/opt/tools/maxquant-current/bin/MaxQuantCmd.dll` in containers. Native installations may point `APPAM_PALEO_MAXQUANT_CMD` directly to any staged MaxQuant release, such as `$HOME/MaxQuant_v2.8.1.0/bin/MaxQuantCmd.dll`.
+
+MaxQuant and vendor conversion components are not stored in this repository. Confirm their licenses before redistribution.
 
 ## Docker
 
-The repository tracks the Docker build assets under:
+Standalone packaging assets are `docker/Dockerfile`, `docker/environment.yml`, and `docker/entrypoint.sh`.
 
-- `docker/Dockerfile`
-- `docker/environment.yml`
-- `docker/requirements-pypi.txt`
-- `docker/entrypoint.sh`
+Root Compose deployments mount `APPAM_HOST_MAXQUANT_ROOT` read-only at `/opt/tools/maxquant-current`; the release is not copied into the image. The standalone Docker assets in this directory expect the build context to provide `tools/MaxQuant` and install it at the same generic location.
 
-When preparing the actual image build context, place `Dockerfile`, `environment.yml`, `requirements-pypi.txt`, and `entrypoint.sh` at the root of the Docker packaging directory rather than under a nested `docker/` subdirectory.
-
-Published image:
-
-- `xreal1ty/appam-paleoproteomics`
-- <https://hub.docker.com/repository/docker/xreal1ty/appam-paleoproteomics/>
-
-The current published version is `xreal1ty/appam-paleoproteomics:v0.1.3`.
-
-Pull the published image:
+Example root deployment:
 
 ```bash
-docker pull xreal1ty/appam-paleoproteomics:latest
+FLASK_SECRET_KEY=... docker compose up -d --build
 ```
 
-The Docker image contains the runtime dependencies for APPAM paleoproteomics, while the Snakemake workflow is mounted at runtime rather than baked into the image. This allows independent workflow updates without rebuilding the container.
-
-The recommended deployment is to run `snakemake` inside a Docker image that already includes:
-
-- `snakemake`
-- `ThermoRawFileParser`
-- `timsconvert`
-- `FileConverter`
-- `dotnet`
-- `entrypoint.sh`
-
-`entrypoint.sh` should activate the `paleoproteomics` conda environment and export these runtime paths:
-
-- `/opt/tools/ThermoRawFileParser`
-- `/opt/tools/MaxQuant_v2.7.5.0`
-- `/opt/tools/openms-development/bin`
-- `/opt/tools/openms-development/lib`
-
-With that entrypoint, the defaults in `config/config.yaml` match the container directly. Only `maxquant_cmd_dll` stays absolute because Snakemake passes it to `dotnet` as a DLL path:
-
-- `/opt/tools/MaxQuant_v2.7.5.0/bin/MaxQuantCmd.dll`
-
-The Docker build context should also provide vendor tool directories under `tools/`. Those binaries are not stored in this repository.
-
-Example:
-
-```bash
-docker run --rm -it \
-  -v "$PWD":/workspace \
-  -v /path/to/raw_data:/data \
-  -w /workspace \
-  xreal1ty/appam-paleoproteomics:latest \
-  snakemake --cores 4
-```
-
-Run with a local override config:
-
-```bash
-docker run --rm -it \
-  -v "$PWD":/workspace \
-  -v /path/to/raw_data:/data \
-  -w /workspace \
-  xreal1ty/appam-paleoproteomics:latest \
-  snakemake --configfile config/config.local.yaml --cores 4
-```
-
-Dry-run:
-
-```bash
-docker run --rm -it \
-  -v "$PWD":/workspace \
-  -v /path/to/raw_data:/data \
-  -w /workspace \
-  xreal1ty/appam-paleoproteomics:latest \
-  snakemake -n --cores 1
-```
-
-Open a shell in the prepared runtime:
-
-```bash
-docker run --rm -it \
-  -v "$PWD":/workspace \
-  -v /path/to/raw_data:/data \
-  -w /workspace \
-  xreal1ty/appam-paleoproteomics:latest \
-  bash
-```
-
-Mount convention:
-
-- Mount the workflow repository to `/workspace`
-- Mount raw vendor files to `/data`
-- Write `config/samples.tsv` with container-visible paths such as `/data/project/S1_F1.RAW` or `/data/project/S2.d`
-
-Input and output handling:
-
-- Input raw data stay in the mounted `/data` directory and are read in place
-- Workflow code, `config/`, and templates are read from `/workspace`
-- Thermo intermediate mzML files are written under `/workspace/results/thermo`
-- Bruker intermediate mzML files are written under `/workspace/results/bruker`
-- Converted mzML files are written under `/workspace/results/mzml`
-- Rendered MaxQuant parameters are written under `/workspace/results/maxquant/mqpar`
-- MaxQuant output tables are written under `/workspace/results/maxquant`
-
-This means users normally only need to back up two things:
-
-- the repository directory mounted at `/workspace`
-- the raw data directory mounted at `/data`
-
-This repository no longer expects Snakemake to launch another container from inside the workflow. The image is the execution environment; the workflow runs directly inside it, while the workflow code remains mounted from the host repository.
-
-## Run Without Docker
-
-You can also run the workflow directly on the host, but then you need to install the runtime yourself.
-
-Required external software:
-
-- `ThermoRawFileParser`
-- `timsconvert`
-- `OpenMS` with `FileConverter`
-- `MaxQuant`
-- `dotnet`
-
-For host installs, `timsconvert` is recommended to be installed via `conda`, consistent with the Docker environment definition. For example:
-
-```bash
-conda install -c bioconda -c conda-forge timsconvert
-```
-
-Recommended `conda` environment:
-
-- `snakemake`
-- Python runtime used by Snakemake
-- any Python packages you want for local testing
-
-When running without Docker, make sure these commands are available on `PATH`:
-
-- `snakemake`
-- `ThermoRawFileParser`
-- `timsconvert`
-- `FileConverter`
-- `dotnet`
-
-Then update `config/config.yaml` to match your local installation, especially:
-
-- `maxquant_cmd_dll`
-- `thermo_raw_file_parser`
-- `timsconvert_bin`
-- `openms_fileconverter`
-
-Local execution example:
-
-```bash
-snakemake --cores 4
-```
-
-With a local override config:
-
-```bash
-snakemake --configfile config/config.local.yaml --cores 4
-```
+For hosts where Docker cannot start containers, follow `../deploy/native/README.md` and install the optional paleoproteomics environment.
 
 ## Tests
 
-Unit tests cover `workflow/scripts/render_mqpar.py`:
-
 ```bash
-python3 -m unittest discover -s .test/unit -p 'test_*.py' -v
+python -m unittest discover -s .test/unit -p 'test_*.py' -v
+python -m unittest discover -s .test/integration -p 'test_*.py' -v
 ```
 
-Integration tests cover repository layout and Snakemake dry-runs:
-
-```bash
-python3 -m unittest discover -s .test/integration -p 'test_*.py' -v
-```
-
-The repository's tests and `snakemake -n` dry-runs work without those tools being installed, but real conversion and MaxQuant execution require either your prepared Docker image or a host environment with the required tools on `PATH`.
+Integration tests validate layout, input errors, command quoting, and Snakemake DAGs without executing vendor software. A real release still requires fixture RAW/.d conversion and MaxQuant result comparison on a licensed test system.

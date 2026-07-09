@@ -17,7 +17,7 @@ DEFAULT_SKILL_FILENAMES = ("SKILL.md", "skill.md")
 class OpenCodeService:
     def __init__(self) -> None:
         self.base_url = os.getenv("OPENCODE_BASE_URL", "http://127.0.0.1:19455").rstrip("/")
-        self.agent = os.getenv("OPENCODE_AGENT", "build")
+        self.agent = os.getenv("OPENCODE_API_AGENT", "plan")
         self.provider_id = os.getenv("OPENCODE_PROVIDER_ID")
         self.model_id = os.getenv("OPENCODE_MODEL_ID")
         self.timeout = float(os.getenv("OPENCODE_TIMEOUT", "120"))
@@ -32,7 +32,7 @@ class OpenCodeService:
         self.permission_pattern = os.getenv("OPENCODE_PERMISSION_PATTERN", "*")
         self.permission_list = os.getenv(
             "OPENCODE_PERMISSIONS",
-            "bash,edit,webfetch,external_directory",
+            "",
         )
         self.session_map: Dict[str, str] = {}
         self.session = requests.Session()
@@ -135,10 +135,12 @@ class OpenCodeService:
 
     def _permission_rules(self) -> list:
         permissions = [p.strip() for p in self.permission_list.split(",") if p.strip()]
-        return [
+        rules = [{"permission": "*", "pattern": "*", "action": "deny"}]
+        rules.extend(
             {"permission": permission, "pattern": self.permission_pattern, "action": "allow"}
             for permission in permissions
-        ]
+        )
+        return rules
 
     def _request(self, method: str, path: str, project_dir: str, json_body: Optional[dict] = None) -> requests.Response:
         url = f"{self.base_url}{path}"
@@ -149,6 +151,25 @@ class OpenCodeService:
             json=json_body,
             timeout=self.timeout,
         )
+
+    def health(self) -> dict:
+        """Return a small, non-sensitive snapshot of OpenCode availability."""
+        try:
+            response = self.session.get(
+                f"{self.base_url}/global/health",
+                timeout=min(self.timeout, 2.0),
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except (requests.RequestException, ValueError):
+            return {"available": False, "version": ""}
+
+        healthy = payload.get("healthy") is True if isinstance(payload, dict) else False
+        version = payload.get("version", "") if isinstance(payload, dict) else ""
+        return {
+            "available": healthy,
+            "version": str(version)[:80] if healthy else "",
+        }
 
     def _create_session(self, project_dir: str) -> str:
         payload = {"permission": self._permission_rules()}

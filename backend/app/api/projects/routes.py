@@ -23,13 +23,22 @@ def get_projects():
 def create_project():
     user = current_user()
     data = request.get_json() or {}
-    creator = data.get('creator') or user.get('display_name') or user.get('username')
-    project = services.create_project(
-        data['name'],
-        data.get('description', ''),
-        creator,
-        owner_id=user['id']
-    )
+    if not isinstance(data, dict):
+        return jsonify({'error': 'A JSON object is required'}), 400
+    name = str(data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'Project name is required'}), 400
+    creator = user.get('display_name') or user.get('username')
+    try:
+        project = services.create_project(
+            name,
+            str(data.get('description') or '').strip(),
+            creator,
+            owner_id=user['id'],
+            analysis_workflow=data.get('analysis_workflow'),
+        )
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
     return jsonify(project), 201
 
 
@@ -53,12 +62,20 @@ def get_project_dashboard(project_id):
 @project_access_required(min_role='owner')
 def update_project(project_id):
     data = request.get_json() or {}
-    updated = services.update_project(
-        project_id,
-        data.get('name'),
-        data.get('description'),
-        data.get('creator'),
-    )
+    if not isinstance(data, dict):
+        return jsonify({'error': 'A JSON object is required'}), 400
+    if 'name' in data and not str(data.get('name') or '').strip():
+        return jsonify({'error': 'Project name is required'}), 400
+    try:
+        updated = services.update_project(
+            project_id,
+            str(data['name']).strip() if 'name' in data else None,
+            str(data['description']).strip() if 'description' in data else None,
+            data.get('creator'),
+            data.get('analysis_workflow', services.PROJECT_FIELD_UNSET),
+        )
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
     if updated:
         user = current_user()
         project = services.get_project_by_id(project_id, user_id=user['id'], is_admin=user_is_admin(user))

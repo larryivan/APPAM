@@ -103,19 +103,17 @@ class WorkflowExecutionTracker:
         if not stage:
             return
 
-        if self.current_stage_id and self.current_stage_id != stage['id']:
-            self._mark_stage_completed(self.current_stage_id)
-
+        first_stage_observation = stage['id'] not in self.seen_stage_ids
         if self.current_stage_id != stage['id']:
             self.current_stage_id = stage['id']
-            if stage['id'] not in self.seen_stage_ids:
+            if first_stage_observation:
                 self.seen_stage_ids.append(stage['id'])
-            append_workflow_run_event(
-                self.run_id,
-                'stage_started',
-                stage_id=stage['id'],
-                message=f"Stage started: {stage['title']}",
-            )
+                append_workflow_run_event(
+                    self.run_id,
+                    'stage_started',
+                    stage_id=stage['id'],
+                    message=f"Stage started: {stage['title']}",
+                )
 
         seen = self.seen_rules.setdefault(stage['id'], set())
         seen.add(rule_name)
@@ -131,15 +129,15 @@ class WorkflowExecutionTracker:
             current_rule=rule_name,
             status='running',
         )
-        update_workflow_stage(
-            self.run_id,
-            stage['id'],
-            status='running',
-            started_at=started_at,
-            current_rule=rule_name,
-            completed_rules=completed_rules,
-            total_rules=total_rules,
-        )
+        stage_fields = {
+            'status': 'running',
+            'current_rule': rule_name,
+            'completed_rules': completed_rules,
+            'total_rules': total_rules,
+        }
+        if first_stage_observation:
+            stage_fields['started_at'] = started_at
+        update_workflow_stage(self.run_id, stage['id'], **stage_fields)
         append_workflow_run_event(
             self.run_id,
             'rule_started',
@@ -153,19 +151,31 @@ class WorkflowExecutionTracker:
             return
 
         finished_at = _now_str()
-        if self.current_stage_id:
-            stage = self.stage_lookup.get(self.current_stage_id)
-            if stage:
-                if final_status == 'completed':
-                    self._mark_stage_completed(self.current_stage_id, finished_at=finished_at)
+        for stage in self.stages:
+            stage_id = stage['id']
+            was_seen = stage_id in self.seen_stage_ids
+            if final_status == 'completed':
+                if was_seen:
+                    self._mark_stage_completed(stage_id, finished_at=finished_at)
                 else:
                     update_workflow_stage(
                         self.run_id,
-                        self.current_stage_id,
-                        status=final_status,
+                        stage_id,
+                        status='optional' if stage.get('optional') else 'skipped',
                         finished_at=finished_at,
                         current_rule=None,
+                        completed_rules=0,
                     )
+            elif was_seen:
+                stage_status = final_status if stage_id == self.current_stage_id else 'interrupted'
+                update_workflow_stage(
+                    self.run_id,
+                    stage_id,
+                    status=stage_status,
+                    finished_at=finished_at,
+                    current_rule=None,
+                    completed_rules=max(0, len(self.seen_rules.get(stage_id, set())) - 1),
+                )
         update_workflow_run(
             self.run_id,
             current_rule=None,
@@ -174,10 +184,10 @@ class WorkflowExecutionTracker:
         )
         append_workflow_run_event(
             self.run_id,
-            'stage_finished',
+            'workflow_finished',
             stage_id=self.current_stage_id,
             rule_name=self.current_rule,
-            message=f'Stage finished with status {final_status}',
+            message=f'Workflow finished with status {final_status}',
             payload={'status': final_status, 'error_message': error_message},
         )
 
@@ -191,7 +201,7 @@ class WorkflowExecutionTracker:
             status='completed',
             finished_at=finished_at or _now_str(),
             current_rule=None,
-            completed_rules=len(stage.get('rules', [])),
+            completed_rules=len(self.seen_rules.get(stage_id, set())),
             total_rules=len(stage.get('rules', [])),
         )
         append_workflow_run_event(
@@ -286,6 +296,8 @@ def run_pipeline_job(
     env['PYTHONUNBUFFERED'] = '1'
 
     process: Optional[subprocess.Popen] = None
+    stdin_handle = None
+    stdout_handle = None
     workflow_context = (command_spec or {}).get('workflow_context') or {}
     workflow_tracker = WorkflowExecutionTracker(workflow_context)
     _update_manifest_after_run(workflow_context, status='running')
@@ -300,10 +312,19 @@ def run_pipeline_job(
             cwd = (command_spec or {}).get('cwd', project_dir)
             env.update((command_spec or {}).get('env') or {})
 
+            stdin_path = (command_spec or {}).get('stdin_path')
+            stdout_path = (command_spec or {}).get('stdout_path')
+            if stdin_path:
+                stdin_handle = open(stdin_path, 'rb')
+            if stdout_path:
+                _ensure_directory(os.path.dirname(stdout_path))
+                stdout_handle = open(stdout_path, 'wb')
+
             process = subprocess.Popen(
                 argv,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
+                stdin=stdin_handle,
+                stdout=stdout_handle or subprocess.PIPE,
+                stderr=subprocess.PIPE if stdout_handle else subprocess.STDOUT,
                 text=True,
                 bufsize=1,
                 universal_newlines=True,
@@ -319,6 +340,7 @@ def run_pipeline_job(
                 host=socket.gethostname(),
             )
             last_heartbeat = time.monotonic()
+            output_stream = process.stderr if stdout_handle else process.stdout
 
             while True:
                 if is_cancel_requested(job_id):
@@ -336,11 +358,11 @@ def run_pipeline_job(
                     mark_job_finished(job_id, 'canceled', None, 'Canceled by user', end_time - start_time)
                     return {'status': 'canceled'}
 
-                if process.stdout is None:
+                if output_stream is None:
                     break
 
                 if select and os.name != 'nt':
-                    ready, _, _ = select.select([process.stdout], [], [], 0.5)
+                    ready, _, _ = select.select([output_stream], [], [], 0.5)
                     if not ready:
                         if time.monotonic() - last_heartbeat >= 5:
                             update_job_heartbeat(job_id)
@@ -348,9 +370,9 @@ def run_pipeline_job(
                         if process.poll() is not None:
                             break
                         continue
-                    output = process.stdout.readline()
+                    output = output_stream.readline()
                 else:
-                    output = process.stdout.readline()
+                    output = output_stream.readline()
 
                 if output == '' and process.poll() is not None:
                     break
@@ -412,8 +434,16 @@ def run_pipeline_job(
         mark_job_finished(job_id, 'failed', None, error_message, end_time - start_time)
         return {'status': 'failed', 'error': error_message}
     finally:
-        if process and process.stdout:
-            try:
-                process.stdout.close()
-            except Exception:
-                pass
+        if process:
+            for stream in (process.stdout, process.stderr):
+                if stream:
+                    try:
+                        stream.close()
+                    except Exception:
+                        pass
+        for handle in (stdin_handle, stdout_handle):
+            if handle:
+                try:
+                    handle.close()
+                except Exception:
+                    pass

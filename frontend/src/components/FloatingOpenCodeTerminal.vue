@@ -62,11 +62,11 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Terminal } from 'xterm'
-import { FitAddon } from 'xterm-addon-fit'
-import { WebLinksAddon } from 'xterm-addon-web-links'
+import { Terminal } from '@xterm/xterm'
+import { FitAddon } from '@xterm/addon-fit'
+import { WebLinksAddon } from '@xterm/addon-web-links'
 import io from 'socket.io-client'
-import 'xterm/css/xterm.css'
+import '@xterm/xterm/css/xterm.css'
 
 const route = useRoute()
 const projectId = computed(() => route.params.id)

@@ -12,18 +12,39 @@ services:
       FLASK_DEBUG: "false"
       FLASK_HOST: "0.0.0.0"
       FLASK_PORT: "19454"
-      APPAM_ALLOW_UNSAFE_WERKZEUG: "true"
-      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:-appam-docker-secret}
+      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:?Set FLASK_SECRET_KEY in .env before starting APPAM}
       APPAM_BOOTSTRAP_ADMINS: ${APPAM_BOOTSTRAP_ADMINS:-}
       APPAM_BOOTSTRAP_ADMINS_JSON: ${APPAM_BOOTSTRAP_ADMINS_JSON:-}
       APPAM_BOOTSTRAP_ADMIN_RESET_PASSWORDS: ${APPAM_BOOTSTRAP_ADMIN_RESET_PASSWORDS:-false}
+      APPAM_ALLOW_REGISTRATION: ${APPAM_ALLOW_REGISTRATION:-false}
+      APPAM_ALLOW_FIRST_USER_ADMIN: "false"
+      APPAM_ALLOWED_ORIGINS: ${APPAM_ALLOWED_ORIGINS:-}
+      APPAM_TRUST_PROXY_HEADERS: "true"
+      APPAM_ALLOW_FTP_DOWNLOADS: ${APPAM_ALLOW_FTP_DOWNLOADS:-false}
+      APPAM_REMOTE_DOWNLOAD_HOSTS: ${APPAM_REMOTE_DOWNLOAD_HOSTS:-}
+      APPAM_MAX_REMOTE_DOWNLOAD_BYTES: ${APPAM_MAX_REMOTE_DOWNLOAD_BYTES:-107374182400}
+      APPAM_MAX_GLOBAL_DOWNLOADS: ${APPAM_MAX_GLOBAL_DOWNLOADS:-8}
+      APPAM_MAX_PROJECT_DOWNLOADS: ${APPAM_MAX_PROJECT_DOWNLOADS:-2}
+      APPAM_MAX_DOWNLOAD_THREADS: ${APPAM_MAX_DOWNLOAD_THREADS:-8}
+      APPAM_DOWNLOAD_HISTORY_DAYS: ${APPAM_DOWNLOAD_HISTORY_DAYS:-30}
+      APPAM_MAX_UPLOAD_CHUNK_BYTES: ${APPAM_MAX_UPLOAD_CHUNK_BYTES:-16777216}
+      APPAM_MAX_UPLOAD_CHUNKS: ${APPAM_MAX_UPLOAD_CHUNKS:-20000}
+      APPAM_MAX_REQUEST_BYTES: ${APPAM_MAX_REQUEST_BYTES:-17825792}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
       SOCKETIO_ASYNC_MODE: "threading"
+      APPAM_GUNICORN_THREADS: ${APPAM_GUNICORN_THREADS:-32}
+      APPAM_GUNICORN_TIMEOUT: ${APPAM_GUNICORN_TIMEOUT:-120}
+      APPAM_GUNICORN_GRACEFUL_TIMEOUT: ${APPAM_GUNICORN_GRACEFUL_TIMEOUT:-30}
       APPAM_QUEUE_BACKEND: ${APPAM_QUEUE_BACKEND:-local-db}
       APPAM_REDIS_URL: ${APPAM_REDIS_URL:-redis://redis:6379/0}
       APPAM_RQ_QUEUE: ${APPAM_RQ_QUEUE:-appam-workflows}
+      APPAM_MAX_GLOBAL_QUEUED: ${APPAM_MAX_GLOBAL_QUEUED:-100}
+      APPAM_MAX_PROJECT_QUEUED: ${APPAM_MAX_PROJECT_QUEUED:-10}
+      APPAM_MAX_USER_QUEUED: ${APPAM_MAX_USER_QUEUED:-10}
       APPAM_PREFLIGHT_DRY_RUN: ${APPAM_PREFLIGHT_DRY_RUN:-true}
       APPAM_PREFLIGHT_DRY_RUN_TIMEOUT: ${APPAM_PREFLIGHT_DRY_RUN_TIMEOUT:-120}
+      APPAM_ALLOW_RUNTIME_DRIFT_ON_RETRY: ${APPAM_ALLOW_RUNTIME_DRIFT_ON_RETRY:-false}
+      APPAM_FIX_PROJECT_OWNERSHIP: ${APPAM_FIX_PROJECT_OWNERSHIP:-false}
       APPAM_REPO_ROOT: "/opt/appam"
       APPAM_BACKEND_ROOT: "/opt/appam/backend"
       APPAM_PROJECTS_ROOT: "/workspaces/projects"
@@ -32,46 +53,63 @@ services:
       APPAM_DB_PATH: "/data/app_database.db"
       APPAM_SMK_ROOT: "/opt/appam/APPAM-SMK-main"
       APPAM_PALEOPROTEOMICS_ROOT: "/opt/appam/appam-paleoproteomics-main"
+      APPAM_PALEO_ENV: ${APPAM_PALEO_ENV:-/opt/conda/envs/paleoproteomics}
       APPAM_SNAKEMAKE_BIN: "snakemake"
       APPAM_SMK_METAWRAP_ENV: ${APPAM_SMK_METAWRAP_ENV:-/opt/conda/envs/metawrap}
+      APPAM_SMK_PREPROCESSING_ENV: ${APPAM_SMK_PREPROCESSING_ENV:-/opt/conda/envs/preprocessing}
+      APPAM_SMK_MAPPING_ENV: ${APPAM_SMK_MAPPING_ENV:-/opt/conda/envs/mapping_dna}
+      APPAM_SMK_ASSEMBLY_ENV: ${APPAM_SMK_ASSEMBLY_ENV:-/opt/conda/envs/assembly}
       APPAM_SMK_PYDAMAGE_ENV: ${APPAM_SMK_PYDAMAGE_ENV:-/opt/conda/envs/ancient_dna}
+      APPAM_SMK_CHECKM1_ENV: ${APPAM_SMK_CHECKM1_ENV:-/opt/conda/envs/checkm}
       APPAM_SMK_CHECKM1_DB: ${APPAM_SMK_CHECKM1_DB:-/databases/checkm}
       APPAM_SMK_CHECKM_DB: ${APPAM_SMK_CHECKM_DB:-/databases/checkm}
       APPAM_SMK_CHECKM2_ENV: ${APPAM_SMK_CHECKM2_ENV:-/opt/conda/envs/checkm2}
       APPAM_SMK_CHECKM2_DB: ${APPAM_SMK_CHECKM2_DB:-/databases/checkm2}
       APPAM_SMK_GUNC_ENV: ${APPAM_SMK_GUNC_ENV:-/opt/conda/envs/binning}
       APPAM_SMK_GUNC_DB: ${APPAM_SMK_GUNC_DB:-/databases/gunc}
+      APPAM_SMK_GTDBTK_ENV: ${APPAM_SMK_GTDBTK_ENV:-/opt/conda/envs/gtdbtk}
+      APPAM_SMK_GTDBTK_DB: ${APPAM_SMK_GTDBTK_DB:-/databases/gtdbtk_r226}
       APPAM_SMK_PROKKA_ENV: ${APPAM_SMK_PROKKA_ENV:-/opt/conda/envs/prokka}
       APPAM_SMK_EGGNOG_ENV: ${APPAM_SMK_EGGNOG_ENV:-/opt/conda/envs/eggnog_py310}
       APPAM_SMK_EGGNOG_DB: ${APPAM_SMK_EGGNOG_DB:-/databases/eggnog}
+      APPAM_KRAKENUNIQ_DB: ${APPAM_KRAKENUNIQ_DB:-/databases/krakenuniq_refseq_bav}
       APPAM_SMK_ABRICATE_ENV: ${APPAM_SMK_ABRICATE_ENV:-/opt/conda/envs/abricate}
       APPAM_SMK_RGI_ENV: ${APPAM_SMK_RGI_ENV:-/opt/conda/envs/rgi}
-      APPAM_SMK_RGI_DB_MODE: ${APPAM_SMK_RGI_DB_MODE:-online}
+      APPAM_SMK_RGI_DB_MODE: ${APPAM_SMK_RGI_DB_MODE:-global}
       APPAM_SMK_ANTISMASH_ENV: ${APPAM_SMK_ANTISMASH_ENV:-/opt/conda/envs/antismash}
       APPAM_RUNTIME_LOG_DIR: "/runtime-logs"
       OPENCODE_PORT: "19455"
       OPENCODE_BASE_URL: "http://127.0.0.1:19455"
       APPAM_PALEO_DOTNET_BIN: "dotnet"
-      APPAM_PALEO_MAXQUANT_CMD: "/opt/tools/MaxQuant_v2.7.5.0/bin/MaxQuantCmd.dll"
+      APPAM_PALEO_MAXQUANT_CMD: "/opt/tools/maxquant-current/bin/MaxQuantCmd.dll"
+      APPAM_PALEO_MAXQUANT_VERSION: ${APPAM_PALEO_MAXQUANT_VERSION:-2.8.1.0}
       APPAM_PALEO_THERMO_RAW_FILE_PARSER: ${APPAM_PALEO_THERMO_RAW_FILE_PARSER:-ThermoRawFileParser}
       APPAM_PALEO_TIMSCONVERT_BIN: ${APPAM_PALEO_TIMSCONVERT_BIN:-timsconvert}
       APPAM_PALEO_OPENMS_FILECONVERTER: ${APPAM_PALEO_OPENMS_FILECONVERTER:-FileConverter}
       OPENCODE_CLI_COMMAND: "/home/mambauser/.opencode/bin/opencode"
       OPENCODE_CLI_AGENT: ${OPENCODE_CLI_AGENT:-build}
+      OPENCODE_API_AGENT: ${OPENCODE_API_AGENT:-plan}
       OPENCODE_CLI_AGENTS_PATH: "/opt/appam/backend/opencode/AGENTS.md"
       OPENCODE_CLI_SYSTEM_PROMPT_PATH: "/opt/appam/backend/opencode/system_prompt.txt"
       OPENCODE_LLM_PROVIDER_ID: ${OPENCODE_LLM_PROVIDER_ID:-}
       OPENCODE_LLM_MODEL: ${OPENCODE_LLM_MODEL:-}
       OPENCODE_LLM_API_KEY: ${OPENCODE_LLM_API_KEY:-}
       OPENCODE_LLM_BASE_URL: ${OPENCODE_LLM_BASE_URL:-}
+      OPENCODE_PERMISSIONS: ${OPENCODE_PERMISSIONS:-}
     volumes: &appam-tools-volumes
       - appam-data:/data
       - ./docker-data/projects:/workspaces/projects
       - ${APPAM_HOST_DB_ROOT:-./docker-data/databases}:/databases:ro
+      - ${APPAM_HOST_MAXQUANT_ROOT:-./docker-data/maxquant}:/opt/tools/maxquant-current:ro
       - ./docker-data/runtime-logs:/runtime-logs
     ports:
-      - "19454:19454"
-      - "19455:19455"
+      - "127.0.0.1:${APPAM_API_PORT:-25079}:19454"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:19454/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   website:
     image: appam-website:latest
@@ -80,12 +118,13 @@ services:
       dockerfile: docker/website/Dockerfile
     restart: unless-stopped
     depends_on:
-      - tools
+      tools:
+        condition: service_healthy
     ports:
-      - "19453:80"
+      - "${APPAM_WEB_PORT:-25078}:80"
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.7-alpine@sha256:02f2cc4882f8bf87c79a220ac958f58c700bdec0dfb9b9ea61b62fb0e8f1bfcf
     profiles: ["rq"]
     restart: unless-stopped
     volumes:

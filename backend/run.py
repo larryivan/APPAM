@@ -20,14 +20,15 @@ app = create_app()
 
 if __name__ == '__main__':
     debug_mode = os.getenv('FLASK_DEBUG', 'False').lower() in ['true', '1', 'yes']
-    port = int(os.getenv('FLASK_PORT', 19454))
+    host = os.getenv('FLASK_HOST', '127.0.0.1')
+    port = int(os.getenv('FLASK_PORT', 25079))
     allow_unsafe_werkzeug = os.getenv('APPAM_ALLOW_UNSAFE_WERKZEUG', 'false').lower() in ['true', '1', 'yes']
     if not debug_mode or os.getenv('WERKZEUG_RUN_MAIN') == 'true':
         start_embedded_worker()
     socketio.run(
         app,
         debug=debug_mode,
-        host='0.0.0.0',
+        host=host,
         port=port,
         allow_unsafe_werkzeug=allow_unsafe_werkzeug,
     )

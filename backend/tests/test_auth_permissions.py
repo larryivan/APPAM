@@ -1,9 +1,12 @@
 import json
+from io import BytesIO
 import os
 import shutil
 import sys
 import tempfile
 import unittest
+import zipfile
+import yaml
 from pathlib import Path
 from unittest import mock
 
@@ -17,6 +20,8 @@ os.environ.setdefault('APPAM_DB_PATH', str(Path(TEST_TEMP_DIR) / 'app_database.d
 os.environ.setdefault('FLASK_SECRET_KEY', 'appam-test-secret')
 os.environ.setdefault('SOCKETIO_ASYNC_MODE', 'threading')
 os.environ.setdefault('APPAM_DISABLE_EMBEDDED_WORKER', 'true')
+os.environ.setdefault('APPAM_ALLOW_REGISTRATION', 'true')
+os.environ.setdefault('APPAM_ALLOW_FIRST_USER_ADMIN', 'true')
 
 sys.path.insert(0, str(BACKEND_DIR))
 
@@ -86,6 +91,120 @@ class AuthPermissionApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201, response.get_data(as_text=True))
         return response.get_json()
 
+    def test_health_endpoint_is_public_and_minimal(self):
+        response = self.client.get('/api/health')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), {'status': 'ok', 'service': 'appam-backend'})
+
+    def test_parameter_fill_health_is_authenticated_and_reflects_opencode(self):
+        unauthenticated = self.client.get('/api/parameter-fill/health')
+        self.assertEqual(unauthenticated.status_code, 401)
+
+        self.register(self.client, 'parameteradmin')
+        with mock.patch(
+            'app.api.parameter_fill.routes.opencode_service.health',
+            return_value={'available': False, 'version': ''},
+        ):
+            response = self.client.get(
+                '/api/parameter-fill/health',
+                headers={'Origin': 'https://untrusted.example'},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), {
+            'available': False,
+            'service': 'parameter_fill',
+            'status': 'unavailable',
+            'version': '',
+        })
+        self.assertIsNone(response.headers.get('Access-Control-Allow-Origin'))
+
+    def test_parameter_fill_rejects_invalid_json(self):
+        self.register(self.client, 'parameterjsonadmin')
+        response = self.client.post(
+            '/api/parameter-fill/suggest',
+            data='not-json',
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()['error'], 'A JSON object is required')
+
+    def test_project_persists_and_validates_analysis_workflow(self):
+        self.register(self.client, 'workflow-owner', display_name='Workflow Owner')
+
+        created = self.client.post(
+            '/api/projects/',
+            json={
+                'name': 'Ancient metagenomics study',
+                'creator': 'Forged creator',
+                'analysis_workflow': 'appam-smk',
+            },
+        )
+        self.assertEqual(created.status_code, 201, created.get_data(as_text=True))
+        project = created.get_json()
+        self.assertEqual(project['analysis_workflow'], 'appam-smk')
+        self.assertEqual(project['creator'], 'Workflow Owner')
+
+        updated = self.client.put(
+            f"/api/projects/{project['id']}",
+            json={'analysis_workflow': 'appam-paleoproteomics'},
+        )
+        self.assertEqual(updated.status_code, 200, updated.get_data(as_text=True))
+        self.assertEqual(updated.get_json()['analysis_workflow'], 'appam-paleoproteomics')
+
+        cleared = self.client.put(
+            f"/api/projects/{project['id']}",
+            json={'analysis_workflow': ''},
+        )
+        self.assertEqual(cleared.status_code, 200, cleared.get_data(as_text=True))
+        self.assertIsNone(cleared.get_json()['analysis_workflow'])
+
+        invalid = self.client.post(
+            '/api/projects/',
+            json={'name': 'Invalid workflow', 'analysis_workflow': 'unknown'},
+        )
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(invalid.get_json()['error'], 'Unsupported analysis workflow')
+
+    def test_dry_run_cannot_bypass_queue_limits(self):
+        self.register(self.client, 'queueadmin')
+        project = self.create_project(self.client, name='Queue limits')
+        with mock.patch.dict(
+            os.environ,
+            {
+                'APPAM_MAX_GLOBAL_QUEUED': '0',
+                'APPAM_MAX_PROJECT_QUEUED': '10',
+                'APPAM_MAX_USER_QUEUED': '10',
+            },
+            clear=False,
+        ):
+            response = self.client.post(
+                f"/api/pipeline/{project['id']}/run/demo",
+                json={'dry_run': True},
+            )
+        self.assertEqual(response.status_code, 409)
+        self.assertIn('Global queue limit reached', response.get_json()['error'])
+
+    def test_opencode_api_sessions_deny_tools_by_default(self):
+        from app.services.opencode_service import OpenCodeService
+
+        with mock.patch.dict(os.environ, {'OPENCODE_PERMISSIONS': ''}, clear=False):
+            service = OpenCodeService()
+        self.assertEqual(service.agent, 'plan')
+        self.assertEqual(service._permission_rules(), [
+            {'permission': '*', 'pattern': '*', 'action': 'deny'},
+        ])
+
+    def test_sqlite_uses_wal_for_local_queue_concurrency(self):
+        conn = get_db_connection()
+        try:
+            journal_mode = conn.execute('PRAGMA journal_mode').fetchone()[0]
+            busy_timeout = conn.execute('PRAGMA busy_timeout').fetchone()[0]
+        finally:
+            conn.close()
+        self.assertEqual(journal_mode.lower(), 'wal')
+        self.assertEqual(busy_timeout, 30000)
+
     def test_bootstrap_admins_from_environment(self):
         db_path = Path(DATABASE_FILE)
         if db_path.exists():
@@ -139,6 +258,156 @@ class AuthPermissionApiTests(unittest.TestCase):
             )
             self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
             self.logout(client)
+
+    def test_production_registration_policy_and_admin_user_creation(self):
+        with mock.patch.dict(os.environ, {'APPAM_ALLOW_REGISTRATION': 'false'}, clear=False):
+            blocked = self.client.post(
+                '/api/auth/register',
+                json={'username': 'blockeduser', 'password': 'password123'},
+            )
+        self.assertEqual(blocked.status_code, 403)
+
+        admin = self.register(self.client, 'provisionadmin')
+        self.assertEqual(admin['role'], 'admin')
+        created = self.client.post(
+            '/api/admin/users',
+            json={
+                'username': 'manageduser',
+                'password': 'managedpassword123',
+                'display_name': 'Managed User',
+                'role': 'user',
+            },
+        )
+        self.assertEqual(created.status_code, 201, created.get_data(as_text=True))
+        self.assertEqual(created.get_json()['user']['role'], 'user')
+
+    def test_cross_site_state_changing_request_is_rejected(self):
+        self.register(self.client, 'csrfadmin')
+        response = self.client.post(
+            '/api/projects/',
+            json={'name': 'Blocked project'},
+            headers={'Sec-Fetch-Site': 'cross-site'},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_trusted_proxy_preserves_https_same_origin(self):
+        with mock.patch.dict(os.environ, {
+            'APPAM_TRUST_PROXY_HEADERS': 'true',
+            'APPAM_ALLOWED_ORIGINS': '',
+        }, clear=False):
+            proxy_app = create_app()
+            proxy_app.config.update(TESTING=True)
+            proxy_client = proxy_app.test_client()
+            response = proxy_client.post(
+                '/api/auth/register',
+                json={'username': 'proxyuser', 'password': 'password123'},
+                headers={
+                    'Origin': 'https://appam.example:25078',
+                    'X-Forwarded-Proto': 'https',
+                    'X-Forwarded-Host': 'appam.example:25078',
+                },
+            )
+        self.assertEqual(response.status_code, 201, response.get_data(as_text=True))
+
+    def test_remote_download_rejects_private_network_and_ftp(self):
+        from app.services.url_security import validate_remote_url
+
+        with self.assertRaisesRegex(ValueError, 'non-public'):
+            validate_remote_url('http://127.0.0.1/private')
+        with self.assertRaisesRegex(ValueError, 'require'):
+            validate_remote_url('ftp://example.com/data.fastq.gz')
+
+    def test_chunk_upload_validates_bounds_and_reassembles_streams(self):
+        self.register(self.client, 'uploadadmin')
+        project = self.create_project(self.client, name='Chunk upload')
+        endpoint = f"/api/filemanager/{project['id']}/upload-chunk"
+
+        invalid = self.client.post(
+            endpoint,
+            data={
+                'file': (BytesIO(b'invalid'), 'chunk'),
+                'path': '.',
+                'filename': 'reads.fastq.gz',
+                'chunkNumber': '0',
+                'totalChunks': '2',
+            },
+            content_type='multipart/form-data',
+        )
+        self.assertEqual(invalid.status_code, 400)
+
+        for number, content in ((1, b'first-'), (2, b'second')):
+            response = self.client.post(
+                endpoint,
+                data={
+                    'file': (BytesIO(content), f'chunk-{number}'),
+                    'path': '.',
+                    'filename': 'reads.fastq.gz',
+                    'chunkNumber': str(number),
+                    'totalChunks': '2',
+                },
+                content_type='multipart/form-data',
+            )
+            self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
+
+        uploaded = self.projects_dir / project['id'] / 'reads.fastq.gz'
+        self.assertEqual(uploaded.read_bytes(), b'first-second')
+
+        with mock.patch.dict(os.environ, {'APPAM_MAX_UPLOAD_CHUNK_BYTES': '4'}, clear=False):
+            oversized = self.client.post(
+                endpoint,
+                data={
+                    'file': (BytesIO(b'12345'), 'chunk-large'),
+                    'path': '.',
+                    'filename': 'too-large.fastq.gz',
+                    'chunkNumber': '1',
+                    'totalChunks': '1',
+                },
+                content_type='multipart/form-data',
+            )
+        self.assertEqual(oversized.status_code, 413)
+        self.assertFalse((self.projects_dir / project['id'] / 'too-large.fastq.gz').exists())
+
+    def test_parallel_download_rejects_declared_oversize_file(self):
+        from app.services import download_manager
+
+        task = download_manager.DownloadTask('oversize', 'https://example.com/large.fastq.gz', 'large.fastq.gz', 'project', '.', True)
+        with mock.patch.dict(os.environ, {'APPAM_MAX_REMOTE_DOWNLOAD_BYTES': '10'}, clear=False), mock.patch.object(
+            download_manager,
+            'get_content_info',
+            return_value={
+                'supports_resume': True,
+                'content_length': 11,
+                'content_type': 'application/gzip',
+                'filename': 'large.fastq.gz',
+            },
+        ):
+            download_manager.multi_thread_download(task)
+        self.assertEqual(task.status, 'error')
+        self.assertIn('size limit', task.error)
+
+    def test_retry_rejects_changed_frozen_input(self):
+        from app.services.pipeline_execution import _verify_source_inputs
+        from app.services.provenance import fingerprint_path
+
+        self.register(self.client, 'driftadmin')
+        project = self.create_project(self.client, name='Input drift project')
+        project_dir = self.projects_dir / project['id']
+        input_path = project_dir / 'sample_R1.fastq.gz'
+        input_path.write_bytes(b'original')
+        original = fingerprint_path(input_path, 'metadata')
+        original.update({'sample_id': 'S1', 'input_role': 'forward_reads'})
+        manifest_path = project_dir / 'source-manifest.json'
+        manifest_path.write_text(json.dumps({'inputs': [original]}), encoding='utf-8')
+
+        input_path.write_bytes(b'changed-and-longer')
+        current = fingerprint_path(input_path, 'metadata')
+        current.update({'sample_id': 'S1', 'input_role': 'forward_reads'})
+        with self.assertRaisesRegex(ValueError, 'Frozen workflow inputs changed'):
+            _verify_source_inputs(
+                project['id'],
+                {'manifest_path': str(manifest_path)},
+                [current],
+            )
 
     def test_profile_and_password_management(self):
         user = self.register(self.client, 'adminuser', display_name='Admin User')
@@ -281,6 +550,12 @@ class AuthPermissionApiTests(unittest.TestCase):
         )
         self.assertEqual(viewer_edit.status_code, 404)
 
+        viewer_download = viewer_client.post(
+            f"/api/filemanager/{project['id']}/download-url",
+            json={'url': 'https://example.org/sample.fastq.gz'},
+        )
+        self.assertEqual(viewer_download.status_code, 404)
+
         self.login(editor_client, editor['username'])
         with mock.patch('app.api.pipeline.routes.get_tool_definition', return_value={
                 'id': 'demo',
@@ -311,6 +586,17 @@ class AuthPermissionApiTests(unittest.TestCase):
 
         editor_job_id = 'job-submit-1'
         from app.services.job_store import create_job, list_process_history
+
+        create_job(
+            'owner-job',
+            project['id'],
+            'Owner Job',
+            'owner-job',
+            str(self.projects_dir / project['id'] / 'logs' / 'owner-job.log'),
+            submitted_by=owner['id'],
+        )
+        forbidden_cancel = editor_client.post('/api/jobs/owner-job/cancel')
+        self.assertEqual(forbidden_cancel.status_code, 403)
 
         create_job(
             editor_job_id,
@@ -416,6 +702,39 @@ class AuthPermissionApiTests(unittest.TestCase):
         self.assertEqual(tools_by_key['workflow-appam-smk']['kind'], 'workflow')
         self.assertEqual(tools_by_key['workflow-appam-paleoproteomics']['section'], 'workflow-automation')
 
+    def test_runtime_path_overrides_are_hidden_and_rejected_for_regular_users(self):
+        admin_client = self.app.test_client()
+        user_client = self.app.test_client()
+        admin = self.register(admin_client, 'runtimeadmin')
+        self.logout(admin_client)
+        user = self.register(user_client, 'runtimeuser')
+        self.logout(user_client)
+
+        self.login(user_client, user['username'])
+        project = self.create_project(user_client, name='Runtime Guard')
+        user_tools = user_client.get('/api/tools').get_json()['tools_by_key']
+        catalog = user_tools['workflow-appam-smk']
+        parameter_names = {parameter['name'] for parameter in catalog['parameters']}
+        self.assertNotIn('metawrap_env', parameter_names)
+        self.assertNotIn('checkm2_db', parameter_names)
+        self.assertNotIn('maxquant', user_tools)
+
+        rejected = user_client.post(
+            f"/api/pipeline/{project['id']}/run/workflow-appam-smk",
+            json={'metawrap_env': '/tmp/user-controlled-environment'},
+        )
+        self.assertEqual(rejected.status_code, 400)
+        self.assertTrue(any('restricted to administrators' in item for item in rejected.get_json()['details']))
+
+        maxquant_rejected = user_client.post(f"/api/pipeline/{project['id']}/run/maxquant", json={})
+        self.assertEqual(maxquant_rejected.status_code, 403)
+
+        self.login(admin_client, admin['username'])
+        admin_catalog = admin_client.get('/api/tools').get_json()['tools_by_key']['workflow-appam-smk']
+        admin_parameter_names = {parameter['name'] for parameter in admin_catalog['parameters']}
+        self.assertIn('metawrap_env', admin_parameter_names)
+        self.assertIn('maxquant', admin_client.get('/api/tools').get_json()['tools_by_key'])
+
     def test_admin_worker_status_endpoint_reports_local_executor(self):
         self.register(self.client, 'workeradmin', display_name='Worker Admin')
         response = self.client.get('/api/system/worker')
@@ -425,6 +744,98 @@ class AuthPermissionApiTests(unittest.TestCase):
         self.assertEqual(payload['data']['mode'], 'local-db')
         self.assertIn('worker', payload['data'])
         self.assertIn('counts', payload['data'])
+
+    def test_admin_readiness_endpoint_separates_core_and_publication_status(self):
+        self.register(self.client, 'readinessadmin', display_name='Readiness Admin')
+        response = self.client.get('/api/system/readiness')
+        self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
+        payload = response.get_json()
+        self.assertTrue(payload['success'])
+        self.assertIn('ready', payload['data'])
+        self.assertIn('publication_ready', payload['data'])
+        self.assertEqual(
+            [group['id'] for group in payload['data']['groups']],
+            ['platform', 'metagenomics', 'paleoproteomics', 'publication'],
+        )
+
+    def test_job_log_tail_and_result_artifact_project_paths(self):
+        from app.services.job_store import create_job
+
+        owner = self.register(self.client, 'resultowner', display_name='Result Owner')
+        project = self.create_project(self.client, name='Result project')
+        project_dir = self.projects_dir / project['id']
+        result_file = project_dir / 'workflow_runs' / 'demo' / 'results' / 'summary.tsv'
+        result_file.parent.mkdir(parents=True, exist_ok=True)
+        result_file.write_text('name\tvalue\nreads\t12\n', encoding='utf-8')
+        outside_file = Path(TEST_TEMP_DIR) / 'outside-result.tsv'
+        outside_file.write_text('outside\n', encoding='utf-8')
+        log_path = project_dir / 'logs' / 'result-job.log'
+        log_path.parent.mkdir(exist_ok=True)
+        log_path.write_text('0123456789', encoding='utf-8')
+
+        create_job(
+            'result-job',
+            project['id'],
+            'APPAM-SMK',
+            'snakemake',
+            str(log_path),
+            status='completed',
+            submitted_by=owner['id'],
+            workflow_id='appam-smk',
+            workflow_run_id='result-run',
+            workflow_run_spec={
+                'id': 'result-run',
+                'job_id': 'result-job',
+                'project_id': project['id'],
+                'workflow_id': 'appam-smk',
+                'tool_name': 'APPAM-SMK',
+                'status': 'completed',
+                'submitted_by': owner['id'],
+                'artifacts': [
+                    {'label': 'Summary', 'path': str(result_file), 'kind': 'summary', 'size_bytes': result_file.stat().st_size},
+                    {'label': 'Outside', 'path': str(outside_file), 'kind': 'summary', 'size_bytes': outside_file.stat().st_size},
+                ],
+            },
+        )
+
+        log_response = self.client.get('/api/jobs/result-job/logs?tail=4&limit=4')
+        self.assertEqual(log_response.status_code, 200)
+        self.assertEqual(log_response.get_json()['content'], '6789')
+        self.assertEqual(log_response.get_json()['offset'], 10)
+        self.assertTrue(log_response.get_json()['eof'])
+        self.assertTrue(log_response.get_json()['reset'])
+
+        reset_response = self.client.get('/api/jobs/result-job/logs?offset=999&limit=20')
+        self.assertEqual(reset_response.get_json()['content'], '0123456789')
+        self.assertTrue(reset_response.get_json()['reset'])
+
+        runs_response = self.client.get(
+            f"/api/pipeline/{project['id']}/workflow-runs?workflow_id=appam-smk"
+        )
+        artifacts = runs_response.get_json()['workflow_runs'][0]['artifacts']
+        artifacts_by_label = {artifact['label']: artifact for artifact in artifacts}
+        self.assertEqual(
+            artifacts_by_label['Summary']['project_path'],
+            'workflow_runs/demo/results/summary.tsv',
+        )
+        self.assertIsNone(artifacts_by_label['Outside']['project_path'])
+
+        summary_response = self.client.get(
+            f"/api/pipeline/{project['id']}/workflow-runs?workflow_id=appam-smk&include_results=false"
+        )
+        summary_run = summary_response.get_json()['workflow_runs'][0]
+        self.assertNotIn('artifacts', summary_run)
+        self.assertNotIn('metrics', summary_run)
+
+    def test_system_diagnostics_require_admin(self):
+        self.register(self.client, 'diagnosticsadmin')
+        self.logout(self.client)
+        regular = self.register(self.client, 'diagnosticsuser')
+        self.assertEqual(regular['role'], 'user')
+
+        for endpoint in ('/api/system/info', '/api/system/status', '/api/system/recommendations', '/api/system/readiness'):
+            response = self.client.get(endpoint)
+            self.assertEqual(response.status_code, 403, endpoint)
 
     def test_workflow_endpoints_prepare_snakemake_jobs(self):
         owner = self.register(self.client, 'workflowowner', display_name='Workflow Owner')
@@ -439,32 +850,44 @@ class AuthPermissionApiTests(unittest.TestCase):
         (raw_data_dir / 'sample1_R1.fastq.gz').write_text('@sample1/1\nACGT\n+\n!!!!\n', encoding='utf-8')
         (raw_data_dir / 'sample1_R2.fastq.gz').write_text('@sample1/2\nTGCA\n+\n!!!!\n', encoding='utf-8')
         metawrap_env = Path(TEST_TEMP_DIR) / 'envs' / 'metawrap'
+        preprocessing_env = Path(TEST_TEMP_DIR) / 'envs' / 'preprocessing'
+        mapping_env = Path(TEST_TEMP_DIR) / 'envs' / 'mapping'
+        assembly_env = Path(TEST_TEMP_DIR) / 'envs' / 'assembly'
         pydamage_env = Path(TEST_TEMP_DIR) / 'envs' / 'pydamage'
         checkm2_env = Path(TEST_TEMP_DIR) / 'envs' / 'checkm2'
         gunc_env = Path(TEST_TEMP_DIR) / 'envs' / 'gunc'
+        gtdbtk_env = Path(TEST_TEMP_DIR) / 'envs' / 'gtdbtk'
         prokka_env = Path(TEST_TEMP_DIR) / 'envs' / 'prokka'
         eggnog_env = Path(TEST_TEMP_DIR) / 'envs' / 'eggnog_py310'
         abricate_env = Path(TEST_TEMP_DIR) / 'envs' / 'abricate'
         antismash_env = Path(TEST_TEMP_DIR) / 'envs' / 'antismash'
+        paleoproteomics_env = Path(TEST_TEMP_DIR) / 'envs' / 'paleoproteomics'
         checkm_db = Path(TEST_TEMP_DIR) / 'db' / 'checkm'
         checkm2_db = Path(TEST_TEMP_DIR) / 'db' / 'checkm2'
         gunc_db = Path(TEST_TEMP_DIR) / 'db' / 'gunc'
+        gtdbtk_db = Path(TEST_TEMP_DIR) / 'db' / 'gtdbtk_r226'
         eggnog_db = Path(TEST_TEMP_DIR) / 'db' / 'eggnog'
         maxquant_cmd = Path(TEST_TEMP_DIR) / 'maxquant' / 'MaxQuantCmd.dll'
         fasta_path = Path(TEST_TEMP_DIR) / 'references' / 'db.fasta'
 
         for directory in (
             metawrap_env,
+            preprocessing_env,
+            mapping_env,
+            assembly_env,
             pydamage_env,
             checkm2_env,
             gunc_env,
+            gtdbtk_env,
             prokka_env,
             eggnog_env,
             abricate_env,
             antismash_env,
+            paleoproteomics_env,
             checkm_db,
             checkm2_db,
             gunc_db,
+            gtdbtk_db,
             eggnog_db,
             maxquant_cmd.parent,
             fasta_path.parent,
@@ -474,8 +897,12 @@ class AuthPermissionApiTests(unittest.TestCase):
         fasta_path.write_text('>seq\nAAAA\n', encoding='utf-8')
 
         runtime_env = {
+            'APPAM_DATABASES_ROOT': str(fasta_path.parent),
             'APPAM_SNAKEMAKE_BIN': '/bin/echo',
             'APPAM_SMK_METAWRAP_ENV': str(metawrap_env),
+            'APPAM_SMK_PREPROCESSING_ENV': str(preprocessing_env),
+            'APPAM_SMK_MAPPING_ENV': str(mapping_env),
+            'APPAM_SMK_ASSEMBLY_ENV': str(assembly_env),
             'APPAM_SMK_PYDAMAGE_ENV': str(pydamage_env),
             'APPAM_SMK_CHECKM1_DB': str(checkm_db),
             'APPAM_SMK_CHECKM_DB': str(checkm_db),
@@ -483,15 +910,18 @@ class AuthPermissionApiTests(unittest.TestCase):
             'APPAM_SMK_CHECKM2_DB': str(checkm2_db),
             'APPAM_SMK_GUNC_ENV': str(gunc_env),
             'APPAM_SMK_GUNC_DB': str(gunc_db),
+            'APPAM_SMK_GTDBTK_ENV': str(gtdbtk_env),
+            'APPAM_SMK_GTDBTK_DB': str(gtdbtk_db),
             'APPAM_SMK_PROKKA_ENV': str(prokka_env),
             'APPAM_SMK_EGGNOG_ENV': str(eggnog_env),
             'APPAM_SMK_EGGNOG_DB': str(eggnog_db),
             'APPAM_SMK_ABRICATE_ENV': str(abricate_env),
             'APPAM_SMK_ANTISMASH_ENV': str(antismash_env),
             'APPAM_PALEO_MAXQUANT_CMD': str(maxquant_cmd),
+            'APPAM_PALEO_ENV': str(paleoproteomics_env),
             'APPAM_PALEO_DOTNET_BIN': '/bin/echo',
             'APPAM_PALEO_THERMO_RAW_FILE_PARSER': '/bin/echo',
-            'APPAM_PALEO_TIMSCONVERT_BIN': '/bin/echo',
+            'APPAM_PALEO_TIMSCONVERT_BIN': '/missing/unused-timsconvert',
             'APPAM_PALEO_OPENMS_FILECONVERTER': '/bin/echo',
         }
 
@@ -555,6 +985,32 @@ class AuthPermissionApiTests(unittest.TestCase):
             self.assertIn('/workflow_runs/appam-smk/', workflow_runs[0]['run_dir'])
             self.assertTrue(workflow_runs[0]['stage_states'])
             self.assertIn('manifest.', Path(workflow_runs[0]['manifest_path']).name)
+            generated_config = Path(workflow_runs[0]['config_path'])
+            config_payload = yaml.safe_load(generated_config.read_text(encoding='utf-8'))
+            self.assertIn('adapter1', config_payload['params'])
+            self.assertFalse(config_payload['params']['use_ancient_contigs'])
+            resolved_manifest = Path(config_payload['samples_file'])
+            self.assertTrue(resolved_manifest.is_file())
+            self.assertIn(str(raw_data_dir.resolve()), resolved_manifest.read_text(encoding='utf-8'))
+            provenance_manifest = json.loads(Path(workflow_runs[0]['manifest_path']).read_text(encoding='utf-8'))
+            self.assertEqual(len(provenance_manifest['effective_config_sha256']), 64)
+            self.assertEqual(len(provenance_manifest['inputs']), 2)
+            self.assertEqual(
+                Path(provenance_manifest['paths']['resolved_sample_manifest']),
+                resolved_manifest,
+            )
+
+            bundle_response = self.client.get(
+                f"/api/pipeline/{project['id']}/workflow-runs/{smk_payload['workflow_run_id']}/provenance-bundle"
+            )
+            self.assertEqual(bundle_response.status_code, 200, bundle_response.status)
+            with zipfile.ZipFile(BytesIO(bundle_response.data)) as bundle:
+                self.assertIn('inputs/samples.resolved.tsv', bundle.namelist())
+                self.assertIn(str(raw_data_dir.resolve()), bundle.read('inputs/samples.resolved.tsv').decode('utf-8'))
+
+            original_manifest_path = project_dir / 'samples.tsv'
+            original_manifest_contents = original_manifest_path.read_text(encoding='utf-8')
+            original_manifest_path.write_text('sample_id\tforward_reads\treverse_reads\n', encoding='utf-8')
 
             conn = get_db_connection()
             try:
@@ -579,6 +1035,14 @@ class AuthPermissionApiTests(unittest.TestCase):
                 f"/api/pipeline/{project['id']}/workflow-runs/{smk_payload['workflow_run_id']}/retry"
             )
             self.assertEqual(retry_response.status_code, 200, retry_response.get_data(as_text=True))
+            retry_detail = self.client.get(
+                f"/api/pipeline/{project['id']}/workflow-runs/{retry_response.get_json()['workflow_run_id']}"
+            ).get_json()
+            retry_config = yaml.safe_load(Path(retry_detail['config_path']).read_text(encoding='utf-8'))
+            self.assertNotEqual(Path(retry_detail['config_path']), generated_config)
+            self.assertTrue(Path(retry_config['samples_file']).is_file())
+            self.assertIn(str(raw_data_dir.resolve()), Path(retry_config['samples_file']).read_text(encoding='utf-8'))
+            original_manifest_path.write_text(original_manifest_contents, encoding='utf-8')
 
         paleoproteomics_table = project_dir / 'proteomics_samples.tsv'
         paleoproteomics_table.write_text('sample_id\tinput_path\texperiment\tfraction\nS1\tdata.RAW\tprojectA\t1\n', encoding='utf-8')

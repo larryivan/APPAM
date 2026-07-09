@@ -1,30 +1,27 @@
 <template>
   <div class="topbar">
     <div class="topbar-content">
-      <router-link to="/" class="logo-section">
+      <router-link :to="homeRoute" class="logo-section">
         <img src="/assets/logo.svg" alt="APPAM Logo" />
         <h1 class="logo-title">APPAM</h1>
       </router-link>
       
       <!-- Desktop Navigation -->
       <nav class="nav-section desktop-nav">
-        <router-link to="/" class="nav-item" :class="{ active: isActive('/') }">
+        <router-link v-if="!authState.user" to="/" class="nav-item" :class="{ active: isActive('/') }">
           <span>Index</span>
-        </router-link>
-        <router-link to="/documentation" class="nav-item" :class="{ active: isActive('/documentation') }">
-          <span>Documentation</span>
         </router-link>
         <router-link v-if="authState.user" to="/projects" class="nav-item" :class="{ active: isActive('/projects') }">
           <span>Projects</span>
         </router-link>
+        <router-link to="/documentation" class="nav-item" :class="{ active: isActive('/documentation') }">
+          <span>Documentation</span>
+        </router-link>
         <router-link v-if="authState.user" to="/settings" class="nav-item" :class="{ active: isActive('/settings') }">
           <span>Settings</span>
         </router-link>
-        <router-link v-if="authState.user?.role === 'admin'" to="/admin/users" class="nav-item" :class="{ active: isActive('/admin/users') }">
+        <router-link v-if="authState.user?.role === 'admin'" to="/admin" class="nav-item" :class="{ active: isActive('/admin') }">
           <span>Admin</span>
-        </router-link>
-        <router-link v-if="authState.user?.role === 'admin'" to="/admin/worker" class="nav-item" :class="{ active: isActive('/admin/worker') }">
-          <span>Worker</span>
         </router-link>
       </nav>
 
@@ -65,7 +62,8 @@
       :aria-hidden="!showMobileMenu"
     >
       <div class="mobile-nav-content">
-        <router-link 
+        <router-link
+          v-if="!authState.user"
           to="/" 
           class="mobile-nav-item" 
           :class="{ active: isActive('/') }"
@@ -73,15 +71,6 @@
           role="menuitem"
         >
           <span>Index</span>
-        </router-link>
-        <router-link 
-          to="/documentation" 
-          class="mobile-nav-item" 
-          :class="{ active: isActive('/documentation') }"
-          @click="closeMobileMenu"
-          role="menuitem"
-        >
-          <span>Documentation</span>
         </router-link>
         <router-link 
           v-if="authState.user"
@@ -92,6 +81,15 @@
           role="menuitem"
         >
           <span>Projects</span>
+        </router-link>
+        <router-link
+          to="/documentation"
+          class="mobile-nav-item"
+          :class="{ active: isActive('/documentation') }"
+          @click="closeMobileMenu"
+          role="menuitem"
+        >
+          <span>Documentation</span>
         </router-link>
         <router-link
           v-if="authState.user"
@@ -105,23 +103,13 @@
         </router-link>
         <router-link
           v-if="authState.user?.role === 'admin'"
-          to="/admin/users"
+          to="/admin"
           class="mobile-nav-item"
-          :class="{ active: isActive('/admin/users') }"
+          :class="{ active: isActive('/admin') }"
           @click="closeMobileMenu"
           role="menuitem"
         >
           <span>Admin</span>
-        </router-link>
-        <router-link
-          v-if="authState.user?.role === 'admin'"
-          to="/admin/worker"
-          class="mobile-nav-item"
-          :class="{ active: isActive('/admin/worker') }"
-          @click="closeMobileMenu"
-          role="menuitem"
-        >
-          <span>Worker</span>
         </router-link>
         <router-link
           v-if="!authState.user"
@@ -164,6 +152,7 @@ const router = useRouter();
 const showMobileMenu = ref(false);
 const authDisplayName = computed(() => authState.user?.display_name || authState.user?.username || 'User')
 const authRoleLabel = computed(() => authState.user?.role === 'admin' ? 'Admin' : 'User')
+const homeRoute = computed(() => authState.user ? '/projects' : '/')
 
 const isActive = (path) => {
   if (path === '/') {

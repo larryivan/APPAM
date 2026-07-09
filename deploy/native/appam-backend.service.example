@@ -1,0 +1,16 @@
+[Unit]
+Description=APPAM backend and local workflow worker
+After=network.target
+
+[Service]
+Type=simple
+Environment=APPAM_ENV_FILE=/srv/appam/APPAM/deploy/native/appam.env
+ExecStart=/srv/appam/APPAM/deploy/native/run-backend.sh
+WorkingDirectory=/srv/appam/APPAM/backend
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+UMask=0077
+
+[Install]
+WantedBy=default.target

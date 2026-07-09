@@ -6,7 +6,7 @@ env=""
 target="$cmd"
 
 case "$cmd" in
-  fastqc|multiqc|adapterremoval|AdapterRemoval)
+  fastp|fastqc|multiqc|adapterremoval|AdapterRemoval)
     env="preprocessing"
     ;;
   bwa|bowtie2|samtools|bedtools)
@@ -78,9 +78,12 @@ case "$cmd" in
   *) target="$cmd" ;;
 esac
 
+env_runner="${APPAM_ENV_RUNNER:-micromamba}"
+metawrap_root="${APPAM_METAWRAP_ROOT:-/opt/vendor/metaWRAP}"
+
 if [[ "$cmd" == "metawrap" || "$cmd" == "metawrap-mg" ]]; then
-  export PATH="/opt/vendor/metaWRAP/bin:${PATH}"
-  exec micromamba run -n "$env" /opt/vendor/metaWRAP/bin/metawrap "$@"
+  export PATH="${metawrap_root}/bin:${PATH}"
+  exec "$env_runner" run -n "$env" "${metawrap_root}/bin/metawrap" "$@"
 fi
 
-exec micromamba run -n "$env" "$target" "$@"
+exec "$env_runner" run -n "$env" "$target" "$@"

@@ -30,7 +30,7 @@ const WORKFLOWS = {
     description:
       'Ancient metagenomics workflow from reads QC through damage-aware MAG reconstruction, taxonomic classification, and reporting.',
     outputRoot: 'workflow_runs/appam-smk',
-    canvas: { width: 1520, height: 860 },
+    canvas: { width: 1960, height: 1080 },
     outputs: [
       'workflow_runs/appam-smk/results/preprocess',
       'workflow_runs/appam-smk/results/megahit',
@@ -45,7 +45,7 @@ const WORKFLOWS = {
         title: 'FASTQ',
         subtitle: 'paired-end ancient reads',
         x: 44,
-        y: 352,
+        y: 112,
         w: 132,
         h: 118,
         description: 'Input paired-end FASTQ files referenced by the APPAM-SMK sample manifest.',
@@ -61,56 +61,11 @@ const WORKFLOWS = {
         h: 164,
         branch: 'orange',
         trackStatus: true,
-        rules: ['fastp_preprocess', 'fastqc', 'adapter_removal', 'collapse_to_single_end'],
+        rules: ['fastp_preprocess', 'fastqc', 'adapter_removal', 'normalize_adapter_removal_reads'],
         tools: [
-          { label: 'FastQC', tone: 'soft' },
-          { label: 'MultiQC', tone: 'soft' },
+          { label: 'fastp', tone: 'orange' },
           { label: 'AdapterRemoval', tone: 'orange' },
         ],
-      },
-      {
-        id: 'adna-filter',
-        title: 'aDNA Filtering',
-        subtitle: 'read-level authenticity',
-        description: 'Read-level authentication and host/environment filtering branch. These modules are currently available as tools and planned for tighter workflow integration.',
-        x: 258,
-        y: 352,
-        w: 258,
-        h: 156,
-        branch: 'orange',
-        optional: true,
-        tools: [
-          { label: 'bwa', tone: 'orange' },
-          { label: 'PMDtools', tone: 'orange' },
-          { label: 'bedtools', tone: 'orange' },
-        ],
-      },
-      {
-        id: 'read-taxonomy',
-        title: 'Taxonomic Classification',
-        subtitle: 'read-based profiling',
-        description: 'Optional read-based taxonomic profiling and visualization branch for rapid sample inspection.',
-        x: 258,
-        y: 566,
-        w: 258,
-        h: 134,
-        branch: 'orange',
-        optional: true,
-        tools: [
-          { label: 'KrakenUniq', tone: 'orange' },
-          { label: 'Krona', tone: 'orange' },
-        ],
-      },
-      {
-        id: 'read-report',
-        kind: 'output',
-        title: 'HTML / TSV',
-        subtitle: 'read branch reports',
-        x: 286,
-        y: 784,
-        w: 228,
-        h: 110,
-        description: 'Read-based branch reports and visual summaries.',
       },
       {
         id: 'assembly',
@@ -126,42 +81,23 @@ const WORKFLOWS = {
         rules: ['megahit'],
         tools: [
           { label: 'MEGAHIT', tone: 'green' },
-          { label: 'SPAdes', tone: 'soft' },
-        ],
-      },
-      {
-        id: 'assembly-eval',
-        title: 'Assembly Evaluation',
-        subtitle: 'continuity and QC',
-        description: 'Assembly continuity and quality summary. calN50 and QUAST are displayed as evaluation companions.',
-        x: 690,
-        y: 320,
-        w: 198,
-        h: 126,
-        branch: 'green',
-        optional: true,
-        tools: [
-          { label: 'calN50', tone: 'soft' },
-          { label: 'QUAST', tone: 'soft' },
         ],
       },
       {
         id: 'alignment-validation',
         title: 'Alignment & aDNA Validation',
         subtitle: 'contig authentication',
-        description: 'Map reads back to contigs, call variants if needed, and detect ancient damage signatures with PyDamage.',
+        description: 'Map reads back to contigs and detect ancient damage signatures with PyDamage.',
         x: 1072,
         y: 82,
         w: 382,
         h: 182,
         branch: 'green',
         trackStatus: true,
-        rules: ['bowtie2_index', 'bowtie2_align', 'index_bam', 'freebayes', 'bcftools', 'pydamage'],
+        rules: ['bowtie2_index', 'bowtie2_align', 'index_bam', 'pydamage'],
         tools: [
           { label: 'Bowtie2', tone: 'soft' },
           { label: 'Samtools', tone: 'soft' },
-          { label: 'FreeBayes', tone: 'soft' },
-          { label: 'BCFtools', tone: 'soft' },
           { label: 'PyDamage', tone: 'green' },
         ],
       },
@@ -175,6 +111,7 @@ const WORKFLOWS = {
         w: 320,
         h: 162,
         branch: 'green',
+        optional: true,
         trackStatus: true,
         rules: ['split_contigs_by_pydamage'],
         tools: [
@@ -187,20 +124,20 @@ const WORKFLOWS = {
         id: 'binning',
         title: 'Binning / Refinement / Evaluation',
         subtitle: 'MAG recovery',
-        description: 'Recover candidate MAGs with multiple binning engines, refine them with metaWRAP, and assess quality with CheckM and GUNC.',
+        description: 'Recover candidate MAGs with three binning engines, optionally refine them, and assess quality with CheckM2 and GUNC.',
         x: 1020,
         y: 644,
         w: 492,
         h: 182,
         branch: 'green',
         trackStatus: true,
-        rules: ['metawrap_binning', 'metawrap_bin_refinement', 'checkm', 'gunc'],
+        rules: ['metawrap_binning', 'metawrap_bin_refinement', 'checkm', 'checkm2', 'gunc'],
         tools: [
           { label: 'MetaBAT2', tone: 'soft' },
           { label: 'MaxBin2', tone: 'soft' },
           { label: 'CONCOCT', tone: 'soft' },
           { label: 'metaWRAP', tone: 'green' },
-          { label: 'CheckM', tone: 'soft' },
+          { label: 'CheckM2', tone: 'soft' },
           { label: 'GUNC', tone: 'soft' },
         ],
       },
@@ -215,7 +152,7 @@ const WORKFLOWS = {
         h: 216,
         branch: 'green',
         trackStatus: true,
-        rules: ['gtdbtk_classify'],
+        rules: ['gtdbtk_classify', 'prokka_annotation', 'eggnog_annotation', 'abricate_annotation', 'rgi_annotation', 'antismash_annotation'],
         tools: [
           { label: 'GTDB-Tk', tone: 'soft' },
           { label: 'PROKKA', tone: 'soft' },
@@ -240,15 +177,12 @@ const WORKFLOWS = {
     edges: [
       { id: 'e1', from: 'input-fastq', to: 'qc-trim', color: 'orange', fromAnchor: 'right', toAnchor: 'left' },
       { id: 'e2', from: 'qc-trim', to: 'assembly', color: 'green', fromAnchor: 'right', toAnchor: 'left' },
-      { id: 'e3', from: 'assembly', to: 'assembly-eval', color: 'green', fromAnchor: 'bottom', toAnchor: 'top' },
-      { id: 'e4', from: 'assembly', to: 'alignment-validation', color: 'green', fromAnchor: 'right', toAnchor: 'left' },
+      { id: 'e3', from: 'assembly', to: 'alignment-validation', color: 'green', fromAnchor: 'right', toAnchor: 'left' },
+      { id: 'e4', from: 'alignment-validation', to: 'binning', color: 'green', fromAnchor: 'bottom', toAnchor: 'top' },
       { id: 'e5', from: 'alignment-validation', to: 'filter-contigs', color: 'green', fromAnchor: 'bottom', toAnchor: 'top' },
       { id: 'e6', from: 'filter-contigs', to: 'binning', color: 'green', fromAnchor: 'bottom', toAnchor: 'top' },
       { id: 'e7', from: 'binning', to: 'taxonomy-annotation', color: 'green', fromAnchor: 'right', toAnchor: 'left' },
       { id: 'e8', from: 'taxonomy-annotation', to: 'mag-report', color: 'green', fromAnchor: 'bottom', toAnchor: 'top' },
-      { id: 'e9', from: 'qc-trim', to: 'adna-filter', color: 'orange', fromAnchor: 'bottom', toAnchor: 'top' },
-      { id: 'e10', from: 'adna-filter', to: 'read-taxonomy', color: 'orange', fromAnchor: 'bottom', toAnchor: 'top' },
-      { id: 'e11', from: 'read-taxonomy', to: 'read-report', color: 'orange', fromAnchor: 'bottom', toAnchor: 'top' },
     ],
   },
   'appam-paleoproteomics': {
@@ -288,6 +222,7 @@ const WORKFLOWS = {
         w: 320,
         h: 144,
         branch: 'blue',
+        optional: true,
         trackStatus: true,
         rules: ['thermo_raw_to_mzml'],
         tools: [
@@ -305,6 +240,7 @@ const WORKFLOWS = {
         w: 320,
         h: 144,
         branch: 'blue',
+        optional: true,
         trackStatus: true,
         rules: ['bruker_d_to_mzml'],
         tools: [
@@ -501,6 +437,8 @@ export function stageLabelFromState(state = 'pending') {
     failed: 'Failed',
     canceled: 'Canceled',
     optional: 'Optional',
+    skipped: 'Skipped',
+    interrupted: 'Interrupted',
     idle: 'Idle',
   }
   return labels[state] || 'Pending'
@@ -724,11 +662,13 @@ export function inferWorkflowRuntimeState(workflow, job, logText = '') {
 
   if (jobStatus === 'completed') {
     trackedNodes.forEach((node) => {
-      stateByNode[node.id] = 'completed'
+      stateByNode[node.id] = seenStageIds.includes(node.id)
+        ? 'completed'
+        : node.optional ? 'optional' : 'skipped'
     })
   } else if (seenStageIds.length > 0) {
-    seenStageIds.slice(0, -1).forEach((nodeId) => {
-      stateByNode[nodeId] = 'completed'
+    seenStageIds.forEach((nodeId) => {
+      stateByNode[nodeId] = 'running'
     })
     if (currentStageId) {
       stateByNode[currentStageId] = statusFromJob(jobStatus)
@@ -746,7 +686,10 @@ export function inferWorkflowRuntimeState(workflow, job, logText = '') {
     if (jobStatus === 'completed' && lastNode) stateByNode[lastNode.id] = 'completed'
   }
 
-  const completedCount = trackedNodes.filter((node) => stateByNode[node.id] === 'completed').length
+  const completedCount = trackedNodes.filter((node) => (
+    stateByNode[node.id] === 'completed'
+    || (jobStatus === 'completed' && ['optional', 'skipped'].includes(stateByNode[node.id]))
+  )).length
   const progress = {
     completed: completedCount,
     total: trackedNodes.length,
@@ -794,9 +737,9 @@ export function runtimeStateFromWorkflowRun(workflow, workflowRun) {
     }
   }
 
-  if (workflowRun.status === 'completed') {
+  if (workflowRun.status === 'completed' && stageStates.size === 0) {
     for (const node of trackedNodes) {
-      stateByNode[node.id] = 'completed'
+      stateByNode[node.id] = node.optional ? 'optional' : 'skipped'
     }
   }
 
@@ -808,7 +751,10 @@ export function runtimeStateFromWorkflowRun(workflow, workflowRun) {
   }
 
   const progress = {
-    completed: trackedNodes.filter((node) => stateByNode[node.id] === 'completed').length,
+    completed: trackedNodes.filter((node) => (
+      stateByNode[node.id] === 'completed'
+      || (workflowRun.status === 'completed' && ['optional', 'skipped'].includes(stateByNode[node.id]))
+    )).length,
     total: trackedNodes.length,
   }
 
@@ -825,9 +771,10 @@ export function edgeState(edge, nodeStates = {}) {
   const toState = nodeStates[edge.to]
   if (toState === 'failed' || fromState === 'failed') return 'failed'
   if (toState === 'canceled' || fromState === 'canceled') return 'canceled'
+  if (toState === 'interrupted' || fromState === 'interrupted') return 'interrupted'
   if (fromState === 'completed' && toState === 'completed') return 'completed'
   if (toState === 'running' || fromState === 'running' || toState === 'queued') return 'running'
-  if (fromState === 'completed' && (toState === 'pending' || toState === 'optional')) return 'completed'
+  if (fromState === 'completed' && ['pending', 'optional', 'skipped'].includes(toState)) return 'completed'
   return 'pending'
 }
 

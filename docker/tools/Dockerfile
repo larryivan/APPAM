@@ -1,9 +1,10 @@
-FROM mambaorg/micromamba:latest
+FROM mambaorg/micromamba:2.3.3@sha256:800e7ade3ffe29c9a9ac2026163131495f8197c3852e572c5835beb4e8a33cd6
 
 USER root
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG THERMO_RAW_FILE_PARSER_URL=https://github.com/CompOmics/ThermoRawFileParser/releases/download/v.2.0.0-dev/ThermoRawFileParser-v.2.0.0-dev-linux.zip
+ARG THERMO_RAW_FILE_PARSER_SHA256=19566762ce6759a93cee9aa4cef50de1e9ae2ad9078bd95826e8e733d4bb0d52
 ARG METAWRAP_REPO=https://github.com/bxlab/metaWRAP.git
 ARG METAWRAP_REF=c4a23f0fff872abe3cafb63767dc592a8361331b
 ARG APPAM_BUILD_RETRY_ATTEMPTS=5
@@ -15,6 +16,7 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     curl \
     git \
+    gosu \
     procps \
     unzip \
     wget \
@@ -34,13 +36,13 @@ WORKDIR /opt/appam
 COPY backend /opt/appam/backend
 COPY APPAM-SMK-main /opt/appam/APPAM-SMK-main
 COPY appam-paleoproteomics-main /opt/appam/appam-paleoproteomics-main
-COPY vendor/maxquant /opt/tools
 COPY docker/tools/environments /opt/appam/docker/tools/environments
 COPY docker/tools/tool-wrapper.sh /opt/appam/docker/tools/tool-wrapper.sh
 COPY docker/tools/retry-bash.sh /usr/local/bin/retry-bash
 COPY docker/tools/start-tools.sh /usr/local/bin/start-appam-tools
+COPY docker/tools/run-as-mambauser.sh /usr/local/bin/run-as-mambauser
 
-RUN chmod +x /usr/local/bin/start-appam-tools /usr/local/bin/retry-bash
+RUN chmod +x /usr/local/bin/start-appam-tools /usr/local/bin/run-as-mambauser /usr/local/bin/retry-bash
 
 USER mambauser
 
@@ -52,7 +54,6 @@ remote_connect_timeout_secs: 30
 remote_read_timeout_secs: 120
 EOF
 
-RUN retry-bash "curl --retry 8 --retry-delay 5 --retry-all-errors -fsSL https://opencode.ai/install | bash"
 ENV PATH="/home/mambauser/.opencode/bin:${PATH}"
 
 USER root
@@ -90,14 +91,15 @@ RUN retry-bash "micromamba create -y -n abricate -f /opt/appam/docker/tools/envi
 RUN retry-bash "micromamba create -y -n gtdbtk -f /opt/appam/docker/tools/environments/gtdbtk.yml && micromamba clean --all --yes"
 RUN retry-bash "micromamba create -y -n antismash -f /opt/appam/docker/tools/environments/antismash.yml && micromamba clean --all --yes"
 
-RUN retry-bash "micromamba create -y -n paleoproteomics -f /opt/appam/appam-paleoproteomics-main/docker/environment.yml && micromamba run -n paleoproteomics pip install -r /opt/appam/appam-paleoproteomics-main/docker/requirements-pypi.txt && micromamba install -y -n paleoproteomics -c bioconda -c conda-forge openms && micromamba run -n paleoproteomics pip install --no-deps git+https://github.com/gtluu/pyimzML.git@fe24388984aa96a18ef2ed54927ec05d6701cc04 git+https://github.com/gtluu/pyTDFSDK.git@4808da81d3e37f82da96f392dbb446c3733edacb git+https://github.com/gtluu/pyBaf2Sql.git@06bb37fa3168b113c73b22d1d85fb4203bb83fb9 git+https://github.com/gtluu/timsconvert.git && micromamba clean --all --yes"
+RUN retry-bash "micromamba create -y -n paleoproteomics -f /opt/appam/appam-paleoproteomics-main/docker/environment.yml && micromamba run -n paleoproteomics pip install -r /opt/appam/appam-paleoproteomics-main/docker/requirements-pypi.txt && micromamba install -y -n paleoproteomics -c bioconda -c conda-forge openms && micromamba run -n paleoproteomics pip install --no-deps git+https://github.com/gtluu/pyimzML.git@fe24388984aa96a18ef2ed54927ec05d6701cc04 git+https://github.com/gtluu/pyTDFSDK.git@4808da81d3e37f82da96f392dbb446c3733edacb git+https://github.com/gtluu/pyBaf2Sql.git@06bb37fa3168b113c73b22d1d85fb4203bb83fb9 git+https://github.com/gtluu/timsconvert.git@c8bbfd98251e07e24522220fd4309e37eea4d7a9 && micromamba clean --all --yes"
 
-RUN retry-bash "micromamba create -y -n backend python=3.12 pip && micromamba run -n backend pip install --no-cache-dir -r /opt/appam/backend/requirements.txt && micromamba run -n backend pip install --no-cache-dir snakemake==9.16.0 && micromamba clean --all --yes"
+RUN retry-bash "micromamba create -y -n backend -c conda-forge python=3.12 pip conda && micromamba run -n backend pip install --no-cache-dir -r /opt/appam/backend/requirements.txt && micromamba clean --all --yes"
 
 USER root
 
 RUN mkdir -p /opt/vendor/ThermoRawFileParser /opt/tools /data /workspaces/projects /databases && \
     curl --retry 8 --retry-delay 5 --retry-all-errors -L "${THERMO_RAW_FILE_PARSER_URL}" -o /tmp/ThermoRawFileParser.zip && \
+    echo "${THERMO_RAW_FILE_PARSER_SHA256}  /tmp/ThermoRawFileParser.zip" | sha256sum -c - && \
     unzip -q /tmp/ThermoRawFileParser.zip -d /opt/vendor/ThermoRawFileParser && \
     rm -f /tmp/ThermoRawFileParser.zip && \
     THERMO_BIN="$(find /opt/vendor/ThermoRawFileParser -type f -name 'ThermoRawFileParser*' -perm -u+x | head -n 1)" && \
@@ -106,7 +108,7 @@ RUN mkdir -p /opt/vendor/ThermoRawFileParser /opt/tools /data /workspaces/projec
     ln -sf /opt/vendor/metaWRAP/bin/config-metawrap /usr/local/bin/config-metawrap && \
     chmod +x /usr/local/bin/appam-tool /usr/local/bin/start-appam-tools && \
     for name in \
-      fastqc multiqc adapterremoval AdapterRemoval bwa bowtie2 samtools bedtools pmdtools pmdtools.py \
+      fastp fastqc multiqc adapterremoval AdapterRemoval bwa bowtie2 samtools bedtools pmdtools pmdtools.py \
       pydamage krakenuniq krona ktImportText ktImportTaxonomy megahit spades spades.py quast quast.py \
       freebayes bcftools metabat2 maxbin2 run_MaxBin.pl concoct gunc checkm checkm2 metawrap metawrap-mg \
       jgi_summarize_bam_contig_depths cut_up_fasta.py concoct_coverage_table.py merge_cutup_clustering.py \
@@ -132,33 +134,42 @@ ENV APPAM_DB_MANIFEST=/databases/appam-db-manifest.json
 ENV APPAM_DB_PATH=/data/app_database.db
 ENV APPAM_SMK_ROOT=/opt/appam/APPAM-SMK-main
 ENV APPAM_PALEOPROTEOMICS_ROOT=/opt/appam/appam-paleoproteomics-main
+ENV APPAM_PALEO_ENV=/opt/conda/envs/paleoproteomics
 ENV APPAM_SNAKEMAKE_BIN=snakemake
 ENV APPAM_SMK_METAWRAP_ENV=/opt/conda/envs/metawrap
+ENV APPAM_SMK_PREPROCESSING_ENV=/opt/conda/envs/preprocessing
+ENV APPAM_SMK_MAPPING_ENV=/opt/conda/envs/mapping_dna
+ENV APPAM_SMK_ASSEMBLY_ENV=/opt/conda/envs/assembly
 ENV APPAM_SMK_PYDAMAGE_ENV=/opt/conda/envs/ancient_dna
+ENV APPAM_SMK_CHECKM1_ENV=/opt/conda/envs/checkm
 ENV APPAM_SMK_CHECKM1_DB=/databases/checkm
 ENV APPAM_SMK_CHECKM_DB=/databases/checkm
 ENV APPAM_SMK_CHECKM2_ENV=/opt/conda/envs/checkm2
 ENV APPAM_SMK_CHECKM2_DB=/databases/checkm2
 ENV APPAM_SMK_GUNC_ENV=/opt/conda/envs/binning
 ENV APPAM_SMK_GUNC_DB=/databases/gunc
+ENV APPAM_SMK_GTDBTK_ENV=/opt/conda/envs/gtdbtk
+ENV APPAM_SMK_GTDBTK_DB=/databases/gtdbtk_r226
 ENV APPAM_SMK_PROKKA_ENV=/opt/conda/envs/prokka
 ENV APPAM_SMK_EGGNOG_ENV=/opt/conda/envs/eggnog_py310
 ENV APPAM_SMK_EGGNOG_DB=/databases/eggnog
 ENV APPAM_SMK_ABRICATE_ENV=/opt/conda/envs/abricate
 ENV APPAM_SMK_RGI_ENV=/opt/conda/envs/rgi
-ENV APPAM_SMK_RGI_DB_MODE=online
+ENV APPAM_SMK_RGI_DB_MODE=global
 ENV APPAM_SMK_ANTISMASH_ENV=/opt/conda/envs/antismash
 ENV APPAM_PALEO_DOTNET_BIN=dotnet
-ENV APPAM_PALEO_MAXQUANT_CMD=/opt/tools/MaxQuant_v2.7.5.0/bin/MaxQuantCmd.dll
+ENV APPAM_PALEO_MAXQUANT_CMD=/opt/tools/maxquant-current/bin/MaxQuantCmd.dll
+ENV APPAM_PALEO_MAXQUANT_VERSION=2.8.1.0
 ENV APPAM_PALEO_THERMO_RAW_FILE_PARSER=ThermoRawFileParser
 ENV APPAM_PALEO_TIMSCONVERT_BIN=timsconvert
 ENV APPAM_PALEO_OPENMS_FILECONVERTER=FileConverter
 ENV OPENCODE_CLI_COMMAND=/home/mambauser/.opencode/bin/opencode
 ENV OPENCODE_CLI_AGENTS_PATH=/opt/appam/backend/opencode/AGENTS.md
 ENV OPENCODE_CLI_SYSTEM_PROMPT_PATH=/opt/appam/backend/opencode/system_prompt.txt
-ENV PATH="/opt/conda/envs/paleoproteomics/bin:/opt/vendor/ThermoRawFileParser:/opt/tools/MaxQuant_v2.7.5.0:/opt/tools/MaxQuant_v2.7.5.0/bin:${PATH}"
+ENV PATH="/opt/conda/envs/paleoproteomics/bin:/opt/vendor/ThermoRawFileParser:/opt/tools/maxquant-current:/opt/tools/maxquant-current/bin:${PATH}"
 
 VOLUME ["/data", "/workspaces/projects", "/databases"]
 EXPOSE 19454 19455
 
+ENTRYPOINT ["/usr/local/bin/run-as-mambauser"]
 CMD ["/usr/local/bin/start-appam-tools"]

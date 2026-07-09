@@ -144,7 +144,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
-import * as echarts from 'echarts'
+import echarts from '../lib/echarts'
 
 // Reactive data
 const loading = ref(false)

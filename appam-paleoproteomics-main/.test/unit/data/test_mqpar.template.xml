@@ -8,6 +8,7 @@
    <fixedSearchFolder></fixedSearchFolder>
    <tempFolder></tempFolder>
    <fixedCombinedFolder></fixedCombinedFolder>
+   <maxQuantVersion>2.8.1.0</maxQuantVersion>
    <matchBetweenRuns>False</matchBetweenRuns>
    <includeContaminants>True</includeContaminants>
    <minPeptideLength>7</minPeptideLength>
@@ -36,6 +37,7 @@
    <parameterGroups>
       <parameterGroup>
          <enzymeMode>4</enzymeMode>
+         <maxMissedCleavages>0</maxMissedCleavages>
          <fixedModifications>
             <string>Carbamidomethyl (C)</string>
          </fixedModifications>

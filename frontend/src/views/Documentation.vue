@@ -53,6 +53,7 @@
 <script setup>
 import { ref, onMounted, nextTick, onUnmounted, computed } from 'vue';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 
 const htmlContent = ref('');
 const loading = ref(true);
@@ -148,7 +149,7 @@ const loadMarkdown = async () => {
     // 为标题添加ID（如果marked没有自动添加）
     html = addIdsToHTML(html, extractedTOC);
     
-    htmlContent.value = html;
+    htmlContent.value = DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
     loading.value = false;
     
     // 等待DOM更新后设置滚动行为
@@ -764,4 +765,4 @@ onUnmounted(() => {
     border: 1px solid #ccc;
   }
 }
-</style> 
+</style>

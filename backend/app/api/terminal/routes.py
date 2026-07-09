@@ -39,6 +39,8 @@ class TerminalSession:
         preset="shell",
         buffer_output=True,
         launch_command=None,
+        owner_user_id=None,
+        project_id=None,
     ):
         self.session_key = session_key
         self.project_path = project_path
@@ -47,6 +49,8 @@ class TerminalSession:
         self.preset = preset or "shell"
         self.buffer_output = buffer_output
         self.launch_command = launch_command or []
+        self.owner_user_id = owner_user_id
+        self.project_id = project_id
         self.process = None
         self.fd = None
         self.pid = None
@@ -381,6 +385,9 @@ def handle_terminal_connect(data):
         # 创建或复用终端会话
         session = terminal_sessions.get(session_key)
         is_new = False
+        if session and session.owner_user_id != user['id']:
+            emit('terminal_error', {'error': 'Terminal session access denied'})
+            return
         if session and (session.closed or session.project_path != project_path or session.preset != preset or not supports_resume):
             session.close()
             terminal_sessions.pop(session_key, None)
@@ -396,6 +403,8 @@ def handle_terminal_connect(data):
                 preset=preset,
                 buffer_output=supports_resume,
                 launch_command=launch_command,
+                owner_user_id=user['id'],
+                project_id=project_id,
             )
             session.start()
             terminal_sessions[session_key] = session
@@ -446,8 +455,9 @@ def handle_terminal_input(data):
     session_id = request.sid
     session_key = data.get('session_key') or client_sessions.get(session_id) or session_id
     session = terminal_sessions.get(session_key)
+    user = session_user()
     
-    if session:
+    if session and user and session.owner_user_id == user['id'] and session_id in session.clients:
         command = data.get('input', '')
         if not session.write(command):
             session.close()
@@ -466,8 +476,9 @@ def handle_terminal_resize(data):
     session_id = request.sid
     session_key = data.get('session_key') or client_sessions.get(session_id) or session_id
     session = terminal_sessions.get(session_key)
+    user = session_user()
     
-    if session and not session.closed:
+    if session and user and session.owner_user_id == user['id'] and session_id in session.clients and not session.closed:
         rows = data.get('rows', 24)
         cols = data.get('cols', 80)
         session.resize(rows, cols)

@@ -1,0 +1,45 @@
+configfile: "benchmark/config/config.yaml"
+
+
+rule all:
+    input:
+        "benchmark/results/validated.ok",
+        "benchmark/results/summary.tsv",
+        "benchmark/results/paired-differences.tsv",
+        "benchmark/results/summary.json"
+
+
+rule validate_observations:
+    conda:
+        "environment.yml"
+    input:
+        lambda wildcards: config["observations"]
+    output:
+        touch("benchmark/results/validated.ok")
+    log:
+        "benchmark/results/logs/validate-observations.log"
+    shell:
+        "python3 benchmark/scripts/validate_observations.py {input:q} > {log:q} 2>&1"
+
+
+rule analyze_observations:
+    conda:
+        "environment.yml"
+    input:
+        observations=lambda wildcards: config["observations"],
+        validated=rules.validate_observations.output
+    output:
+        summary="benchmark/results/summary.tsv",
+        paired="benchmark/results/paired-differences.tsv",
+        json="benchmark/results/summary.json"
+    params:
+        baseline=lambda wildcards: config["baseline"],
+        iterations=lambda wildcards: int(config.get("bootstrap_iterations", 2000)),
+        seed=lambda wildcards: int(config.get("seed", 20260710))
+    log:
+        "benchmark/results/logs/analyze-observations.log"
+    shell:
+        "python3 benchmark/scripts/analyze_observations.py {input.observations:q} "
+        "--baseline {params.baseline:q} --iterations {params.iterations} --seed {params.seed} "
+        "--summary {output.summary:q} --paired {output.paired:q} --json {output.json:q} "
+        "> {log:q} 2>&1"

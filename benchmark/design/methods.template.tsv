@@ -1,0 +1,4 @@
+method	workflow_version	container_digest	database_manifest_sha256	threads	memory_gb	cache_policy	status
+appam-all-contigs	TBD	TBD	TBD	16	64	cold	planned
+appam-damage-filtered	TBD	TBD	TBD	16	64	cold	planned
+nf-core-mag-ancient	TBD	TBD	TBD	16	64	cold	planned

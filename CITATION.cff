@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use APPAM, cite this software release. Replace this entry with the peer-reviewed article after publication."
+title: "APPAM: ancient metagenomics and paleoproteomics analysis platform"
+type: software
+authors:
+  - family-names: "Liu"
+    given-names: "Wentao"
+repository-code: "https://github.com/larryivan/APPAM"
+license: MIT
+version: "0.2.0-dev"
+date-released: "2026-07-10"

@@ -1,166 +1,98 @@
-# APPAM Docker Layout
+# APPAM Docker deployment
 
-This deployment uses two images:
+Compose builds a tools/backend image and a separate nginx/Vue image. The public Web port defaults to `25078` and can be set with `APPAM_WEB_PORT`. The backend API defaults to host loopback port `25079`; nginx proxies `/api/` and `/socket.io/` over the Compose network.
 
-- `appam-tools`
-  - Flask API
-  - local DB-backed worker
-  - terminal / OpenCode integration
-  - OpenCode HTTP API
-  - APPAM-SMK workflow runtime
-  - paleoproteomics runtime dependencies
-- `appam-website`
-  - built Vue frontend
-  - nginx reverse proxy to `tools:19454`
+## First start
 
-## Start
+Create `.env` beside `docker-compose.yml`:
 
-```bash
-docker compose up --build
+```dotenv
+FLASK_SECRET_KEY=replace-with-output-of-openssl-rand-hex-32
+APPAM_WEB_PORT=25078
+APPAM_ALLOWED_ORIGINS=http://SERVER_NAME_OR_IP:25078
+APPAM_HOST_DB_ROOT=/home/adna/db
+APPAM_HOST_MAXQUANT_ROOT=/home/adna/MaxQuant_v2.8.1.0
 ```
 
-Then open:
-
-- Website: `http://localhost:19453`
-- Direct tools API: `http://localhost:19454`
-- Direct OpenCode API: `http://localhost:19455`
-
-## Build with a persistent log
-
-For server-side troubleshooting, prefer the build wrapper. It forces plain Docker
-progress output and writes the complete build transcript to a timestamped file on
-the host:
+Then run:
 
 ```bash
-./docker/build-tools.sh tools
-```
-
-Logs are written under:
-
-- `docker-data/build-logs/`
-
-You can also build multiple services and keep one combined log:
-
-```bash
-./docker/build-tools.sh tools website
-```
-
-## Persistent host directories
-
-The compose file uses host-mounted directories under `docker-data/` for project files and reference databases:
-
-- `docker-data/projects`
-- `docker-data/databases`
-- `docker-data/build-logs` (created automatically by the build wrapper)
-- `docker-data/runtime-logs`
-
-These map to container paths:
-
-- `/workspaces/projects`
-- `/databases`
-- `/runtime-logs`
-
-## Runtime crash logs
-
-The tools container writes backend and OpenCode runtime logs to the host at:
-
-- `docker-data/runtime-logs/backend.latest.log`
-- `docker-data/runtime-logs/opencode.latest.log`
-
-Each container start also creates timestamped log files in the same directory.
-If the backend exits and Docker restarts the container, the last 120 lines of the
-backend log are echoed back into `docker compose logs tools` as well.
-
-The application database is stored in a dedicated Docker volume:
-
-- `appam-data` -> `/data`
-
-This keeps deployments clean by default and avoids shipping a pre-populated SQLite file with the repository.
-
-## Important runtime notes
-
-### APPAM-SMK databases
-
-Set these before starting if you want the metagenomics workflow to run immediately:
-
-- `APPAM_HOST_DB_ROOT` (host directory mounted read-only as `/databases`)
-- `APPAM_SMK_CHECKM1_DB`
-- `APPAM_SMK_CHECKM2_DB`
-- `APPAM_SMK_GUNC_DB`
-- `APPAM_SMK_EGGNOG_DB`
-
-Defaults point inside `/databases`.
-
-For example, if local databases live under `~/db`, start APPAM with:
-
-```bash
-APPAM_HOST_DB_ROOT="$HOME/db" docker compose up
-```
-
-For publication-grade provenance, keep a database manifest at:
-
-- `/databases/appam-db-manifest.json` inside the container, or
-- a custom path set with `APPAM_DB_MANIFEST`
-
-Start from `docker/database-manifest.example.json` and record exact database versions, download dates, and paths. APPAM includes this manifest in the project dashboard and provenance bundles.
-
-### Queue backend
-
-APPAM defaults to the built-in local SQLite-backed worker:
-
-- `APPAM_QUEUE_BACKEND=local-db`
-
-For Redis/RQ-based queueing, start Redis and the dedicated RQ worker through the `rq` profile and set:
-
-```bash
-APPAM_QUEUE_BACKEND=rq docker compose --profile rq up
-```
-
-The `rq-worker` service reuses the same image, project volume, runtime log volume, and database mount as the `tools` service. Keep `APPAM_HOST_DB_ROOT` and any `APPAM_SMK_*_DB` overrides identical for both services by setting them in the shell or `.env` before running Compose.
-
-### Paleoproteomics MaxQuant
-
-`ThermoRawFileParser`, `timsconvert`, `dotnet`, and `FileConverter` are installed into the tools image.
-
-Bundle the downloaded MaxQuant release in the repository at:
-
-- `vendor/maxquant/MaxQuant_v2.7.5.0/...`
-
-The tools image copies that directory into:
-
-- `/opt/tools/MaxQuant_v2.7.5.0`
-
-and uses this fixed DLL path:
-
-- `/opt/tools/MaxQuant_v2.7.5.0/bin/MaxQuantCmd.dll`
-
-## Fixed in-container paths
-
-These paths are intentionally fixed for container deployment:
-
-- `/opt/appam/backend`
-- `/opt/appam/APPAM-SMK-main`
-- `/opt/appam/appam-paleoproteomics-main`
-- `/opt/tools/MaxQuant_v2.7.5.0`
-- `/opt/tools/MaxQuant_v2.7.5.0/bin/MaxQuantCmd.dll`
-- `/workspaces/projects`
-- `/databases`
-- `/data/app_database.db`
-
-## Reset to an empty database
-
-To start with a clean APPAM database on a server:
-
-```bash
-docker compose down
-docker volume rm appam_appam-data
 docker compose up -d --build
+docker compose ps
+docker compose logs --tail=100 tools website
 ```
 
-If you only want to recreate the tools container against a fresh database:
+Open `http://SERVER_NAME_OR_IP:25078`. Port `19455` is not published; OpenCode is optional, loopback-only inside the tools container, and starts only if its executable is supplied.
+
+Create the first administrator with a hidden password prompt:
 
 ```bash
-docker compose rm -sf tools
-docker volume rm appam_appam-data
-docker compose up -d --build tools
+docker compose exec tools micromamba run -n backend \
+  python /opt/appam/backend/manage.py create-admin --username labadmin
 ```
+
+For unattended provisioning, `APPAM_BOOTSTRAP_ADMINS_JSON` is still supported.
+
+## Persistent data
+
+- `appam-data` volume: SQLite application database.
+- `docker-data/projects`: project files, run snapshots, outputs, and provenance.
+- `APPAM_HOST_DB_ROOT`: read-only database mount at `/databases`.
+- `APPAM_HOST_MAXQUANT_ROOT`: read-only MaxQuant release mounted at `/opt/tools/maxquant-current`.
+- `docker-data/runtime-logs`: backend logs.
+
+Back up the application volume and project directory together.
+
+The container entrypoint uses root only to prepare mounted directories and then drops to `mambauser` before starting APPAM or any analysis process. When upgrading a deployment that previously wrote project files as root, start once with `APPAM_FIX_PROJECT_OWNERSHIP=true`; this recursively changes ownership and can take time on large projects, so remove the setting after the migration.
+
+## Database mount
+
+Expected defaults under the host database root are:
+
+```text
+checkm2/
+gunc/
+eggnog/
+gtdbtk_r226/
+krakenuniq_refseq_bav/
+```
+
+`checkm/` is optional unless CheckM1 or MetaWRAP refinement is enabled; KrakenUniq is optional when that advanced tool is unused. Copy `docker/database-manifest.example.json` to `appam-db-manifest.json` under the database root and record exact versions/download dates.
+
+RGI command-line runs always require CARD reference data. Keep `APPAM_SMK_RGI_DB_MODE=global` only when CARD has been loaded into the RGI environment; for a directory prepared with `rgi load --local`, set mode `local`, configure `APPAM_SMK_RGI_DB`, and record the CARD release.
+
+## MaxQuant
+
+Point `APPAM_HOST_MAXQUANT_ROOT` at the release directory that directly contains `bin/MaxQuantCmd.dll`, for example:
+
+```text
+/home/adna/MaxQuant_v2.8.1.0/bin/MaxQuantCmd.dll
+```
+
+Compose mounts that directory read-only at `/opt/tools/maxquant-current`; MaxQuant itself is not copied into the Git repository or Docker image.
+
+## Queue modes
+
+The default `local-db` queue is intended for one small-laboratory server and one backend process. For Redis/RQ:
+
+```bash
+APPAM_QUEUE_BACKEND=rq docker compose --profile rq up -d
+```
+
+Keep project, database, and environment mounts identical between the API and worker.
+Queued jobs, including dry runs, are capped by `APPAM_MAX_GLOBAL_QUEUED`,
+`APPAM_MAX_PROJECT_QUEUED`, and `APPAM_MAX_USER_QUEUED`. Worker count controls execution
+concurrency; the default deployment runs one worker so laboratory jobs execute serially.
+
+## Diagnostics
+
+```bash
+FLASK_SECRET_KEY=test docker compose config --quiet
+docker compose ps
+docker compose logs -f tools
+curl -fsS http://127.0.0.1:25079/api/health
+```
+
+The direct API host port can be changed with `APPAM_API_PORT`, but remains bound to `127.0.0.1`.
+
+For an LXC host that denies nested container sysctls/mounts, use `deploy/native/README.md` instead of weakening the host runtime.

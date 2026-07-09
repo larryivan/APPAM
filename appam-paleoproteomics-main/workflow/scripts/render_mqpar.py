@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import ast
 import csv
+import re
 from collections.abc import Mapping
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
 
 REQUIRED_SAMPLE_COLUMNS = ["sample_id", "input_path", "experiment", "fraction"]
+SAMPLE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 
 
 def _parse_scalar(value: str) -> object:
@@ -142,9 +144,12 @@ def _parse_int_field(
 ) -> str:
     cleaned = _require_nonempty(value, field_name, sample_label)
     try:
-        return str(int(cleaned))
+        parsed = int(cleaned)
     except ValueError as exc:
         raise ValueError(f"invalid {field_name} for sample {sample_label}: {cleaned}") from exc
+    if not -32768 <= parsed <= 32767:
+        raise ValueError(f"{field_name} for sample {sample_label} is outside the MaxQuant short range")
+    return str(parsed)
 
 
 def _config_value(config: Mapping[str, object], key: str, default: object | None = None) -> object | None:
@@ -204,6 +209,8 @@ def render_mqpar(
     root = tree.getroot()
 
     samples = _read_samples(samples_path)
+    if not samples:
+        raise ValueError("samples.tsv has no sample rows")
     file_paths = []
     experiments = []
     fractions = []
@@ -214,6 +221,8 @@ def render_mqpar(
 
     for sample in samples:
         sample_id = _require_nonempty(sample["sample_id"], "sample_id")
+        if not SAMPLE_ID_PATTERN.fullmatch(sample_id):
+            raise ValueError(f"invalid sample_id: {sample_id!r}")
         if sample_id in seen_sample_ids:
             raise ValueError(f"duplicate sample_id: {sample_id}")
         seen_sample_ids.add(sample_id)
@@ -263,6 +272,7 @@ def render_mqpar(
     _replace_text(root, ".//proteinFdr", _config_value(config, "protein_fdr", 0.01))
     _replace_text(root, ".//siteFdr", _config_value(config, "site_fdr", 0.01))
     _replace_text(root, ".//numThreads", _config_value(config, "threads", 1))
+    _replace_text(root, ".//maxQuantVersion", _config_value(config, "maxquant_version", "2.8.1.0"))
 
     for parameter_group in parameter_group_nodes:
         _replace_text(parameter_group, "./enzymeMode", _config_value(config, "enzyme_mode", 4))
@@ -276,6 +286,11 @@ def render_mqpar(
         )
         _replace_text(parameter_group, "./firstSearchTol", _config_value(config, "first_search_tol", 20))
         _replace_text(parameter_group, "./mainSearchTol", _config_value(config, "main_search_tol", 4.5))
+        _replace_text(
+            parameter_group,
+            "./maxMissedCleavages",
+            _config_value(config, "max_missed_cleavages", 0),
+        )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     ET.indent(tree, space="   ")

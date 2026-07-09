@@ -1,0 +1,7 @@
+dataset_id	scenario_id	method	replicate	metric	value	unit
+synthetic-fixture	damage-05	appam-all-contigs	1	mag_recall	0.70	fraction
+synthetic-fixture	damage-05	appam-all-contigs	2	mag_recall	0.72	fraction
+synthetic-fixture	damage-05	appam-all-contigs	3	mag_recall	0.71	fraction
+synthetic-fixture	damage-05	appam-damage-filtered	1	mag_recall	0.68	fraction
+synthetic-fixture	damage-05	appam-damage-filtered	2	mag_recall	0.69	fraction
+synthetic-fixture	damage-05	appam-damage-filtered	3	mag_recall	0.67	fraction

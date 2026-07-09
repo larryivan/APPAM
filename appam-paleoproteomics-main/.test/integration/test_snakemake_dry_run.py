@@ -124,7 +124,7 @@ class SnakemakeDryRunTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("dotnet", result.stdout)
-        self.assertIn("/opt/tools/MaxQuant_v2.7.5.0/bin/MaxQuantCmd.dll", result.stdout)
+        self.assertIn("/opt/tools/maxquant-current/bin/MaxQuantCmd.dll", result.stdout)
         self.assertIn("all_samples.mqpar.xml", result.stdout)
         self.assertIn("proteinGroups.txt", result.stdout)
         self.assertIn("cd results/maxquant", result.stdout)

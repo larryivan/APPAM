@@ -1,4 +1,6 @@
 rule thermo_raw_to_mzml:
+    conda:
+        config["runtime_env"]
     wildcard_constraints:
         sample=RAW_SAMPLE_ID_REGEX
     input:
@@ -13,11 +15,13 @@ rule thermo_raw_to_mzml:
         int(config["threads"])
     shell:
         """
-        {params.thermo_raw_file_parser:q} -i={input.raw:q} -b={output.mzml:q} -f=2 -m=0 > {log:q} 2>&1
+        {params.thermo_raw_file_parser:q} -i={input.raw:q} -b={output.mzml:q} -f=2 -m=2 > {log:q} 2>&1
         """
 
 
 rule bruker_d_to_mzml:
+    conda:
+        config["runtime_env"]
     wildcard_constraints:
         sample=D_SAMPLE_ID_REGEX
     input:
@@ -34,11 +38,19 @@ rule bruker_d_to_mzml:
     shell:
         """
         {params.timsconvert_bin:q} --input {input.bruker:q} --outdir {params.outdir:q} --mode raw > {log:q} 2>&1
-        mv {params.outdir:q}/*.mzML {output.mzml:q}
+        shopt -s nullglob
+        mzml_files=({params.outdir:q}/*.mzML)
+        if [ "${{#mzml_files[@]}}" -ne 1 ]; then
+            printf 'Expected one mzML from timsconvert, found %s\n' "${{#mzml_files[@]}}" >> {log:q}
+            exit 1
+        fi
+        mv "${{mzml_files[0]}}" {output.mzml:q}
         """
 
 
 rule finalize_raw_mzml:
+    conda:
+        config["runtime_env"]
     wildcard_constraints:
         sample=RAW_SAMPLE_ID_REGEX
     input:
@@ -58,6 +70,8 @@ rule finalize_raw_mzml:
 
 
 rule finalize_bruker_mzml:
+    conda:
+        config["runtime_env"]
     wildcard_constraints:
         sample=D_SAMPLE_ID_REGEX
     input:

@@ -16,7 +16,7 @@ WORKFLOW_RUNTIME_DEFINITIONS = {
                 'id': 'qc-trim',
                 'title': 'Adapter / QC',
                 'optional': False,
-                'rules': ['fastp_preprocess', 'fastqc', 'adapter_removal', 'collapse_to_single_end'],
+                'rules': ['fastp_preprocess', 'fastqc', 'adapter_removal', 'normalize_adapter_removal_reads'],
             },
             {
                 'id': 'assembly',
@@ -28,12 +28,12 @@ WORKFLOW_RUNTIME_DEFINITIONS = {
                 'id': 'alignment-validation',
                 'title': 'Alignment & aDNA Validation',
                 'optional': False,
-                'rules': ['bowtie2_index', 'bowtie2_align', 'index_bam', 'freebayes', 'bcftools', 'pydamage'],
+                'rules': ['bowtie2_index', 'bowtie2_align', 'index_bam', 'pydamage'],
             },
             {
                 'id': 'filter-contigs',
                 'title': 'Filter Contigs',
-                'optional': False,
+                'optional': True,
                 'rules': ['split_contigs_by_pydamage'],
             },
             {
@@ -64,13 +64,13 @@ WORKFLOW_RUNTIME_DEFINITIONS = {
             {
                 'id': 'thermo-convert',
                 'title': 'Thermo Conversion',
-                'optional': False,
+                'optional': True,
                 'rules': ['thermo_raw_to_mzml'],
             },
             {
                 'id': 'bruker-convert',
                 'title': 'Bruker Conversion',
-                'optional': False,
+                'optional': True,
                 'rules': ['bruker_d_to_mzml'],
             },
             {

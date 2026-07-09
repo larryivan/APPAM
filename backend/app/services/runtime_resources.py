@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from ..paths import DATABASES_ROOT
+from .provenance import conda_environment_fingerprint
 from .workflow_results import resource_fingerprint
 
 
@@ -64,10 +65,15 @@ def get_appam_smk_runtime_settings(params: dict | None = None) -> dict:
     return {
         'databases_root': str(DATABASES_ROOT),
         'tools': {
+            'preprocessing_env': _setting(params, ('preprocessing_env',), ('APPAM_SMK_PREPROCESSING_ENV',), '/opt/conda/envs/preprocessing'),
+            'mapping_env': _setting(params, ('mapping_env',), ('APPAM_SMK_MAPPING_ENV',), '/opt/conda/envs/mapping_dna'),
+            'assembly_env': _setting(params, ('assembly_env',), ('APPAM_SMK_ASSEMBLY_ENV',), '/opt/conda/envs/assembly'),
             'metawrap_env': _setting(params, ('metawrap_env',), ('APPAM_SMK_METAWRAP_ENV',), '/opt/conda/envs/metawrap'),
             'pydamage_env': _setting(params, ('pydamage_env',), ('APPAM_SMK_PYDAMAGE_ENV',), '/opt/conda/envs/ancient_dna'),
+            'checkm1_env': _setting(params, ('checkm1_env',), ('APPAM_SMK_CHECKM1_ENV',), '/opt/conda/envs/checkm'),
             'checkm2_env': _setting(params, ('checkm2_env',), ('APPAM_SMK_CHECKM2_ENV',), '/opt/conda/envs/checkm2'),
             'gunc_env': _setting(params, ('gunc_env',), ('APPAM_SMK_GUNC_ENV',), '/opt/conda/envs/binning'),
+            'gtdbtk_env': _setting(params, ('gtdbtk_env',), ('APPAM_SMK_GTDBTK_ENV',), '/opt/conda/envs/gtdbtk'),
             'prokka_env': _setting(params, ('prokka_env',), ('APPAM_SMK_PROKKA_ENV',), '/opt/conda/envs/prokka'),
             'eggnog_env': _setting(params, ('eggnog_env',), ('APPAM_SMK_EGGNOG_ENV',), '/opt/conda/envs/eggnog_py310'),
             'abricate_env': _setting(params, ('abricate_env',), ('APPAM_SMK_ABRICATE_ENV',), '/opt/conda/envs/abricate'),
@@ -83,21 +89,25 @@ def get_appam_smk_runtime_settings(params: dict | None = None) -> dict:
             ),
             'checkm2_db': _database_setting(params, ('checkm2_db',), ('APPAM_SMK_CHECKM2_DB',), 'checkm2'),
             'gunc_db': _database_setting(params, ('gunc_db',), ('APPAM_SMK_GUNC_DB',), 'gunc'),
+            'gtdbtk_db': _database_setting(params, ('gtdbtk_db',), ('APPAM_SMK_GTDBTK_DB', 'GTDBTK_DATA_PATH'), 'gtdbtk_r226'),
             'eggnog_db': _database_setting(params, ('eggnog_db',), ('APPAM_SMK_EGGNOG_DB',), 'eggnog'),
             'abricate_db': _setting(params, ('abricate_db',), ('APPAM_SMK_ABRICATE_DB',), 'builtin'),
-            'rgi_db_mode': _setting(params, ('rgi_db_mode',), ('APPAM_SMK_RGI_DB_MODE',), 'online'),
+            'rgi_db_mode': _setting(params, ('rgi_db_mode',), ('APPAM_SMK_RGI_DB_MODE',), 'global'),
             'rgi_db': _setting(params, ('rgi_db',), ('APPAM_SMK_RGI_DB',), None),
             'antismash_db': _setting(params, ('antismash_db',), ('APPAM_SMK_ANTISMASH_DB',), 'builtin'),
             'prokka_db': _setting(params, ('prokka_db',), ('APPAM_SMK_PROKKA_DB',), 'builtin'),
         },
         'modules': {
+            'enable_bin_refinement': _bool_setting(params, 'enable_bin_refinement', False),
+            'enable_checkm1': _bool_setting(params, 'enable_checkm1', False),
             'enable_checkm2': _bool_setting(params, 'enable_checkm2', True),
             'enable_gunc': _bool_setting(params, 'enable_gunc', True),
+            'enable_gtdbtk': _bool_setting(params, 'enable_gtdbtk', True),
             'enable_prokka': _bool_setting(params, 'enable_prokka', True),
-            'enable_eggnog': _bool_setting(params, 'enable_eggnog', True),
-            'enable_abricate': _bool_setting(params, 'enable_abricate', True),
+            'enable_eggnog': _bool_setting(params, 'enable_eggnog', False),
+            'enable_abricate': _bool_setting(params, 'enable_abricate', False),
             'enable_rgi': _bool_setting(params, 'enable_rgi', False),
-            'enable_antismash': _bool_setting(params, 'enable_antismash', True),
+            'enable_antismash': _bool_setting(params, 'enable_antismash', False),
         },
     }
 
@@ -143,10 +153,16 @@ def get_appam_smk_runtime_checks(settings: dict | None = None) -> list[dict]:
 
     checks = [
         _path_check('databases_root', settings['databases_root'], 'Database mount root', required=False, kind='dir'),
+        _env_check('preprocessing_env', tools.get('preprocessing_env'), 'Preprocessing'),
+        _env_check('mapping_env', tools.get('mapping_env'), 'Read mapping'),
+        _env_check('assembly_env', tools.get('assembly_env'), 'Assembly'),
         _env_check('metawrap_env', tools.get('metawrap_env'), 'MetaWRAP'),
         _env_check('pydamage_env', tools.get('pydamage_env'), 'PyDamage'),
-        _path_check('checkm1_db', databases.get('checkm1_db'), 'CheckM1 database', kind='dir'),
     ]
+
+    if modules.get('enable_bin_refinement') or modules.get('enable_checkm1'):
+        checks.append(_env_check('checkm1_env', tools.get('checkm1_env'), 'CheckM1'))
+        checks.append(_path_check('checkm1_db', databases.get('checkm1_db'), 'CheckM1 database', kind='dir'))
 
     if modules.get('enable_checkm2'):
         checks.append(_env_check('checkm2_env', tools.get('checkm2_env'), 'CheckM2'))
@@ -154,6 +170,9 @@ def get_appam_smk_runtime_checks(settings: dict | None = None) -> list[dict]:
     if modules.get('enable_gunc'):
         checks.append(_env_check('gunc_env', tools.get('gunc_env'), 'GUNC'))
         checks.append(_path_check('gunc_db', databases.get('gunc_db'), 'GUNC database', kind='file_or_dir'))
+    if modules.get('enable_gtdbtk'):
+        checks.append(_env_check('gtdbtk_env', tools.get('gtdbtk_env'), 'GTDB-Tk'))
+        checks.append(_path_check('gtdbtk_db', databases.get('gtdbtk_db'), 'GTDB-Tk database', kind='dir'))
     if modules.get('enable_prokka'):
         checks.append(_env_check('prokka_env', tools.get('prokka_env'), 'Prokka'))
         checks.append({'name': 'prokka_db', 'status': 'ok', 'required': False, 'message': f"Prokka database: {databases.get('prokka_db')}"})
@@ -167,11 +186,15 @@ def get_appam_smk_runtime_checks(settings: dict | None = None) -> list[dict]:
         checks.append({'name': 'abricate_db', 'status': 'ok', 'required': False, 'message': f"ABRicate database: {databases.get('abricate_db')}"})
     if modules.get('enable_rgi'):
         checks.append(_env_check('rgi_env', tools.get('rgi_env'), 'RGI'))
-        rgi_mode = str(databases.get('rgi_db_mode') or 'online').lower()
+        rgi_mode = str(databases.get('rgi_db_mode') or 'global').lower()
+        if rgi_mode == 'online':
+            rgi_mode = 'global'
         if rgi_mode == 'local':
             checks.append(_path_check('rgi_db', databases.get('rgi_db'), 'RGI database', kind='dir'))
+        elif rgi_mode == 'global':
+            checks.append({'name': 'rgi_db_mode', 'status': 'warn', 'required': False, 'message': 'RGI will use CARD data loaded in its environment; record that CARD release in the database manifest.'})
         else:
-            checks.append({'name': 'rgi_db_mode', 'status': 'warn', 'required': False, 'message': 'RGI is configured for online/non-local database mode; record this in provenance.'})
+            checks.append({'name': 'rgi_db_mode', 'status': 'error', 'required': True, 'message': 'RGI database mode must be global or local.'})
     if modules.get('enable_antismash'):
         checks.append(_env_check('antismash_env', tools.get('antismash_env'), 'antiSMASH'))
         checks.append({'name': 'antismash_db', 'status': 'ok', 'required': False, 'message': f"antiSMASH database: {databases.get('antismash_db')}"})
@@ -201,6 +224,7 @@ def collect_appam_smk_runtime_metadata(settings: dict | None = None) -> dict:
             'checkm1_db': resource_fingerprint(databases.get('checkm1_db')),
             'checkm2_db': resource_fingerprint(databases.get('checkm2_db')),
             'gunc_db': resource_fingerprint(databases.get('gunc_db')),
+            'gtdbtk_db': resource_fingerprint(databases.get('gtdbtk_db')),
             'eggnog_db': resource_fingerprint(databases.get('eggnog_db')),
             'abricate_db': databases.get('abricate_db'),
             'rgi_db_mode': databases.get('rgi_db_mode'),
@@ -208,6 +232,9 @@ def collect_appam_smk_runtime_metadata(settings: dict | None = None) -> dict:
             'antismash_db': databases.get('antismash_db'),
             'prokka_db': databases.get('prokka_db'),
         },
-        'tools': settings.get('tools', {}),
+        'tools': {
+            name: conda_environment_fingerprint(value)
+            for name, value in settings.get('tools', {}).items()
+        },
         'modules': settings.get('modules', {}),
     }

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from ..database import get_db_connection
+from ..paths import get_project_dir
 from .execution_insights import classify_failure
 
 
@@ -685,6 +686,20 @@ def _enrich_workflow_run_record(record: Dict) -> Dict:
     return record
 
 
+def _add_project_paths(artifacts: List[Dict], project_id: str) -> List[Dict]:
+    project_root = get_project_dir(project_id).resolve()
+    enriched = []
+    for artifact in artifacts:
+        item = dict(artifact)
+        try:
+            artifact_path = Path(str(item.get('path') or '')).resolve()
+            item['project_path'] = artifact_path.relative_to(project_root).as_posix()
+        except (OSError, ValueError):
+            item['project_path'] = None
+        enriched.append(item)
+    return enriched
+
+
 def _get_queue_position_safe(job_id: str | None):
     if not job_id:
         return None
@@ -843,7 +858,7 @@ def get_workflow_run(run_id: str) -> Optional[Dict]:
         data['params'] = _decode_json(data.get('params_json'))
         data['stage_states'] = list_workflow_stage_states(run_id, conn=conn)
         data['events'] = list_workflow_run_events(run_id, limit=200, conn=conn)
-        data['artifacts'] = list_workflow_artifacts(run_id, conn=conn)
+        data['artifacts'] = _add_project_paths(list_workflow_artifacts(run_id, conn=conn), data['project_id'])
         data['metrics'] = list_workflow_metrics(run_id, conn=conn)
         return data
     finally:
@@ -866,7 +881,7 @@ def get_workflow_run_by_job(job_id: str) -> Optional[Dict]:
         data['params'] = _decode_json(data.get('params_json'))
         data['stage_states'] = list_workflow_stage_states(data['id'], conn=conn)
         data['events'] = list_workflow_run_events(data['id'], limit=200, conn=conn)
-        data['artifacts'] = list_workflow_artifacts(data['id'], conn=conn)
+        data['artifacts'] = _add_project_paths(list_workflow_artifacts(data['id'], conn=conn), data['project_id'])
         data['metrics'] = list_workflow_metrics(data['id'], conn=conn)
         return data
     finally:
@@ -958,7 +973,13 @@ def list_workflow_metrics(run_id: str, limit: int = 500, conn=None) -> List[Dict
             connection.close()
 
 
-def list_workflow_runs(project_id: str, workflow_id: Optional[str] = None, limit: int = 20) -> List[Dict]:
+def list_workflow_runs(
+    project_id: str,
+    workflow_id: Optional[str] = None,
+    limit: int = 20,
+    *,
+    include_results: bool = True,
+) -> List[Dict]:
     conn = get_db_connection()
     try:
         if workflow_id:
@@ -986,8 +1007,9 @@ def list_workflow_runs(project_id: str, workflow_id: Optional[str] = None, limit
         for run in runs:
             run['params'] = _decode_json(run.get('params_json'))
             run['stage_states'] = list_workflow_stage_states(run['id'], conn=conn)
-            run['artifacts'] = list_workflow_artifacts(run['id'], conn=conn)
-            run['metrics'] = list_workflow_metrics(run['id'], conn=conn)
+            if include_results:
+                run['artifacts'] = _add_project_paths(list_workflow_artifacts(run['id'], conn=conn), run['project_id'])
+                run['metrics'] = list_workflow_metrics(run['id'], conn=conn)
         return runs
     finally:
         conn.close()
@@ -1023,7 +1045,7 @@ def get_active_workflow_run(project_id: str, workflow_id: Optional[str] = None) 
         run = _enrich_workflow_run_record(dict(row))
         run['params'] = _decode_json(run.get('params_json'))
         run['stage_states'] = list_workflow_stage_states(run['id'], conn=conn)
-        run['artifacts'] = list_workflow_artifacts(run['id'], conn=conn)
+        run['artifacts'] = _add_project_paths(list_workflow_artifacts(run['id'], conn=conn), run['project_id'])
         run['metrics'] = list_workflow_metrics(run['id'], conn=conn)
         return run
     finally:

@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, send_from_directory, Response, g
-from app.auth import get_project_for_user
+from app.auth import current_user, get_project_for_user
 from app.services import file_manager as services
 from app.services import download_manager
 import os
@@ -13,10 +13,14 @@ EDITOR_FILEMANAGER_ENDPOINTS = {
     'filemanager_bp.make_directory',
     'filemanager_bp.rename_item',
     'filemanager_bp.delete_items',
-    'filemanager_bp.fetch_from_url',
     'filemanager_bp.save_file',
     'filemanager_bp.copy_items',
     'filemanager_bp.cut_items',
+    'filemanager_bp.start_url_download',
+    'filemanager_bp.pause_download',
+    'filemanager_bp.resume_download',
+    'filemanager_bp.cancel_download',
+    'filemanager_bp.cleanup_downloads',
 }
 
 
@@ -53,6 +57,9 @@ def list_files(project_id):
 @filemanager_bp.route('/<project_id>/upload-chunk', methods=['POST'])
 def upload_chunk(project_id):
     try:
+        max_chunk_bytes = int(os.getenv('APPAM_MAX_UPLOAD_CHUNK_BYTES', str(16 * 1024 * 1024)))
+        if request.content_length and request.content_length > max_chunk_bytes + 1024 * 1024:
+            return jsonify({'error': 'Upload chunk is too large'}), 413
         file = request.files['file']
         target_path = request.form['path']
         filename = request.form['filename']
@@ -60,6 +67,10 @@ def upload_chunk(project_id):
         total_chunks = int(request.form['totalChunks'])
         services.upload_chunk(project_id, file, target_path, filename, chunk_number, total_chunks)
         return jsonify({'message': 'Chunk uploaded'})
+    except services.UploadTooLargeError as e:
+        return jsonify({'error': str(e)}), 413
+    except (KeyError, ValueError) as e:
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -116,18 +127,6 @@ def delete_items(project_id):
         items = request.json['items']
         services.delete_items(project_id, items)
         return jsonify({'message': 'Items deleted'})
-    except ValueError as e:
-        return jsonify({'error': str(e)}), 400
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@filemanager_bp.route('/<project_id>/fetch-url', methods=['POST'])
-def fetch_from_url(project_id):
-    try:
-        url = request.json['url']
-        path = request.json.get('path', '.')
-        message = services.fetch_from_url(project_id, url, path)
-        return jsonify({'message': message})
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     except Exception as e:
@@ -234,8 +233,8 @@ def cut_items(project_id):
 def get_thumbnail(project_id):
     try:
         path = request.args.get('path')
-        size = request.args.get('size', '128')
-        result = services.generate_thumbnail(project_id, path, int(size))
+        size = min(max(int(request.args.get('size', '128')), 16), 1024)
+        result = services.generate_thumbnail(project_id, path, size)
         if result['success']:
             return send_from_directory(
                 os.path.dirname(result['path']),
@@ -252,7 +251,7 @@ def preview_file_head(project_id):
     """Preview first N lines of a file"""
     try:
         path = request.args.get('path')
-        lines = int(request.args.get('lines', 1000))
+        lines = min(max(int(request.args.get('lines', 1000)), 1), 5000)
         result = services.preview_file_head(project_id, path, lines)
         return jsonify(result)
     except FileNotFoundError as e:
@@ -267,7 +266,7 @@ def preview_file_sample(project_id):
     """Preview sample lines from a file"""
     try:
         path = request.args.get('path')
-        samples = int(request.args.get('samples', 100))
+        samples = min(max(int(request.args.get('samples', 100)), 1), 1000)
         result = services.preview_file_sample(project_id, path, samples)
         return jsonify(result)
     except FileNotFoundError as e:
@@ -290,19 +289,14 @@ def start_url_download(project_id):
         filename = data.get('filename', '')
         path = data.get('path', '/')
         concurrent = data.get('concurrent', True)
-        task_id = data.get('task_id')
-        
-        # Validate URL format
-        if not url.startswith(('http://', 'https://', 'ftp://')):
-            return jsonify({'error': 'Unsupported URL protocol, please use HTTP/HTTPS/FTP'}), 400
-        
+
         task_id = download_manager.start_download(
             project_id=project_id,
             url=url,
             filename=filename,
             path=path,
             concurrent=concurrent,
-            task_id=task_id
+            submitted_by=current_user()['id'],
         )
         
         return jsonify({
@@ -311,6 +305,8 @@ def start_url_download(project_id):
             'message': 'Download task started'
         })
         
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -318,7 +314,7 @@ def start_url_download(project_id):
 def get_download_progress(project_id, task_id):
     """获取下载进度"""
     try:
-        progress = download_manager.get_download_progress(task_id)
+        progress = download_manager.get_download_progress(task_id, project_id=project_id)
         if progress is None:
             return jsonify({'error': 'Download task not found'}), 404
         
@@ -331,7 +327,7 @@ def get_download_progress(project_id, task_id):
 def pause_download(project_id, task_id):
     """暂停下载任务"""
     try:
-        success = download_manager.pause_download(task_id)
+        success = download_manager.pause_download(task_id, project_id=project_id)
         if success:
             return jsonify({'success': True, 'message': 'Download paused'})
         else:
@@ -344,7 +340,7 @@ def pause_download(project_id, task_id):
 def resume_download(project_id, task_id):
     """继续下载任务"""
     try:
-        success = download_manager.resume_download(task_id)
+        success = download_manager.resume_download(task_id, project_id=project_id)
         if success:
             return jsonify({'success': True, 'message': 'Download resumed'})
         else:
@@ -357,7 +353,7 @@ def resume_download(project_id, task_id):
 def cancel_download(project_id, task_id):
     """取消下载任务"""
     try:
-        success = download_manager.cancel_download(task_id)
+        success = download_manager.cancel_download(task_id, project_id=project_id)
         if success:
             return jsonify({'success': True, 'message': 'Download cancelled'})
         else:
@@ -380,7 +376,7 @@ def list_downloads(project_id):
 def cleanup_downloads(project_id):
     """清理已完成的下载任务"""
     try:
-        count = download_manager.cleanup_completed_downloads()
+        count = download_manager.cleanup_completed_downloads(project_id=project_id)
         return jsonify({
             'success': True, 
             'message': f'Cleaned up {count} completed download tasks'

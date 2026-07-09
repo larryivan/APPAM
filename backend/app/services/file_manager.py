@@ -1,7 +1,7 @@
+import fcntl
 import uuid
 import os
 import shutil
-import requests
 import mimetypes
 import time
 import yaml
@@ -29,6 +29,10 @@ TEXT_EXTENSIONS = {
     '.sql', '.dockerfile', '.dockerignore', '.gitignore',
     '.env', '.example', '.sample', '.template'
 }
+
+
+class UploadTooLargeError(ValueError):
+    pass
 
 LANG_MAP = {
     '.py': 'python', '.js': 'javascript', '.ts': 'typescript',
@@ -138,19 +142,88 @@ def list_files(project_id, path):
     return items
 
 def upload_chunk(project_id, file, path, filename, chunk_number, total_chunks):
+    if not filename or filename in {'.', '..'} or os.path.basename(filename) != filename:
+        raise ValueError('Invalid upload filename')
+    if len(filename) > 255:
+        raise ValueError('Upload filename is too long')
+    max_chunks = int(os.getenv('APPAM_MAX_UPLOAD_CHUNKS', '20000'))
+    if total_chunks < 1 or total_chunks > max_chunks:
+        raise ValueError(f'totalChunks must be between 1 and {max_chunks}')
+    if chunk_number < 1 or chunk_number > total_chunks:
+        raise ValueError('chunkNumber is outside the declared upload range')
+
     temp_dir = get_project_path(project_id, os.path.join(path, f'.tmp_{filename}'))
     os.makedirs(temp_dir, exist_ok=True)
-    file.save(os.path.join(temp_dir, str(chunk_number)))
+    lock_path = os.path.join(temp_dir, '.merge.lock')
+    total_path = os.path.join(temp_dir, '.total')
+    final_path = get_project_path(project_id, os.path.join(path, filename))
 
-    if len(os.listdir(temp_dir)) == total_chunks:
-        final_path = get_project_path(project_id, os.path.join(path, filename))
-        with open(final_path, 'wb') as outfile:
-            for i in range(1, total_chunks + 1):
-                chunk_path = os.path.join(temp_dir, str(i))
-                with open(chunk_path, 'rb') as infile:
-                    outfile.write(infile.read())
-                os.remove(chunk_path)
-        os.rmdir(temp_dir)
+    with open(lock_path, 'a+', encoding='utf-8') as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        complete_path = os.path.join(temp_dir, '.complete')
+        if chunk_number == 1 and os.path.exists(complete_path):
+            for entry in os.listdir(temp_dir):
+                candidate = os.path.join(temp_dir, entry)
+                if candidate != lock_path and os.path.isfile(candidate):
+                    os.remove(candidate)
+
+        if os.path.exists(total_path):
+            with open(total_path, 'r', encoding='utf-8') as total_file:
+                declared_total = int(total_file.read().strip())
+            if declared_total != total_chunks:
+                raise ValueError('totalChunks changed during an active upload')
+        else:
+            with open(total_path, 'w', encoding='utf-8') as total_file:
+                total_file.write(str(total_chunks))
+
+        chunk_path = os.path.join(temp_dir, str(chunk_number))
+        chunk_temp_path = f'{chunk_path}.part-{uuid.uuid4().hex}'
+        try:
+            max_chunk_bytes = max(1, int(os.getenv('APPAM_MAX_UPLOAD_CHUNK_BYTES', str(16 * 1024 * 1024))))
+        except ValueError:
+            max_chunk_bytes = 16 * 1024 * 1024
+        bytes_written = 0
+        try:
+            with open(chunk_temp_path, 'wb') as chunk_handle:
+                while True:
+                    data = file.stream.read(1024 * 1024)
+                    if not data:
+                        break
+                    bytes_written += len(data)
+                    if bytes_written > max_chunk_bytes:
+                        raise UploadTooLargeError(
+                            f'Upload chunk exceeds the configured {max_chunk_bytes}-byte limit'
+                        )
+                    chunk_handle.write(data)
+                chunk_handle.flush()
+                os.fsync(chunk_handle.fileno())
+        except Exception:
+            if os.path.exists(chunk_temp_path):
+                os.remove(chunk_temp_path)
+            raise
+        os.replace(chunk_temp_path, chunk_path)
+
+        expected_chunks = [os.path.join(temp_dir, str(index)) for index in range(1, total_chunks + 1)]
+        if not all(os.path.isfile(candidate) for candidate in expected_chunks):
+            return
+
+        merge_path = f'{final_path}.uploading-{uuid.uuid4().hex}'
+        try:
+            with open(merge_path, 'wb') as outfile:
+                for candidate in expected_chunks:
+                    with open(candidate, 'rb') as infile:
+                        shutil.copyfileobj(infile, outfile, length=1024 * 1024)
+                outfile.flush()
+                os.fsync(outfile.fileno())
+            os.replace(merge_path, final_path)
+        finally:
+            if os.path.exists(merge_path):
+                os.remove(merge_path)
+
+        for candidate in expected_chunks:
+            os.remove(candidate)
+        with open(complete_path, 'w', encoding='utf-8') as marker:
+            marker.write(str(total_chunks))
 
 def make_directory(project_id, path):
     os.makedirs(get_project_path(project_id, path), exist_ok=True)
@@ -286,17 +359,6 @@ def generate_thumbnail(project_id, path, size=128):
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
-def fetch_from_url(project_id, url, path):
-    filename = url.split('/')[-1] or 'downloaded_file'
-    save_path = get_project_path(project_id, os.path.join(path, filename))
-    
-    with requests.get(url, stream=True) as r:
-        r.raise_for_status()
-        with open(save_path, 'wb') as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                f.write(chunk)
-    return f'Downloaded {filename} from URL.'
-
 def save_file(project_id, path, content):
     """Save content to a file."""
     abs_path = get_project_path(project_id, path)
@@ -321,11 +383,15 @@ def preview_file_head(project_id, path, lines=1000):
     
     try:
         content_lines = []
+        content_bytes = 0
+        max_preview_bytes = 2 * 1024 * 1024
         with open(abs_path, 'r', encoding='utf-8', errors='ignore') as f:
             for i, line in enumerate(f):
-                if i >= lines:
+                encoded_size = len(line.encode('utf-8', errors='ignore'))
+                if i >= lines or content_bytes + encoded_size > max_preview_bytes:
                     break
                 content_lines.append(line.rstrip())
+                content_bytes += encoded_size
         
         return {
             'content': '\n'.join(content_lines),
@@ -347,36 +413,46 @@ def preview_file_sample(project_id, path, samples=100):
         raise FileNotFoundError("File not found or is a directory")
     
     try:
-        # First, count total lines
-        with open(abs_path, 'r', encoding='utf-8', errors='ignore') as f:
-            total_lines = sum(1 for _ in f)
-        
-        if total_lines <= samples:
-            # If file is small enough, return all lines
+        file_size = os.path.getsize(abs_path)
+        max_full_read_bytes = 2 * 1024 * 1024
+
+        if file_size <= max_full_read_bytes:
             with open(abs_path, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read()
+                content_lines = f.read().splitlines()
+            if len(content_lines) <= samples:
+                return {
+                    'content': '\n'.join(content_lines),
+                    'lines_count': len(content_lines),
+                    'preview_type': 'full'
+                }
+            sample_interval = max(1, len(content_lines) // samples)
+            sampled = content_lines[::sample_interval][:samples]
             return {
-                'content': content,
-                'lines_count': total_lines,
-                'preview_type': 'full'
+                'content': '\n'.join(sampled),
+                'lines_count': len(sampled),
+                'preview_type': 'sample',
+                'total_lines': len(content_lines)
             }
-        
-        # Sample lines evenly throughout the file
-        sample_interval = max(1, total_lines // samples)
+
         content_lines = []
-        
-        with open(abs_path, 'r', encoding='utf-8', errors='ignore') as f:
-            for i, line in enumerate(f):
-                if i % sample_interval == 0:
-                    content_lines.append(f"Line {i+1}: {line.rstrip()}")
-                if len(content_lines) >= samples:
-                    break
-        
+        with open(abs_path, 'rb') as f:
+            for index in range(samples):
+                position = int(file_size * index / max(samples, 1))
+                f.seek(position)
+                if position:
+                    f.readline(65536)
+                line = f.readline(65536)
+                if not line:
+                    continue
+                content_lines.append(
+                    f"Offset {position}: {line.decode('utf-8', errors='replace').rstrip()}"
+                )
+
         return {
             'content': '\n'.join(content_lines),
             'lines_count': len(content_lines),
             'preview_type': 'sample',
-            'total_lines': total_lines
+            'file_size': file_size
         }
     except Exception as e:
         return {
@@ -386,6 +462,22 @@ def preview_file_sample(project_id, path, samples=100):
         }
 
 # Project management functions
+SUPPORTED_ANALYSIS_WORKFLOWS = frozenset({
+    'appam-smk',
+    'appam-paleoproteomics',
+})
+PROJECT_FIELD_UNSET = object()
+
+
+def normalize_analysis_workflow(value):
+    workflow_id = str(value or '').strip()
+    if not workflow_id:
+        return None
+    if workflow_id not in SUPPORTED_ANALYSIS_WORKFLOWS:
+        raise ValueError('Unsupported analysis workflow')
+    return workflow_id
+
+
 def _sanitize_project(project):
     if not project:
         return None
@@ -472,9 +564,10 @@ def get_project_by_id(project_id, user_id=None, is_admin=False):
     return _sanitize_project(project)
 
 
-def create_project(name, description='', creator='', owner_id=None):
+def create_project(name, description='', creator='', owner_id=None, analysis_workflow=None):
     """Create a new project."""
     project_id = str(uuid.uuid4())
+    analysis_workflow = normalize_analysis_workflow(analysis_workflow)
 
     project_dir = get_project_path(project_id)
     os.makedirs(project_dir, exist_ok=True)
@@ -482,8 +575,11 @@ def create_project(name, description='', creator='', owner_id=None):
     conn = get_db_connection()
     try:
         conn.execute(
-            'INSERT INTO projects (id, name, description, creator, owner_id) VALUES (?, ?, ?, ?, ?)',
-            (project_id, name, description, creator, owner_id)
+            '''
+            INSERT INTO projects (id, name, description, creator, analysis_workflow, owner_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ''',
+            (project_id, name, description, creator, analysis_workflow, owner_id)
         )
         if owner_id:
             conn.execute(
@@ -508,7 +604,13 @@ def create_project(name, description='', creator='', owner_id=None):
     return _sanitize_project(project)
 
 
-def update_project(project_id, name=None, description=None, creator=None):
+def update_project(
+    project_id,
+    name=None,
+    description=None,
+    creator=None,
+    analysis_workflow=PROJECT_FIELD_UNSET,
+):
     """Update an existing project."""
     conn = get_db_connection()
     try:
@@ -522,6 +624,12 @@ def update_project(project_id, name=None, description=None, creator=None):
             conn.execute('UPDATE projects SET description = ? WHERE id = ?', (description, project_id))
         if creator is not None:
             conn.execute('UPDATE projects SET creator = ? WHERE id = ?', (creator, project_id))
+        if analysis_workflow is not PROJECT_FIELD_UNSET:
+            normalized_workflow = normalize_analysis_workflow(analysis_workflow)
+            conn.execute(
+                'UPDATE projects SET analysis_workflow = ? WHERE id = ?',
+                (normalized_workflow, project_id),
+            )
 
         conn.commit()
         updated_project = conn.execute('SELECT * FROM projects WHERE id = ?', (project_id,)).fetchone()
@@ -797,8 +905,7 @@ def preview_file(project_id, path):
     
     # Size limits
     MAX_PREVIEW_SIZE = 10 * 1024 * 1024  # 10MB
-    MAX_BIO_PREVIEW_SIZE = 50 * 1024 * 1024  # 50MB for bio files
-    
+
     try:
         # Check if it's a bioinformatics file
         bio_format = get_file_format(file_ext)
@@ -806,7 +913,25 @@ def preview_file(project_id, path):
         is_html = file_ext in {'.html', '.htm'}
         is_markdown = file_ext in {'.md', '.markdown'}
 
-        # Allow full preview for HTML and Markdown files
+        # Refuse full reads before handling any text subtype.
+        if file_size > MAX_PREVIEW_SIZE:
+            if is_bio_file:
+                return {
+                    'type': 'bioinformatics',
+                    'file_format': file_ext.lstrip('.'),
+                    'file_size': file_size,
+                    'too_large': True,
+                    'error': f'File is too large ({file_size / (1024*1024):.1f}MB) to preview safely. Use preview options below.',
+                    'mimetype': mimetype or 'text/plain'
+                }
+            return {
+                'type': 'text',
+                'file_size': file_size,
+                'too_large': True,
+                'error': f'File is too large ({file_size / (1024*1024):.1f}MB) to preview safely. Download to view.',
+                'mimetype': mimetype or 'text/plain'
+            }
+
         if is_html:
             try:
                 with open(abs_path, 'r', encoding='utf-8') as f:
@@ -841,26 +966,6 @@ def preview_file(project_id, path):
                     'content': 'Markdown file appears to be binary. Cannot preview.'
                 }
 
-        # Handle large files
-        if file_size > MAX_PREVIEW_SIZE:
-            if is_bio_file:
-                return {
-                    'type': 'bioinformatics',
-                    'file_format': file_ext.lstrip('.'),
-                    'file_size': file_size,
-                    'too_large': True,
-                    'error': f'File is too large ({file_size / (1024*1024):.1f}MB) to preview safely. Use preview options below.',
-                    'mimetype': mimetype or 'text/plain'
-                }
-            else:
-                return {
-                    'type': 'text',
-                    'file_size': file_size,
-                    'too_large': True,
-                    'error': f'File is too large ({file_size / (1024*1024):.1f}MB) to preview safely. Download to view.',
-                    'mimetype': mimetype or 'text/plain'
-                }
-        
         # Handle bioinformatics files
         if is_bio_file:
             return analyze_bio_file(abs_path, file_ext, file_size)

@@ -15,16 +15,25 @@
       "version": "progenomes_2.1",
       "path": "/databases/gunc"
     },
+    "gtdbtk_db": {
+      "version": "r226",
+      "path": "/databases/gtdbtk_r226"
+    },
     "eggnog_db": {
       "version": "5.0.2",
       "path": "/databases/eggnog"
+    },
+    "krakenuniq_db": {
+      "version": "record-release-and-build-date",
+      "path": "/databases/krakenuniq_refseq_bav"
     },
     "abricate_db": {
       "version": "container-configured",
       "builtin": true
     },
     "rgi_db": {
-      "version": "online-or-local",
+      "version": "record-CARD-release",
+      "mode": "global-or-local",
       "path": ""
     },
     "antismash_db": {

@@ -1,0 +1,4 @@
+observations: benchmark/data/observations.example.tsv
+baseline: appam-all-contigs
+bootstrap_iterations: 2000
+seed: 20260710

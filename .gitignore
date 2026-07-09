@@ -51,7 +51,11 @@ htmlcov/
 .pytest_cache/
 
 # ===== 数据库和数据文件 =====
-
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
 
 # 项目数据文件
 projects/*/
@@ -172,3 +176,12 @@ Desktop.ini
 # 配置文件（保留模板）
 config.env
 local_config.py
+
+# Local workflow state
+**/.snakemake/
+benchmark/results/
+deploy/native/appam.env
+vendor/maxquant/**
+docker-data/**
+!docker-data/**/
+!docker-data/**/.gitkeep

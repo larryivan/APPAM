@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import copy
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -16,7 +18,13 @@ from .runtime_resources import (
     get_appam_smk_runtime_settings,
     validate_appam_smk_runtime,
 )
-from .sample_validator import validate_appam_smk_manifest, validate_paleoproteomics_table
+from .provenance import conda_environment_fingerprint, fingerprint_path, repository_state, sha256_bytes
+from .sample_validator import (
+    validate_appam_smk_manifest,
+    validate_paleoproteomics_table,
+    write_resolved_appam_smk_manifest,
+    write_resolved_paleoproteomics_table,
+)
 from .workflow_runtime import get_workflow_stage_definitions
 from ..paths import (
     APPAM_PALEOPROTEOMICS_ROOT,
@@ -40,13 +48,50 @@ def resolve_project_or_absolute_path(project_id: str, path_value: str) -> Path:
     raw_value = str(path_value).strip()
     if not raw_value:
         raise ValueError('Path is required')
-    if os.path.isabs(raw_value):
-        return Path(raw_value).resolve()
-    return resolve_project_path(project_id, raw_value)
+    if not os.path.isabs(raw_value):
+        return resolve_project_path(project_id, raw_value)
+
+    candidate = Path(raw_value).expanduser().resolve()
+    project_root = get_project_dir(project_id).resolve()
+    shared_root = Path(os.getenv('APPAM_DATABASES_ROOT', '/databases')).expanduser().resolve()
+    allowed_roots = (project_root, shared_root)
+    if not any(candidate == root or root in candidate.parents for root in allowed_roots):
+        raise ValueError('Absolute paths must be inside the project or APPAM_DATABASES_ROOT')
+    return candidate
 
 
 def ensure_directory(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
+
+
+def _load_yaml_mapping(path: Path) -> dict:
+    payload = yaml.safe_load(path.read_text(encoding='utf-8')) or {}
+    if not isinstance(payload, dict):
+        raise ValueError(f'Configuration must be a mapping: {path}')
+    return payload
+
+
+def _deep_merge(base: dict, overrides: dict) -> dict:
+    merged = copy.deepcopy(base)
+    for key, value in overrides.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = copy.deepcopy(value)
+    return merged
+
+
+def _materialize_config(default_path: Path, overrides: dict) -> dict:
+    return _deep_merge(_load_yaml_mapping(default_path), overrides)
+
+
+def _list_parameter(params: dict, name: str, default: list[str]) -> list[str]:
+    value = params.get(name)
+    if value in (None, ''):
+        return list(default)
+    if isinstance(value, (list, tuple)):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return [item.strip() for item in str(value).split(',') if item.strip()]
 
 
 def command_to_string(argv: list[str]) -> str:
@@ -55,10 +100,12 @@ def command_to_string(argv: list[str]) -> str:
 
 def get_snakemake_bin() -> str:
     configured = os.getenv('APPAM_SNAKEMAKE_BIN', 'snakemake')
-    if os.path.isabs(configured):
-        if not Path(configured).exists():
+    expanded = os.path.expanduser(configured)
+    if os.path.isabs(expanded):
+        path = Path(expanded).resolve()
+        if not path.is_file() or not os.access(path, os.X_OK):
             raise ValueError(f'Snakemake binary not found: {configured}')
-        return configured
+        return str(path)
     resolved = shutil.which(configured)
     if not resolved:
         raise ValueError(
@@ -72,10 +119,14 @@ def resolve_executable(value: str, label: str) -> str:
     configured = str(value or '').strip()
     if not configured:
         raise ValueError(f'{label} is required')
-    if os.path.isabs(configured):
-        if not Path(configured).exists():
+    expanded = os.path.expanduser(configured)
+    if os.path.isabs(expanded):
+        path = Path(expanded).resolve()
+        if not path.is_file():
             raise ValueError(f'{label} not found: {configured}')
-        return str(Path(configured).resolve())
+        if not os.access(path, os.X_OK):
+            raise ValueError(f'{label} is not executable: {path}')
+        return str(path)
     resolved = shutil.which(configured)
     if not resolved:
         raise ValueError(f'{label} executable "{configured}" was not found on PATH')
@@ -96,6 +147,163 @@ def require_existing_directory(path: Path, label: str) -> Path:
     if not path.is_dir():
         raise ValueError(f'{label} must be a directory: {path}')
     return path
+
+
+def _project_scoped_path(project_id: str, value: str | Path, label: str) -> Path:
+    """Resolve a persisted path while keeping workflow state inside its project."""
+    raw_value = str(value or '').strip()
+    if not raw_value:
+        raise ValueError(f'{label} is required')
+    raw_path = Path(raw_value)
+    candidate = raw_path.resolve() if raw_path.is_absolute() else resolve_project_path(project_id, str(raw_path))
+    project_dir = get_project_dir(project_id).resolve()
+    if candidate != project_dir and project_dir not in candidate.parents:
+        raise ValueError(f'{label} escapes project workspace: {candidate}')
+    return candidate
+
+
+def _project_relative_value(project_id: str, path: Path) -> str:
+    project_dir = get_project_dir(project_id).resolve()
+    resolved = path.resolve()
+    if resolved == project_dir:
+        return '.'
+    if project_dir not in resolved.parents:
+        raise ValueError(f'Path escapes project workspace: {resolved}')
+    return str(resolved.relative_to(project_dir))
+
+
+def _load_frozen_source_config(project_id: str, source_run: dict, default_path: Path) -> tuple[Path, dict]:
+    config_path = _project_scoped_path(project_id, source_run.get('config_path', ''), 'Source workflow config')
+    require_existing_file(config_path, 'Source workflow config')
+    return config_path, _materialize_config(default_path, _load_yaml_mapping(config_path))
+
+
+def _runtime_settings_from_appam_config(config_data: dict) -> dict:
+    runtime_params = {}
+    runtime_params.update(config_data.get('databases') or {})
+    runtime_params.update(config_data.get('tools') or {})
+    workflow_params = config_data.get('params') or {}
+    for name in (
+        'enable_bin_refinement',
+        'enable_checkm1',
+        'enable_checkm2',
+        'enable_gunc',
+        'enable_gtdbtk',
+        'enable_prokka',
+        'enable_eggnog',
+        'enable_abricate',
+        'enable_rgi',
+        'enable_antismash',
+    ):
+        if name in workflow_params:
+            runtime_params[name] = workflow_params[name]
+    return get_appam_smk_runtime_settings(runtime_params)
+
+
+def _verify_source_inputs(project_id: str, source_run: dict | None, current_inputs: list[dict]) -> dict:
+    if not source_run:
+        return {'checked': False, 'matched': None, 'reason': 'not a resumed or retried run'}
+    manifest_value = source_run.get('manifest_path')
+    if not manifest_value:
+        return {'checked': False, 'matched': None, 'reason': 'source run has no manifest'}
+    manifest_path = _project_scoped_path(project_id, manifest_value, 'Source workflow manifest')
+    require_existing_file(manifest_path, 'Source workflow manifest')
+    try:
+        source_manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f'Could not read source workflow manifest: {exc}') from exc
+    source_inputs = source_manifest.get('inputs') or []
+    if not source_inputs:
+        return {'checked': False, 'matched': None, 'reason': 'source manifest predates input fingerprints'}
+
+    def key(item: dict) -> tuple[str, str, str]:
+        return (
+            str(item.get('sample_id') or ''),
+            str(item.get('input_role') or ''),
+            str(Path(str(item.get('path') or '')).resolve()),
+        )
+
+    current_by_key = {key(item): item for item in current_inputs}
+    mismatches = []
+    for source in source_inputs:
+        current = current_by_key.get(key(source))
+        if current is None:
+            mismatches.append(f'missing input: {source.get("path")}')
+            continue
+        if source.get('sha256'):
+            fields = ('exists', 'type', 'size_bytes', 'sha256')
+        elif source.get('type') == 'directory':
+            fields = ('exists', 'type', 'file_count', 'size_bytes', 'fingerprint')
+        else:
+            fields = ('exists', 'type', 'size_bytes', 'mtime_ns')
+        changed = [field for field in fields if source.get(field) != current.get(field)]
+        if changed:
+            mismatches.append(f'{source.get("path")}: changed {", ".join(changed)}')
+    if mismatches:
+        raise ValueError(
+            'Frozen workflow inputs changed after the source run. Submit a new run instead of retry/resume: '
+            + '; '.join(mismatches[:10])
+        )
+    return {'checked': True, 'matched': True, 'input_count': len(source_inputs)}
+
+
+def _runtime_value_with_source_shape(current, source):
+    if isinstance(source, dict):
+        current_mapping = current if isinstance(current, dict) else {}
+        return {
+            key: _runtime_value_with_source_shape(current_mapping.get(key), value)
+            for key, value in source.items()
+            if key != 'path'
+        }
+    if isinstance(source, list):
+        current_values = current if isinstance(current, list) else []
+        if not source:
+            return list(current_values)
+        return [
+            _runtime_value_with_source_shape(value, source[min(index, len(source) - 1)])
+            for index, value in enumerate(current_values)
+        ]
+    return current
+
+
+def _runtime_digest(value) -> str:
+    payload = json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
+    return sha256_bytes(payload)
+
+
+def _verify_source_runtime(project_id: str, source_run: dict | None, current_runtime: dict) -> dict:
+    if not source_run:
+        return {'checked': False, 'matched': None, 'reason': 'not a resumed or retried run'}
+    manifest_value = source_run.get('manifest_path')
+    if not manifest_value:
+        return {'checked': False, 'matched': None, 'reason': 'source run has no manifest'}
+    manifest_path = _project_scoped_path(project_id, manifest_value, 'Source workflow manifest')
+    require_existing_file(manifest_path, 'Source workflow manifest')
+    try:
+        source_manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f'Could not read source workflow manifest: {exc}') from exc
+    source_runtime = source_manifest.get('runtime_metadata')
+    if not source_runtime:
+        return {'checked': False, 'matched': None, 'reason': 'source manifest predates runtime fingerprints'}
+
+    normalized_source = _runtime_value_with_source_shape(source_runtime, source_runtime)
+    normalized_current = _runtime_value_with_source_shape(current_runtime, source_runtime)
+    source_digest = _runtime_digest(normalized_source)
+    current_digest = _runtime_digest(normalized_current)
+    matched = source_digest == current_digest
+    if not matched and os.getenv('APPAM_ALLOW_RUNTIME_DRIFT_ON_RETRY', 'false').strip().lower() not in {'1', 'true', 'yes', 'on'}:
+        raise ValueError(
+            'Workflow runtime or database resources changed after the source run. '
+            'Submit a new run, or explicitly set APPAM_ALLOW_RUNTIME_DRIFT_ON_RETRY=true and document the deviation.'
+        )
+    return {
+        'checked': True,
+        'matched': matched,
+        'source_digest': source_digest,
+        'current_digest': current_digest,
+        'override_used': not matched,
+    }
 
 
 def _required_config_value(params: dict, param_name: str, env_name: str | None = None):
@@ -166,6 +374,12 @@ def _build_manifest_payload(project_id: str, tool_info: dict, params: dict, cont
         'runtime': context.get('runtime_settings'),
         'runtime_checks': context.get('runtime_checks'),
         'runtime_metadata': context.get('runtime_metadata'),
+        'workflow_revision': context.get('workflow_revision'),
+        'effective_config': context.get('config_data'),
+        'effective_config_sha256': context.get('config_sha256'),
+        'inputs': context.get('input_provenance'),
+        'source_input_verification': context.get('source_input_verification'),
+        'source_runtime_verification': context.get('source_runtime_verification'),
         'input_validation': context.get('input_validation'),
         'paths': {
             'config_path': str(context['config_path']),
@@ -174,6 +388,8 @@ def _build_manifest_payload(project_id: str, tool_info: dict, params: dict, cont
             'work_dir': str(context['run_paths']['work_dir']),
             'results_dir': str(context['run_paths']['results_dir']),
             'reports_dir': str(context['run_paths']['reports_dir']),
+            'resolved_sample_manifest': str(context['resolved_sample_manifest']) if context.get('resolved_sample_manifest') else None,
+            'resolved_sample_table': str(context['resolved_sample_table']) if context.get('resolved_sample_table') else None,
         },
         'command': context['argv'],
         'cleanup_commands': context.get('unlock_argv') and [context['unlock_argv']] or [],
@@ -214,33 +430,266 @@ def preflight_job_request(project_id: str, tool_info: dict, params: dict) -> dic
     return _preflight_command_job(project_id, tool_info, params)
 
 
-def _append_parameter_value(argv: list[str], param: dict, value, project_id: str) -> None:
-    if value in (None, '', []):
+def _has_parameter_value(value) -> bool:
+    return value not in (None, '', [])
+
+
+def validate_parameter_values(tool_info: dict, params: dict) -> list[str]:
+    errors = []
+    parameters = tool_info.get('parameters') or []
+    known_names = {parameter['name'] for parameter in parameters}
+    unknown_names = sorted(name for name in params if name not in known_names and not str(name).startswith('_'))
+    if unknown_names:
+        errors.append(f'Unknown parameter(s): {", ".join(unknown_names)}')
+
+    for parameter in parameters:
+        name = parameter['name']
+        value = params.get(name)
+        if parameter.get('required') and not _has_parameter_value(value):
+            errors.append(f"Required parameter '{name}' is missing")
+            continue
+        if not _has_parameter_value(value):
+            continue
+
+        values = value if isinstance(value, list) else [value]
+        if parameter.get('multiple') is False and isinstance(value, list) and len(value) > 1:
+            errors.append(f"Parameter '{name}' accepts only one value")
+        minimum_items = parameter.get('minimum_items')
+        maximum_items = parameter.get('maximum_items')
+        if minimum_items is not None and len(values) < int(minimum_items):
+            errors.append(f"Parameter '{name}' requires at least {minimum_items} value(s)")
+        if maximum_items is not None and len(values) > int(maximum_items):
+            errors.append(f"Parameter '{name}' accepts at most {maximum_items} value(s)")
+
+        options = parameter.get('options') or []
+        for item in values:
+            if options and item not in options:
+                errors.append(f"Parameter '{name}' value '{item}' is not allowed")
+                continue
+
+            converted = item
+            try:
+                if parameter.get('type') == 'integer':
+                    if isinstance(item, bool):
+                        raise ValueError
+                    converted = int(item)
+                elif parameter.get('type') == 'float':
+                    if isinstance(item, bool):
+                        raise ValueError
+                    converted = float(item)
+                elif parameter.get('type') == 'flag' and not isinstance(item, bool):
+                    raise ValueError
+            except (TypeError, ValueError):
+                errors.append(f"Parameter '{name}' must be a valid {parameter.get('type')}")
+                continue
+
+            minimum = parameter.get('minimum')
+            maximum = parameter.get('maximum')
+            if minimum is not None and converted < minimum:
+                errors.append(f"Parameter '{name}' must be at least {minimum}")
+            if maximum is not None and converted > maximum:
+                errors.append(f"Parameter '{name}' must be at most {maximum}")
+            pattern = parameter.get('pattern')
+            if pattern and not re.fullmatch(str(pattern), str(item)):
+                errors.append(f"Parameter '{name}' has an invalid format")
+
+    required_any = tool_info.get('required_any') or []
+    if required_any and not any(_has_parameter_value(params.get(name)) for name in required_any):
+        errors.append(f'At least one input parameter is required: {", ".join(required_any)}')
+    for group in tool_info.get('paired_parameters') or []:
+        present = [_has_parameter_value(params.get(name)) for name in group]
+        if any(present) and not all(present):
+            errors.append(f'Parameters must be provided together: {", ".join(group)}')
+    for requirement in tool_info.get('conditional_requirements') or []:
+        if not _has_parameter_value(params.get(requirement.get('when'))):
+            continue
+        dependent_name = requirement.get('parameter')
+        dependent_value = params.get(dependent_name)
+        dependent_values = dependent_value if isinstance(dependent_value, list) else [dependent_value]
+        dependent_count = len([item for item in dependent_values if _has_parameter_value(item)])
+        minimum_items = requirement.get('minimum_items')
+        maximum_items = requirement.get('maximum_items')
+        if minimum_items is not None and dependent_count < int(minimum_items):
+            errors.append(f"Parameter '{dependent_name}' requires at least {minimum_items} value(s) when '{requirement.get('when')}' is enabled")
+        if maximum_items is not None and dependent_count > int(maximum_items):
+            errors.append(f"Parameter '{dependent_name}' accepts at most {maximum_items} value(s) when '{requirement.get('when')}' is enabled")
+    return errors
+
+
+def _parameter_path_role(param: dict) -> str | None:
+    explicit = param.get('path_role')
+    if explicit:
+        return str(explicit)
+    if param.get('type') in {'file', 'directory'}:
+        return 'input'
+    return None
+
+
+def _resolve_shared_path(value: str) -> Path:
+    root = Path(os.getenv('APPAM_DATABASES_ROOT', '/databases')).expanduser().resolve()
+    raw_value = str(value).strip()
+    candidate = Path(raw_value).expanduser()
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    candidate = candidate.resolve()
+    if candidate != root and root not in candidate.parents:
+        raise ValueError(f'Path escapes the shared database root: {value}')
+    return candidate
+
+
+def _resolve_parameter_path(project_id: str, param: dict, value: str) -> Path:
+    scope = param.get('path_scope', 'project')
+    if scope == 'shared':
+        path = _resolve_shared_path(value)
+    elif scope == 'project':
+        path = resolve_project_path(project_id, value)
+    else:
+        raise ValueError(f'Unsupported path scope for {param["name"]}: {scope}')
+
+    selector = param.get('path_select')
+    if selector and path.is_dir():
+        matches = sorted(candidate for candidate in path.rglob(str(selector)) if candidate.is_file())
+        if not matches:
+            raise ValueError(f'No file matching {selector} found under {path}')
+        path = matches[0]
+    return path
+
+
+def _validate_input_path(path: Path, param: dict) -> None:
+    if param.get('path_exists', True) is False:
         return
 
-    positional = param.get('position') is not None or param.get('positional', False)
-    param_type = param.get('type')
+    path_kind = param.get('path_kind') or param.get('type')
+    if path_kind == 'file':
+        require_existing_file(path, param['name'])
+    elif path_kind == 'directory':
+        require_existing_directory(path, param['name'])
+    elif path_kind == 'prefix':
+        if not path.parent.is_dir() or not any(path.parent.glob(f'{path.name}*')):
+            raise ValueError(f'{param["name"]} prefix not found: {path}')
+    elif path_kind == 'any':
+        if not path.exists():
+            raise ValueError(f'{param["name"]} not found: {path}')
+    else:
+        raise ValueError(f'Unsupported path kind for {param["name"]}: {path_kind}')
 
+
+def _prepare_output_path(path: Path, param: dict) -> None:
+    path_kind = param.get('path_kind') or param.get('type')
+    if path_kind == 'directory' and param.get('create_output_directory'):
+        ensure_directory(path)
+    else:
+        ensure_directory(path.parent)
+
+
+def _render_parameter_values(
+    project_id: str,
+    param: dict,
+    value,
+    *,
+    prepare_outputs: bool,
+) -> tuple[list[str], list[Path]]:
     values = value if isinstance(value, list) else [value]
     rendered_values = []
+    output_paths = []
+    path_role = _parameter_path_role(param)
 
     for item in values:
-        if param_type in {'file', 'directory'}:
-            rendered_values.append(str(resolve_project_path(project_id, item)))
+        if path_role:
+            path = _resolve_parameter_path(project_id, param, str(item))
+            if path_role == 'input':
+                _validate_input_path(path, param)
+            elif path_role == 'output':
+                output_paths.append(path)
+                if prepare_outputs:
+                    _prepare_output_path(path, param)
+            else:
+                raise ValueError(f'Unsupported path role for {param["name"]}: {path_role}')
+            rendered_values.append(str(path))
         else:
             rendered_values.append(str(item))
 
-    if param_type == 'flag':
+    join_with = param.get('join')
+    if join_with is not None and rendered_values:
+        rendered_values = [str(join_with).join(rendered_values)]
+    return rendered_values, output_paths
+
+
+def _append_parameter_value(
+    argv: list[str],
+    param: dict,
+    value,
+    project_id: str,
+    *,
+    prepare_outputs: bool = True,
+) -> tuple[list[Path], str | None, str | None]:
+    if not _has_parameter_value(value):
+        return [], None, None
+
+    if param.get('type') == 'flag':
         if value:
             argv.append(param['name'])
-        return
+        return [], None, None
 
+    rendered_values, output_paths = _render_parameter_values(
+        project_id,
+        param,
+        value,
+        prepare_outputs=prepare_outputs,
+    )
+    stream = param.get('stream')
+    if stream:
+        if len(rendered_values) != 1:
+            raise ValueError(f'{param["name"]} must contain exactly one path')
+        if stream == 'stdin':
+            return output_paths, rendered_values[0], None
+        if stream == 'stdout':
+            return output_paths, None, rendered_values[0]
+        raise ValueError(f'Unsupported stream for {param["name"]}: {stream}')
+
+    positional = param.get('position') is not None or param.get('positional', False)
     if positional:
         argv.extend(rendered_values)
-        return
+        return output_paths, None, None
+
+    if param.get('repeat'):
+        for rendered in rendered_values:
+            argv.extend([param['name'], rendered])
+        return output_paths, None, None
+
+    separator = param.get('separator')
+    if separator is not None:
+        argv.extend(f'{param["name"]}{separator}{rendered}' for rendered in rendered_values)
+        return output_paths, None, None
 
     argv.append(param['name'])
     argv.extend(rendered_values)
+    return output_paths, None, None
+
+
+def _validate_parameter_groups(tool_info: dict, params: dict) -> None:
+    errors = validate_parameter_values(tool_info, params)
+    if errors:
+        raise ValueError('; '.join(errors))
+
+
+def _validate_execution_requirements(execution: dict) -> list[dict]:
+    checks = []
+    for requirement in execution.get('required_paths') or []:
+        path = Path(str(requirement.get('path') or '')).expanduser().resolve()
+        label = requirement.get('label') or 'Runtime resource'
+        kind = requirement.get('kind', 'any')
+        if kind == 'file':
+            require_existing_file(path, label)
+        elif kind == 'directory':
+            require_existing_directory(path, label)
+        elif kind == 'any':
+            if not path.exists():
+                raise ValueError(f'{label} not found: {path}')
+        else:
+            raise ValueError(f'Unsupported runtime path kind for {label}: {kind}')
+        checks.append({'name': label, 'status': 'ok', 'message': f'{label} found: {path}'})
+    return checks
 
 
 def _build_command_job(project_id: str, job_id: str, tool_info: dict, params: dict) -> dict:
@@ -250,61 +699,100 @@ def _build_command_job(project_id: str, job_id: str, tool_info: dict, params: di
         raise ValueError(f'No executable configured for {tool_info["tool_name"]}')
 
     executable = resolve_executable(command, tool_info['tool_name'])
-    argv = [executable]
-    output_dirs = []
+    _validate_execution_requirements(execution)
+    _validate_parameter_groups(tool_info, params)
+    argv = [executable, *[str(item) for item in execution.get('prefix_args', [])]]
+    output_paths = []
+    stdin_path = None
+    stdout_path = None
 
-    positional_params = sorted(
-        [param for param in tool_info.get('parameters', []) if param.get('position') is not None],
-        key=lambda item: item.get('position', 0),
+    indexed_params = list(enumerate(tool_info.get('parameters', [])))
+    ordered_params = sorted(
+        indexed_params,
+        key=lambda item: (
+            item[1].get('order', 100 if item[1].get('position') is not None or item[1].get('positional') else 50),
+            item[0],
+        ),
     )
-    named_params = [param for param in tool_info.get('parameters', []) if param.get('position') is None]
 
-    for param in positional_params + named_params:
+    for _, param in ordered_params:
         param_name = param['name']
-        if param_name not in params:
-            continue
         value = params.get(param_name)
-        _append_parameter_value(argv, param, value, project_id)
-
-        if param.get('type') == 'directory' and value and ('out' in param_name.lower() or 'output' in param_name.lower()):
-            if isinstance(value, list):
-                output_dirs.extend(resolve_project_path(project_id, item) for item in value)
-            else:
-                output_dirs.append(resolve_project_path(project_id, value))
-
-    for directory in output_dirs:
-        ensure_directory(directory)
+        if param.get('required') and not _has_parameter_value(value):
+            raise ValueError(f'Required parameter is missing: {param_name}')
+        if not _has_parameter_value(value):
+            continue
+        rendered_outputs, rendered_stdin, rendered_stdout = _append_parameter_value(
+            argv,
+            param,
+            value,
+            project_id,
+        )
+        output_paths.extend(rendered_outputs)
+        if rendered_stdin:
+            if stdin_path:
+                raise ValueError('Only one stdin parameter is supported')
+            stdin_path = rendered_stdin
+        if rendered_stdout:
+            if stdout_path:
+                raise ValueError('Only one stdout parameter is supported')
+            stdout_path = rendered_stdout
 
     project_dir = get_project_dir(project_id)
     log_dir = project_dir / 'logs'
     ensure_directory(log_dir)
 
+    display_command = command_to_string(argv)
+    if stdin_path:
+        display_command += f' < {shlex.quote(stdin_path)}'
+    if stdout_path:
+        display_command += f' > {shlex.quote(stdout_path)}'
+
+    command_spec = {
+        'argv': argv,
+        'cwd': str(project_dir),
+    }
+    if execution.get('env'):
+        command_spec['env'] = {str(name): str(value) for name, value in execution['env'].items()}
+    if stdin_path:
+        command_spec['stdin_path'] = stdin_path
+    if stdout_path:
+        command_spec['stdout_path'] = stdout_path
+
     return {
-        'display_command': command_to_string(argv),
+        'display_command': display_command,
         'log_path': str(log_dir / f'{job_id}.log'),
-        'output_path': str(output_dirs[0]) if output_dirs else None,
+        'output_path': str(output_paths[0]) if output_paths else None,
         'work_dir': str(project_dir),
         'execution_mode': 'command',
         'is_dry_run': False,
-        'command_spec': {
-            'argv': argv,
-            'cwd': str(project_dir),
-        },
+        'command_spec': command_spec,
     }
 
 
 def _preflight_command_job(project_id: str, tool_info: dict, params: dict) -> dict:
-    executable = resolve_executable((tool_info.get('execution') or {}).get('command'), tool_info['tool_name'])
+    execution = tool_info.get('execution') or {}
+    executable = resolve_executable(execution.get('command'), tool_info['tool_name'])
+    _validate_parameter_groups(tool_info, params)
     checks = [
         {'name': 'tool', 'status': 'ok', 'message': f'Executable resolved: {executable}'},
     ]
+    checks.extend(_validate_execution_requirements(execution))
     for param in tool_info.get('parameters', []):
-        if param.get('type') == 'file' and params.get(param['name']):
-            path = require_existing_file(resolve_project_path(project_id, params[param['name']]), param['name'])
-            checks.append({'name': param['name'], 'status': 'ok', 'message': f'Input file found: {path}'})
-        elif param.get('type') == 'directory' and params.get(param['name']):
-            path = require_existing_directory(resolve_project_path(project_id, params[param['name']]), param['name'])
-            checks.append({'name': param['name'], 'status': 'ok', 'message': f'Input directory found: {path}'})
+        value = params.get(param['name'])
+        if param.get('required') and not _has_parameter_value(value):
+            raise ValueError(f'Required parameter is missing: {param["name"]}')
+        if not _has_parameter_value(value) or not _parameter_path_role(param):
+            continue
+        rendered, _ = _render_parameter_values(
+            project_id,
+            param,
+            value,
+            prepare_outputs=False,
+        )
+        role = _parameter_path_role(param)
+        label = 'Input found' if role == 'input' else 'Output path ready'
+        checks.append({'name': param['name'], 'status': 'ok', 'message': f'{label}: {", ".join(rendered)}'})
     return {'ok': True, 'mode': 'command', 'checks': checks}
 
 
@@ -313,12 +801,82 @@ def _appam_smk_context(project_id: str, job_id: str, params: dict, run_id: str, 
     workflow_root = APPAM_SMK_ROOT
     snakefile = require_existing_file(workflow_root / 'workflow' / 'Snakefile', 'APPAM-SMK Snakefile')
 
-    sample_manifest = require_existing_file(resolve_project_path(project_id, params.get('sample_manifest', '')), 'APPAM-SMK sample manifest')
-    raw_data_dir = require_existing_directory(resolve_project_path(project_id, params.get('raw_data_dir', '')), 'APPAM-SMK raw data directory')
+    default_config_path = workflow_root / 'config' / 'config.yaml'
+    frozen_source = mode in {'resume', 'retry'} and source_run is not None
+    source_config_path = None
+    source_config = None
+    if frozen_source:
+        source_config_path, source_config = _load_frozen_source_config(project_id, source_run, default_config_path)
+        sample_manifest = require_existing_file(
+            _project_scoped_path(project_id, source_config.get('samples_file', ''), 'Frozen APPAM-SMK sample manifest'),
+            'Frozen APPAM-SMK sample manifest',
+        )
+        raw_data_dir = require_existing_directory(
+            _project_scoped_path(project_id, (source_config.get('paths') or {}).get('raw_data_dir', ''), 'Frozen APPAM-SMK raw data directory'),
+            'Frozen APPAM-SMK raw data directory',
+        )
+        runtime_settings = _runtime_settings_from_appam_config(source_config)
+    else:
+        sample_manifest = require_existing_file(resolve_project_path(project_id, params.get('sample_manifest', '')), 'APPAM-SMK sample manifest')
+        raw_data_dir = require_existing_directory(resolve_project_path(project_id, params.get('raw_data_dir', '')), 'APPAM-SMK raw data directory')
+        runtime_settings = get_appam_smk_runtime_settings(params)
 
-    runtime_settings = get_appam_smk_runtime_settings(params)
     runtime_checks = validate_appam_smk_runtime(runtime_settings)
-    input_validation = validate_appam_smk_manifest(project_id, str(params.get('sample_manifest', '')), str(params.get('raw_data_dir', '')))
+    from .database_manifest import load_database_manifest, validate_database_manifest
+
+    database_manifest = load_database_manifest()
+    manifest_found = bool(database_manifest.get('found'))
+    module_resources = {
+        'enable_checkm2': 'checkm2_db',
+        'enable_gunc': 'gunc_db',
+        'enable_gtdbtk': 'gtdbtk_db',
+        'enable_prokka': 'prokka_db',
+        'enable_eggnog': 'eggnog_db',
+        'enable_abricate': 'abricate_db',
+        'enable_rgi': 'rgi_db',
+        'enable_antismash': 'antismash_db',
+    }
+    required_manifest_resources = [
+        resource
+        for module, resource in module_resources.items()
+        if runtime_settings['modules'].get(module)
+    ]
+    if runtime_settings['modules'].get('enable_bin_refinement') or runtime_settings['modules'].get('enable_checkm1'):
+        required_manifest_resources.append('checkm1_db')
+    manifest_errors = validate_database_manifest(database_manifest, required_manifest_resources)
+    require_manifest = bool(params.get('require_database_manifest'))
+    if require_manifest and manifest_errors:
+        raise ValueError('Publication database manifest is incomplete: ' + '; '.join(manifest_errors[:10]))
+    if not manifest_found and not required_manifest_resources:
+        manifest_status = 'skipped'
+        manifest_message = 'Database manifest not required by enabled modules'
+    elif manifest_errors:
+        manifest_status = 'error' if require_manifest else 'warn'
+        manifest_message = 'Database manifest incomplete: ' + '; '.join(manifest_errors[:5])
+    else:
+        manifest_status = 'ok'
+        manifest_message = f'Database manifest validated: {database_manifest.get("path")}'
+    runtime_checks.append({
+        'name': 'database_manifest',
+        'status': manifest_status,
+        'required': require_manifest,
+        'message': manifest_message,
+    })
+    runtime_metadata = collect_appam_smk_runtime_metadata(runtime_settings)
+    manifest_path = Path(str(database_manifest.get('path') or '')).expanduser()
+    runtime_metadata['database_manifest'] = {
+        'found': manifest_found,
+        'path': str(manifest_path) if manifest_path else None,
+        'sha256': fingerprint_path(manifest_path, 'sha256').get('sha256') if manifest_found else None,
+        'schema_version': database_manifest.get('schema_version'),
+        'resources': database_manifest.get('resources') or {},
+        'validation_errors': manifest_errors,
+    }
+    input_validation = validate_appam_smk_manifest(
+        project_id,
+        _project_relative_value(project_id, sample_manifest),
+        _project_relative_value(project_id, raw_data_dir),
+    )
     if not input_validation.get('ok'):
         details = '; '.join(check['message'] for check in input_validation.get('checks', []) if check.get('status') == 'error')
         raise ValueError(f'APPAM-SMK input validation failed: {details}')
@@ -337,7 +895,11 @@ def _appam_smk_context(project_id: str, job_id: str, params: dict, run_id: str, 
     profile_dir = require_existing_directory(workflow_root / 'profiles' / profile, f'APPAM-SMK profile "{profile}"')
     snakemake_bin = get_snakemake_bin()
     cores = int(params.get('cores', 4))
-    backend = resolve_backend_name(params.get('execution_backend') or os.getenv('APPAM_SMK_EXECUTION_BACKEND'), profile=profile)
+    backend = (
+        str(source_run.get('backend') or 'local')
+        if frozen_source
+        else resolve_backend_name(params.get('execution_backend') or os.getenv('APPAM_SMK_EXECUTION_BACKEND'), profile=profile)
+    )
 
     if mode == 'resume' and source_run:
         run_paths = {
@@ -353,59 +915,99 @@ def _appam_smk_context(project_id: str, job_id: str, params: dict, run_id: str, 
     else:
         run_paths = _workflow_run_root(project_id, workflow_id, run_id)
         generated_config = run_paths['config_dir'] / f'config.{job_id}.yaml'
-    temp_dir = run_paths['work_dir'] / 'temp'
     benchmark_dir = run_paths['metadata_dir'] / 'benchmarks'
     log_path = run_paths['logs_dir'] / f'{job_id}.log'
 
-    config_data = {
-        'samples_file': str(sample_manifest),
-        'paths': {
-            'raw_data_dir': str(raw_data_dir),
-            'temp_dir': str(temp_dir),
-            'results_dir': str(run_paths['results_dir']),
-            'logs_dir': str(run_paths['logs_dir']),
-            'benchmark_dir': str(benchmark_dir),
-        },
-        'params': {
-            'preprocess_method': params.get('preprocess_method', 'fastp'),
-            'min_contig_len': int(params.get('min_contig_len', 500)),
-            'use_ancient_contigs': bool(params.get('use_ancient_contigs', True)),
-            'annotation_threads': int(params.get('annotation_threads', 8)),
-            'abricate_db': params.get('abricate_db', 'vfdb'),
-            'abricate_minid': int(params.get('abricate_minid', 80)),
-            'abricate_mincov': int(params.get('abricate_mincov', 80)),
-            'enable_checkm2': bool(modules.get('enable_checkm2', True)),
-            'enable_gunc': bool(modules.get('enable_gunc', True)),
-            'enable_prokka': bool(modules.get('enable_prokka', True)),
-            'enable_eggnog': bool(modules.get('enable_eggnog', True)),
-            'enable_abricate': bool(modules.get('enable_abricate', True)),
-            'enable_rgi': bool(modules.get('enable_rgi', False)),
-            'enable_antismash': bool(modules.get('enable_antismash', True)),
-        },
-        'databases': {
-            'checkm_db': str(checkm1_db),
-            'checkm1_db': str(checkm1_db),
-            'checkm2_db': str(checkm2_db),
-            'gunc_db': str(gunc_db),
-            'eggnog_db': str(eggnog_db),
-            'abricate_db': str(databases.get('abricate_db')),
-            'rgi_db_mode': str(databases.get('rgi_db_mode')),
-            'rgi_db': str(databases.get('rgi_db') or ''),
-            'antismash_db': str(databases.get('antismash_db')),
-            'prokka_db': str(databases.get('prokka_db')),
-        },
-        'tools': {
-            'metawrap_env': str(metawrap_env),
-            'pydamage_env': str(pydamage_env),
-            'checkm2_env': str(tools.get('checkm2_env')),
-            'gunc_env': str(tools.get('gunc_env')),
-            'prokka_env': str(tools.get('prokka_env')),
-            'eggnog_env': str(tools.get('eggnog_env')),
-            'abricate_env': str(tools.get('abricate_env')),
-            'rgi_env': str(tools.get('rgi_env')),
-            'antismash_env': str(tools.get('antismash_env')),
-        },
-    }
+    if mode == 'resume':
+        resolved_sample_manifest = sample_manifest
+        config_data = copy.deepcopy(source_config)
+    else:
+        resolved_sample_manifest = run_paths['config_dir'] / 'samples.resolved.tsv'
+        if frozen_source:
+            config_data = copy.deepcopy(source_config)
+            config_data['samples_file'] = str(resolved_sample_manifest)
+            config_data['paths'] = {
+                **(config_data.get('paths') or {}),
+                'raw_data_dir': str(raw_data_dir),
+                'results_dir': str(run_paths['results_dir']),
+                'logs_dir': str(run_paths['logs_dir']),
+                'benchmark_dir': str(benchmark_dir),
+            }
+        else:
+            config_overrides = {
+                'samples_file': str(resolved_sample_manifest),
+                'paths': {
+                    'raw_data_dir': str(raw_data_dir),
+                    'results_dir': str(run_paths['results_dir']),
+                    'logs_dir': str(run_paths['logs_dir']),
+                    'benchmark_dir': str(benchmark_dir),
+                },
+                'params': {
+                    'preprocess_method': params.get('preprocess_method', 'fastp'),
+                    'min_contig_len': int(params.get('min_contig_len', 500)),
+                    'use_ancient_contigs': bool(params.get('use_ancient_contigs', False)),
+                    'enable_bin_refinement': bool(modules.get('enable_bin_refinement', False)),
+                    'unrefined_binner': str(params.get('unrefined_binner', 'metabat2')),
+                    'annotation_threads': int(params.get('annotation_threads', 8)),
+                    'abricate_db': params.get('abricate_db', 'vfdb'),
+                    'abricate_minid': int(params.get('abricate_minid', 80)),
+                    'abricate_mincov': int(params.get('abricate_mincov', 80)),
+                    'enable_checkm1': bool(modules.get('enable_checkm1', False)),
+                    'enable_checkm2': bool(modules.get('enable_checkm2', True)),
+                    'enable_gunc': bool(modules.get('enable_gunc', True)),
+                    'enable_gtdbtk': bool(modules.get('enable_gtdbtk', True)),
+                    'enable_prokka': bool(modules.get('enable_prokka', True)),
+                    'enable_eggnog': bool(modules.get('enable_eggnog', False)),
+                    'enable_abricate': bool(modules.get('enable_abricate', False)),
+                    'enable_rgi': bool(modules.get('enable_rgi', False)),
+                    'enable_antismash': bool(modules.get('enable_antismash', False)),
+                },
+                'databases': {
+                    'checkm_db': str(checkm1_db),
+                    'checkm1_db': str(checkm1_db),
+                    'checkm2_db': str(checkm2_db),
+                    'gunc_db': str(gunc_db),
+                    'gtdbtk_db': str(databases.get('gtdbtk_db')),
+                    'eggnog_db': str(eggnog_db),
+                    'abricate_db': str(databases.get('abricate_db')),
+                    'rgi_db_mode': str(databases.get('rgi_db_mode')),
+                    'rgi_db': str(databases.get('rgi_db') or ''),
+                    'antismash_db': str(databases.get('antismash_db')),
+                    'prokka_db': str(databases.get('prokka_db')),
+                },
+                'tools': {
+                    'preprocessing_env': str(tools.get('preprocessing_env')),
+                    'mapping_env': str(tools.get('mapping_env')),
+                    'assembly_env': str(tools.get('assembly_env')),
+                    'metawrap_env': str(metawrap_env),
+                    'pydamage_env': str(pydamage_env),
+                    'checkm1_env': str(tools.get('checkm1_env')),
+                    'checkm2_env': str(tools.get('checkm2_env')),
+                    'gunc_env': str(tools.get('gunc_env')),
+                    'gtdbtk_env': str(tools.get('gtdbtk_env')),
+                    'prokka_env': str(tools.get('prokka_env')),
+                    'eggnog_env': str(tools.get('eggnog_env')),
+                    'abricate_env': str(tools.get('abricate_env')),
+                    'rgi_env': str(tools.get('rgi_env')),
+                    'antismash_env': str(tools.get('antismash_env')),
+                },
+            }
+            config_data = _materialize_config(default_config_path, config_overrides)
+    hash_mode = str(params.get('input_hash_mode', 'metadata')).strip().lower()
+    if hash_mode not in {'metadata', 'sha256'}:
+        raise ValueError('input_hash_mode must be metadata or sha256')
+    input_provenance = []
+    for sample in input_validation.get('samples') or []:
+        for read_name in ('forward_reads', 'reverse_reads'):
+            fingerprint = fingerprint_path(resolve_project_path(project_id, sample[read_name]), hash_mode)
+            fingerprint.update({'sample_id': sample['sample_id'], 'input_role': read_name})
+            input_provenance.append(fingerprint)
+    source_input_verification = _verify_source_inputs(project_id, source_run if frozen_source else None, input_provenance)
+    source_runtime_verification = _verify_source_runtime(
+        project_id,
+        source_run if frozen_source else None,
+        runtime_metadata,
+    )
 
     if write_files:
         for directory in (
@@ -416,11 +1018,11 @@ def _appam_smk_context(project_id: str, job_id: str, params: dict, run_id: str, 
             run_paths['results_dir'],
             run_paths['reports_dir'],
             run_paths['work_dir'],
-            temp_dir,
             benchmark_dir,
         ):
             ensure_directory(directory)
-        if mode != 'resume' or not generated_config.exists():
+        if mode != 'resume':
+            write_resolved_appam_smk_manifest(project_id, input_validation, resolved_sample_manifest)
             generated_config.write_text(yaml.safe_dump(config_data, sort_keys=False), encoding='utf-8')
 
     argv = [
@@ -465,6 +1067,8 @@ def _appam_smk_context(project_id: str, job_id: str, params: dict, run_id: str, 
         'profile': profile,
         'cores': cores,
         'sample_manifest': sample_manifest,
+        'resolved_sample_manifest': resolved_sample_manifest,
+        'source_config_path': source_config_path,
         'raw_data_dir': raw_data_dir,
         'metawrap_env': str(metawrap_env),
         'pydamage_env': str(pydamage_env),
@@ -475,7 +1079,12 @@ def _appam_smk_context(project_id: str, job_id: str, params: dict, run_id: str, 
         'eggnog_db': str(eggnog_db),
         'runtime_settings': runtime_settings,
         'runtime_checks': runtime_checks,
-        'runtime_metadata': collect_appam_smk_runtime_metadata(runtime_settings),
+        'runtime_metadata': runtime_metadata,
+        'workflow_revision': repository_state(REPO_ROOT),
+        'input_provenance': input_provenance,
+        'source_input_verification': source_input_verification,
+        'source_runtime_verification': source_runtime_verification,
+        'config_sha256': sha256_bytes(yaml.safe_dump(config_data, sort_keys=False).encode('utf-8')),
         'input_validation': input_validation,
         'config_path': generated_config,
         'log_path': log_path,
@@ -492,33 +1101,65 @@ def _paleoproteomics_context(project_id: str, job_id: str, params: dict, run_id:
     workflow_root = APPAM_PALEOPROTEOMICS_ROOT
     snakefile = require_existing_file(workflow_root / 'workflow' / 'Snakefile', 'APPAM paleoproteomics Snakefile')
 
-    sample_table = require_existing_file(resolve_project_path(project_id, params.get('sample_table', '')), 'Paleoproteomics sample table')
-    input_validation = validate_paleoproteomics_table(project_id, str(params.get('sample_table', '')))
+    default_config_path = workflow_root / 'config' / 'config.yaml'
+    frozen_source = mode in {'resume', 'retry'} and source_run is not None
+    source_config_path = None
+    source_config = None
+    if frozen_source:
+        source_config_path, source_config = _load_frozen_source_config(project_id, source_run, default_config_path)
+        sample_table = require_existing_file(
+            _project_scoped_path(project_id, source_config.get('sample_table', ''), 'Frozen paleoproteomics sample table'),
+            'Frozen paleoproteomics sample table',
+        )
+        fasta_path = require_existing_file(
+            resolve_project_or_absolute_path(project_id, source_config.get('fasta_path', '')),
+            'Frozen reference FASTA',
+        )
+        runtime_values = source_config
+    else:
+        sample_table = require_existing_file(resolve_project_path(project_id, params.get('sample_table', '')), 'Paleoproteomics sample table')
+        fasta_path = require_existing_file(resolve_project_or_absolute_path(project_id, params.get('fasta_path', '')), 'Reference FASTA')
+        runtime_values = params
+
+    input_validation = validate_paleoproteomics_table(project_id, _project_relative_value(project_id, sample_table))
     if not input_validation.get('ok'):
         details = '; '.join(check['message'] for check in input_validation.get('checks', []) if check.get('status') == 'error')
         raise ValueError(f'Paleoproteomics input validation failed: {details}')
-    fasta_path = require_existing_file(resolve_project_or_absolute_path(project_id, params.get('fasta_path', '')), 'Reference FASTA')
 
-    dotnet_bin = resolve_executable(_required_config_value(params, 'dotnet_bin', 'APPAM_PALEO_DOTNET_BIN') or 'dotnet', 'dotnet')
-    maxquant_cmd_dll = _required_config_value(params, 'maxquant_cmd_dll', 'APPAM_PALEO_MAXQUANT_CMD')
-    thermo_raw_file_parser = resolve_executable(
-        _required_config_value(params, 'thermo_raw_file_parser', 'APPAM_PALEO_THERMO_RAW_FILE_PARSER') or 'ThermoRawFileParser',
-        'ThermoRawFileParser',
-    )
-    timsconvert_bin = resolve_executable(
-        _required_config_value(params, 'timsconvert_bin', 'APPAM_PALEO_TIMSCONVERT_BIN') or 'timsconvert',
-        'timsconvert',
-    )
+    validated_input_paths = [
+        resolve_project_path(project_id, sample['input_path'])
+        for sample in input_validation.get('samples') or []
+    ]
+    requires_thermo = any(path.is_file() and path.suffix.lower() == '.raw' for path in validated_input_paths)
+    requires_timsconvert = any(path.is_dir() and path.name.lower().endswith('.d') for path in validated_input_paths)
+
+    dotnet_bin = resolve_executable(_required_config_value(runtime_values, 'dotnet_bin', 'APPAM_PALEO_DOTNET_BIN') or 'dotnet', 'dotnet')
+    maxquant_cmd_dll = _required_config_value(runtime_values, 'maxquant_cmd_dll', 'APPAM_PALEO_MAXQUANT_CMD')
+    thermo_value = _required_config_value(runtime_values, 'thermo_raw_file_parser', 'APPAM_PALEO_THERMO_RAW_FILE_PARSER') or 'ThermoRawFileParser'
+    timsconvert_value = _required_config_value(runtime_values, 'timsconvert_bin', 'APPAM_PALEO_TIMSCONVERT_BIN') or 'timsconvert'
+    thermo_raw_file_parser = resolve_executable(thermo_value, 'ThermoRawFileParser') if requires_thermo else str(thermo_value)
+    timsconvert_bin = resolve_executable(timsconvert_value, 'timsconvert') if requires_timsconvert else str(timsconvert_value)
     openms_fileconverter = resolve_executable(
-        _required_config_value(params, 'openms_fileconverter', 'APPAM_PALEO_OPENMS_FILECONVERTER') or 'FileConverter',
+        _required_config_value(runtime_values, 'openms_fileconverter', 'APPAM_PALEO_OPENMS_FILECONVERTER') or 'FileConverter',
         'OpenMS FileConverter',
+    )
+    runtime_env_value = _required_config_value(runtime_values, 'runtime_env', 'APPAM_PALEO_ENV')
+    if not runtime_env_value:
+        raise ValueError('Missing paleoproteomics runtime settings: runtime_env / APPAM_PALEO_ENV')
+    runtime_env = require_existing_directory(
+        Path(str(runtime_env_value)).expanduser().resolve(),
+        'Paleoproteomics Conda environment',
     )
 
     if not maxquant_cmd_dll:
         raise ValueError('Missing paleoproteomics runtime settings: maxquant_cmd_dll / APPAM_PALEO_MAXQUANT_CMD')
-    maxquant_cmd_dll = require_existing_file(Path(str(maxquant_cmd_dll)).resolve(), 'MaxQuantCmd.dll')
+    maxquant_cmd_dll = require_existing_file(Path(str(maxquant_cmd_dll)).expanduser().resolve(), 'MaxQuantCmd.dll')
 
-    backend = resolve_backend_name(params.get('execution_backend') or os.getenv('APPAM_PALEO_EXECUTION_BACKEND'), profile='local')
+    backend = (
+        str(source_run.get('backend') or 'local')
+        if frozen_source
+        else resolve_backend_name(params.get('execution_backend') or os.getenv('APPAM_PALEO_EXECUTION_BACKEND'), profile='local')
+    )
     if mode == 'resume' and source_run:
         run_paths = {
             'run_dir': Path(source_run['run_dir']),
@@ -534,26 +1175,91 @@ def _paleoproteomics_context(project_id: str, job_id: str, params: dict, run_id:
         run_paths = _workflow_run_root(project_id, workflow_id, run_id)
         generated_config = run_paths['config_dir'] / f'config.{job_id}.yaml'
     log_path = run_paths['logs_dir'] / f'{job_id}.log'
-    maxquant_output_dir = run_paths['results_dir'] / 'maxquant'
-
-    config_data = {
-        'sample_table': str(sample_table),
-        'mqpar_template': str(workflow_root / 'workflow' / 'templates' / 'mqpar.template.xml'),
-        'results_dir': str(run_paths['results_dir']),
-        'maxquant_output_dir': str(maxquant_output_dir),
-        'threads': int(params.get('cores', 4)),
-        'fasta_path': str(fasta_path),
-        'match_between_runs': bool(params.get('match_between_runs', False)),
-        'include_contaminants': bool(params.get('include_contaminants', True)),
-        'min_peptide_length': int(params.get('min_peptide_length', 7)),
-        'first_search_tol': float(params.get('first_search_tol', 20)),
-        'main_search_tol': float(params.get('main_search_tol', 4.5)),
-        'dotnet_bin': str(dotnet_bin),
-        'maxquant_cmd_dll': str(maxquant_cmd_dll),
-        'thermo_raw_file_parser': str(thermo_raw_file_parser),
-        'timsconvert_bin': str(timsconvert_bin),
-        'openms_fileconverter': str(openms_fileconverter),
+    if mode == 'resume':
+        resolved_sample_table = sample_table
+        config_data = copy.deepcopy(source_config)
+        maxquant_output_dir = _project_scoped_path(
+            project_id,
+            config_data.get('maxquant_output_dir', run_paths['results_dir'] / 'maxquant'),
+            'Frozen MaxQuant output directory',
+        )
+    else:
+        resolved_sample_table = run_paths['config_dir'] / 'samples.resolved.tsv'
+        maxquant_output_dir = run_paths['results_dir'] / 'maxquant'
+        if frozen_source:
+            config_data = copy.deepcopy(source_config)
+            config_data.update({
+                'sample_table': str(resolved_sample_table),
+                'results_dir': str(run_paths['results_dir']),
+                'maxquant_output_dir': str(maxquant_output_dir),
+            })
+        else:
+            config_overrides = {
+                'sample_table': str(resolved_sample_table),
+                'mqpar_template': str(workflow_root / 'workflow' / 'templates' / 'mqpar.template.xml'),
+                'results_dir': str(run_paths['results_dir']),
+                'maxquant_output_dir': str(maxquant_output_dir),
+                'threads': int(params.get('cores', 4)),
+                'runtime_env': str(runtime_env),
+                'maxquant_version': os.getenv('APPAM_PALEO_MAXQUANT_VERSION', '2.8.1.0'),
+                'fasta_path': str(fasta_path),
+                'match_between_runs': bool(params.get('match_between_runs', False)),
+                'enzymes': _list_parameter(params, 'enzymes', ['Trypsin/P']),
+                'enzyme_mode': int(params.get('enzyme_mode', 4)),
+                'max_missed_cleavages': int(params.get('max_missed_cleavages', 0)),
+                'fixed_modifications': _list_parameter(params, 'fixed_modifications', ['Carbamidomethyl (C)']),
+                'variable_modifications': _list_parameter(
+                    params,
+                    'variable_modifications',
+                    ['Deamidation (NQ)', 'Oxidation (MP)', 'Gln->pyro-Glu', 'Glu->pyro-Glu', 'Phospho (ST)'],
+                ),
+                'peptide_fdr': float(params.get('peptide_fdr', 0.01)),
+                'protein_fdr': float(params.get('protein_fdr', 0.01)),
+                'site_fdr': float(params.get('site_fdr', 0.01)),
+                'include_contaminants': bool(params.get('include_contaminants', True)),
+                'min_peptide_length': int(params.get('min_peptide_length', 7)),
+                'first_search_tol': float(params.get('first_search_tol', 20)),
+                'main_search_tol': float(params.get('main_search_tol', 4.5)),
+                'dotnet_bin': str(dotnet_bin),
+                'maxquant_cmd_dll': str(maxquant_cmd_dll),
+                'thermo_raw_file_parser': str(thermo_raw_file_parser),
+                'timsconvert_bin': str(timsconvert_bin),
+                'openms_fileconverter': str(openms_fileconverter),
+            }
+            config_data = _materialize_config(default_config_path, config_overrides)
+    hash_mode = str(params.get('input_hash_mode', 'metadata')).strip().lower()
+    if hash_mode not in {'metadata', 'sha256'}:
+        raise ValueError('input_hash_mode must be metadata or sha256')
+    input_provenance = []
+    for sample in input_validation.get('samples') or []:
+        fingerprint = fingerprint_path(resolve_project_path(project_id, sample['input_path']), hash_mode)
+        fingerprint.update({'sample_id': sample['sample_id'], 'input_role': 'mass_spectrometry_raw'})
+        input_provenance.append(fingerprint)
+    fasta_fingerprint = fingerprint_path(fasta_path, hash_mode)
+    fasta_fingerprint['input_role'] = 'reference_fasta'
+    input_provenance.append(fasta_fingerprint)
+    source_input_verification = _verify_source_inputs(project_id, source_run if frozen_source else None, input_provenance)
+    runtime_checks = [
+        {'name': 'runtime_env', 'status': 'ok', 'required': True, 'message': f'Paleoproteomics environment: {runtime_env}'},
+        {'name': 'dotnet', 'status': 'ok', 'required': True, 'message': f'dotnet: {dotnet_bin}'},
+        {'name': 'maxquant', 'status': 'ok', 'required': True, 'message': f'MaxQuantCmd.dll: {maxquant_cmd_dll}'},
+        {'name': 'ThermoRawFileParser', 'status': 'ok' if requires_thermo else 'skipped', 'required': requires_thermo, 'message': f'ThermoRawFileParser: {thermo_raw_file_parser}' if requires_thermo else 'ThermoRawFileParser not required by this sample table'},
+        {'name': 'timsconvert', 'status': 'ok' if requires_timsconvert else 'skipped', 'required': requires_timsconvert, 'message': f'timsconvert: {timsconvert_bin}' if requires_timsconvert else 'timsconvert not required by this sample table'},
+        {'name': 'OpenMS FileConverter', 'status': 'ok', 'required': True, 'message': f'FileConverter: {openms_fileconverter}'},
+    ]
+    runtime_metadata = {
+        'runtime_env': conda_environment_fingerprint(str(runtime_env)),
+        'maxquant_cmd_dll': fingerprint_path(maxquant_cmd_dll, 'sha256'),
+        'dotnet_bin': fingerprint_path(dotnet_bin, 'metadata'),
+        'thermo_raw_file_parser': fingerprint_path(thermo_raw_file_parser, 'metadata'),
+        'timsconvert_bin': fingerprint_path(timsconvert_bin, 'metadata'),
+        'openms_fileconverter': fingerprint_path(openms_fileconverter, 'metadata'),
     }
+    source_runtime_verification = _verify_source_runtime(
+        project_id,
+        source_run if frozen_source else None,
+        runtime_metadata,
+    )
 
     if write_files:
         for directory in (
@@ -567,11 +1273,12 @@ def _paleoproteomics_context(project_id: str, job_id: str, params: dict, run_id:
             maxquant_output_dir,
         ):
             ensure_directory(directory)
-        if mode != 'resume' or not generated_config.exists():
+        if mode != 'resume':
+            write_resolved_paleoproteomics_table(project_id, input_validation, resolved_sample_table)
             generated_config.write_text(yaml.safe_dump(config_data, sort_keys=False), encoding='utf-8')
 
     snakemake_bin = get_snakemake_bin()
-    cores = int(params.get('cores', 4))
+    cores = int(config_data.get('threads', params.get('cores', 4)))
     argv = [
         snakemake_bin,
         '-s',
@@ -580,6 +1287,8 @@ def _paleoproteomics_context(project_id: str, job_id: str, params: dict, run_id:
         str(generated_config),
         '--cores',
         str(cores),
+        '--software-deployment-method',
+        'conda',
         '--printshellcmds',
     ]
     if params.get('dry_run'):
@@ -599,6 +1308,8 @@ def _paleoproteomics_context(project_id: str, job_id: str, params: dict, run_id:
         str(generated_config),
         '--cores',
         str(cores),
+        '--software-deployment-method',
+        'conda',
         '--unlock',
     ]
 
@@ -607,8 +1318,26 @@ def _paleoproteomics_context(project_id: str, job_id: str, params: dict, run_id:
         'workflow_root': workflow_root,
         'snakefile': snakefile,
         'sample_table': sample_table,
+        'resolved_sample_table': resolved_sample_table,
+        'source_config_path': source_config_path,
         'fasta_path': fasta_path,
+        'runtime_env': runtime_env,
+        'runtime_settings': {
+            'runtime_env': str(runtime_env),
+            'dotnet_bin': str(dotnet_bin),
+            'maxquant_cmd_dll': str(maxquant_cmd_dll),
+            'thermo_raw_file_parser': str(thermo_raw_file_parser),
+            'timsconvert_bin': str(timsconvert_bin),
+            'openms_fileconverter': str(openms_fileconverter),
+        },
+        'runtime_checks': runtime_checks,
+        'runtime_metadata': runtime_metadata,
         'input_validation': input_validation,
+        'workflow_revision': repository_state(REPO_ROOT),
+        'input_provenance': input_provenance,
+        'source_input_verification': source_input_verification,
+        'source_runtime_verification': source_runtime_verification,
+        'config_sha256': sha256_bytes(yaml.safe_dump(config_data, sort_keys=False).encode('utf-8')),
         'config_path': generated_config,
         'log_path': log_path,
         'run_paths': run_paths,
@@ -817,6 +1546,7 @@ def _preflight_paleoproteomics(project_id: str, tool_info: dict, params: dict) -
         {'name': 'fasta_path', 'status': 'ok', 'message': f'Reference FASTA found: {context["fasta_path"]}'},
     ]
     checks.extend(context.get('input_validation', {}).get('checks') or [])
+    checks.extend(context.get('runtime_checks') or [])
     checks.append(_snakemake_dry_run_check(context))
     ok = not any(check.get('status') == 'error' for check in checks)
     return {
@@ -929,13 +1659,29 @@ def runtime_health_for_workflow(workflow_id: str) -> dict:
         require_existing_directory(workflow_root, 'APPAM paleoproteomics root')
         require_existing_file(workflow_root / 'workflow' / 'Snakefile', 'APPAM paleoproteomics Snakefile')
         checks.append({'name': 'workflow_root', 'status': 'ok', 'message': f'Workflow root ready: {workflow_root}'})
+        runtime_env = _required_config_value({}, 'runtime_env', 'APPAM_PALEO_ENV')
+        if not runtime_env:
+            raise ValueError('APPAM_PALEO_ENV is not configured')
+        resolved_runtime_env = require_existing_directory(
+            Path(runtime_env).expanduser().resolve(),
+            'Paleoproteomics Conda environment',
+        )
+        checks.append({'name': 'runtime_env', 'status': 'ok', 'message': f'Paleoproteomics environment: {resolved_runtime_env}'})
         checks.append({'name': 'dotnet', 'status': 'ok', 'message': f"dotnet: {resolve_executable(_required_config_value({}, 'dotnet_bin', 'APPAM_PALEO_DOTNET_BIN') or 'dotnet', 'dotnet')}"})
-        if _required_config_value({}, 'maxquant_cmd_dll', 'APPAM_PALEO_MAXQUANT_CMD'):
-            checks.append({'name': 'maxquant', 'status': 'ok', 'message': f"MaxQuantCmd.dll: {_required_config_value({}, 'maxquant_cmd_dll', 'APPAM_PALEO_MAXQUANT_CMD')}"})
-        else:
+        maxquant_value = _required_config_value({}, 'maxquant_cmd_dll', 'APPAM_PALEO_MAXQUANT_CMD')
+        if not maxquant_value:
             raise ValueError('APPAM_PALEO_MAXQUANT_CMD is not configured')
-        checks.append({'name': 'ThermoRawFileParser', 'status': 'ok', 'message': f"ThermoRawFileParser: {resolve_executable(_required_config_value({}, 'thermo_raw_file_parser', 'APPAM_PALEO_THERMO_RAW_FILE_PARSER') or 'ThermoRawFileParser', 'ThermoRawFileParser')}"})
-        checks.append({'name': 'timsconvert', 'status': 'ok', 'message': f"timsconvert: {resolve_executable(_required_config_value({}, 'timsconvert_bin', 'APPAM_PALEO_TIMSCONVERT_BIN') or 'timsconvert', 'timsconvert')}"})
+        maxquant_path = require_existing_file(Path(maxquant_value).expanduser().resolve(), 'MaxQuantCmd.dll')
+        checks.append({'name': 'maxquant', 'status': 'ok', 'message': f'MaxQuantCmd.dll: {maxquant_path}'})
+        for name, configured in (
+            ('ThermoRawFileParser', _required_config_value({}, 'thermo_raw_file_parser', 'APPAM_PALEO_THERMO_RAW_FILE_PARSER') or 'ThermoRawFileParser'),
+            ('timsconvert', _required_config_value({}, 'timsconvert_bin', 'APPAM_PALEO_TIMSCONVERT_BIN') or 'timsconvert'),
+        ):
+            try:
+                resolved = resolve_executable(configured, name)
+                checks.append({'name': name, 'status': 'ok', 'required': False, 'message': f'{name}: {resolved}'})
+            except ValueError as exc:
+                checks.append({'name': name, 'status': 'warn', 'required': False, 'message': str(exc)})
         checks.append({'name': 'OpenMS FileConverter', 'status': 'ok', 'message': f"FileConverter: {resolve_executable(_required_config_value({}, 'openms_fileconverter', 'APPAM_PALEO_OPENMS_FILECONVERTER') or 'FileConverter', 'OpenMS FileConverter')}"})
         return {'ok': True, 'workflow_id': workflow_id, 'checks': checks}
 

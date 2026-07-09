@@ -2,6 +2,8 @@ import copy
 import json
 import os
 import re
+import shutil
+from pathlib import Path
 from functools import lru_cache
 from ..paths import BACKEND_ROOT
 
@@ -75,7 +77,6 @@ TOOL_SECTION_OVERRIDES = {
     'megahit': 'assembly-authentication',
     'spades': 'assembly-authentication',
     'quast': 'assembly-authentication',
-    'caln50': 'assembly-authentication',
     'bowtie2': 'assembly-authentication',
     'samtools': 'assembly-authentication',
     'freebayes': 'assembly-authentication',
@@ -115,7 +116,6 @@ COMMAND_OVERRIDES = {
     'MEGAHIT': 'megahit',
     'SPAdes': 'spades.py',
     'QUAST': 'quast.py',
-    'calN50': 'calN50.pl',
     'Bowtie2': 'bowtie2',
     'Samtools': 'samtools',
     'PyDamage': 'pydamage',
@@ -140,14 +140,55 @@ COMMAND_OVERRIDES = {
     'MaxQuant': 'dotnet',
 }
 
+COMMAND_ENV_OVERRIDES = {
+    'ThermoRawFileParser': 'APPAM_PALEO_THERMO_RAW_FILE_PARSER',
+    'timsconvert': 'APPAM_PALEO_TIMSCONVERT_BIN',
+    'OpenMS FileConverter': 'APPAM_PALEO_OPENMS_FILECONVERTER',
+    'MaxQuant': 'APPAM_PALEO_DOTNET_BIN',
+}
+
+PREFIX_ARG_ENV_OVERRIDES = {
+    'MaxQuant': ('APPAM_PALEO_MAXQUANT_CMD', '/opt/tools/maxquant-current/bin/MaxQuantCmd.dll'),
+}
+
+THREAD_PARAMETER_NAMES = {
+    '--threads', '--cpus', '--cpu', '--num_threads',
+    '-t', '-@', '-p', '-j', '-thread', '-threads',
+}
+
+ADMIN_ONLY_WORKFLOW_PARAMETERS = {
+    'metawrap_env', 'pydamage_env', 'checkm_env', 'checkm1_env', 'checkm2_env',
+    'gunc_env', 'gtdbtk_env', 'prokka_env', 'eggnog_env', 'abricate_env',
+    'rgi_env', 'antismash_env', 'checkm_db', 'checkm1_db', 'checkm2_db',
+    'gunc_db', 'gtdbtk_db', 'eggnog_db', 'rgi_db', 'runtime_env', 'dotnet_bin',
+    'maxquant_cmd_dll', 'thermo_raw_file_parser', 'timsconvert_bin',
+    'openms_fileconverter',
+}
+
+TOOL_RUNTIME_REQUIREMENTS = {
+    'GTDB-Tk': {
+        'environment': {
+            'GTDBTK_DATA_PATH': ('APPAM_SMK_GTDBTK_DB', '/databases/gtdbtk_r226'),
+        },
+        'required_paths': [
+            ('APPAM_SMK_GTDBTK_DB', '/databases/gtdbtk_r226', 'directory', 'GTDB-Tk database'),
+        ],
+    },
+    'MaxQuant': {
+        'required_paths': [
+            ('APPAM_PALEO_MAXQUANT_CMD', '/opt/tools/maxquant-current/bin/MaxQuantCmd.dll', 'file', 'MaxQuantCmd.dll'),
+        ],
+    },
+}
+
 ADDITIONAL_TOOLS = [
     {
         'tool_name': 'FreeBayes',
         'description': 'Bayesian haplotype-based polymorphism discovery for aligned reads.',
         'parameters': [
-            {'name': '-f', 'description': 'Reference FASTA file', 'type': 'file', 'extensions': ['.fasta', '.fa', '.fna']},
-            {'name': 'alignment_bam', 'description': 'Aligned BAM file', 'type': 'file', 'extensions': ['.bam']},
-            {'name': '-v', 'description': 'Output VCF file', 'type': 'string', 'default': 'variants.vcf'},
+            {'name': '-f', 'description': 'Reference FASTA file', 'type': 'file', 'extensions': ['.fasta', '.fa', '.fna'], 'required': True},
+            {'name': 'alignment_bam', 'description': 'Aligned BAM file', 'type': 'file', 'extensions': ['.bam'], 'positional': True, 'order': 100, 'required': True},
+            {'name': '-v', 'description': 'Output VCF file', 'type': 'string', 'default': 'results/freebayes/variants.vcf', 'path_role': 'output', 'path_kind': 'file'},
             {'name': '--min-alternate-fraction', 'description': 'Minimum alternate allele fraction', 'type': 'float', 'default': 0.33},
             {'name': '--min-base-quality', 'description': 'Minimum base quality', 'type': 'integer', 'default': 20},
             {'name': '--ploidy', 'description': 'Ploidy', 'type': 'integer', 'default': 1},
@@ -157,9 +198,9 @@ ADDITIONAL_TOOLS = [
         'tool_name': 'BCFtools',
         'description': 'Utilities for variant calling and manipulating VCF/BCF files.',
         'parameters': [
-            {'name': 'subcommand', 'description': 'BCFtools subcommand', 'type': 'string', 'options': ['view', 'filter', 'stats', 'index', 'sort', 'consensus'], 'default': 'view'},
-            {'name': 'input_file', 'description': 'Input VCF/BCF file', 'type': 'file', 'extensions': ['.vcf', '.vcf.gz', '.bcf']},
-            {'name': '-o', 'description': 'Output file', 'type': 'string', 'default': 'bcftools_output.vcf.gz'},
+            {'name': 'subcommand', 'description': 'BCFtools subcommand', 'type': 'string', 'options': ['view'], 'default': 'view', 'positional': True, 'order': 0, 'required': True},
+            {'name': 'input_file', 'description': 'Input VCF/BCF file', 'type': 'file', 'extensions': ['.vcf', '.vcf.gz', '.bcf'], 'positional': True, 'order': 100, 'required': True},
+            {'name': '-o', 'description': 'Output file', 'type': 'string', 'default': 'results/bcftools/output.vcf.gz', 'path_role': 'output', 'path_kind': 'file'},
             {'name': '-O', 'description': 'Output type', 'type': 'string', 'options': ['u', 'b', 'v', 'z'], 'default': 'z'},
             {'name': '--threads', 'description': 'Number of threads', 'type': 'integer', 'default': 4},
         ],
@@ -168,18 +209,10 @@ ADDITIONAL_TOOLS = [
         'tool_name': 'SeqKit',
         'description': 'A fast and cross-platform toolkit for FASTA/Q file manipulation.',
         'parameters': [
-            {'name': 'subcommand', 'description': 'SeqKit subcommand', 'type': 'string', 'options': ['stats', 'seq', 'fx2tab', 'sample', 'grep'], 'default': 'stats'},
-            {'name': 'input_file', 'description': 'Input FASTA/FASTQ file', 'type': 'file', 'extensions': ['.fasta', '.fa', '.fna', '.fastq', '.fq', '.fastq.gz', '.fq.gz']},
-            {'name': '-o', 'description': 'Output file', 'type': 'string', 'default': 'seqkit_output.txt'},
+            {'name': 'subcommand', 'description': 'SeqKit subcommand', 'type': 'string', 'options': ['stats'], 'default': 'stats', 'positional': True, 'order': 0, 'required': True},
+            {'name': 'input_file', 'description': 'Input FASTA/FASTQ file', 'type': 'file', 'extensions': ['.fasta', '.fa', '.fna', '.fastq', '.fq', '.fastq.gz', '.fq.gz'], 'positional': True, 'order': 100, 'required': True},
+            {'name': '-o', 'description': 'Output file', 'type': 'string', 'default': 'results/seqkit/stats.tsv', 'path_role': 'output', 'path_kind': 'file'},
             {'name': '-j', 'description': 'Number of threads', 'type': 'integer', 'default': 4},
-        ],
-    },
-    {
-        'tool_name': 'calN50',
-        'description': 'Calculate assembly N50 and related continuity statistics from FASTA assemblies.',
-        'parameters': [
-            {'name': 'input_fasta', 'description': 'Input assembly FASTA file', 'type': 'file', 'extensions': ['.fasta', '.fa', '.fna']},
-            {'name': '--output', 'description': 'Optional output file', 'type': 'string', 'default': 'caln50.txt'},
         ],
     },
     {
@@ -188,7 +221,7 @@ ADDITIONAL_TOOLS = [
         'parameters': [
             {'name': '--composition_file', 'description': 'Composition FASTA file', 'type': 'file', 'extensions': ['.fasta', '.fa', '.fna']},
             {'name': '--coverage_file', 'description': 'Coverage table TSV file', 'type': 'file', 'extensions': ['.tsv', '.txt']},
-            {'name': '-b', 'description': 'Output directory prefix', 'type': 'directory', 'default': './concoct_output'},
+            {'name': '-b', 'description': 'Output directory prefix', 'type': 'directory', 'default': 'results/concoct', 'path_role': 'output', 'create_output_directory': True},
             {'name': '-c', 'description': 'Number of clusters (optional)', 'type': 'integer'},
             {'name': '--threads', 'description': 'Number of threads', 'type': 'integer', 'default': 4},
         ],
@@ -197,10 +230,10 @@ ADDITIONAL_TOOLS = [
         'tool_name': 'metaWRAP',
         'description': 'Wrapper utilities for metagenomic binning refinement and MAG improvement.',
         'parameters': [
-            {'name': 'subcommand', 'description': 'metaWRAP subcommand', 'type': 'string', 'options': ['bin_refinement'], 'default': 'bin_refinement'},
-            {'name': '-o', 'description': 'Output directory', 'type': 'directory', 'default': './metawrap_output'},
-            {'name': '-A', 'description': 'Binning result set A', 'type': 'directory'},
-            {'name': '-B', 'description': 'Binning result set B', 'type': 'directory'},
+            {'name': 'subcommand', 'description': 'metaWRAP subcommand', 'type': 'string', 'options': ['bin_refinement'], 'default': 'bin_refinement', 'positional': True, 'order': 0, 'required': True},
+            {'name': '-o', 'description': 'Output directory', 'type': 'directory', 'default': 'results/metawrap', 'path_role': 'output', 'create_output_directory': True},
+            {'name': '-A', 'description': 'Binning result set A', 'type': 'directory', 'required': True},
+            {'name': '-B', 'description': 'Binning result set B', 'type': 'directory', 'required': True},
             {'name': '-C', 'description': 'Binning result set C', 'type': 'directory'},
             {'name': '-t', 'description': 'Number of threads', 'type': 'integer', 'default': 8},
             {'name': '-c', 'description': 'Minimum completeness threshold', 'type': 'integer', 'default': 50},
@@ -211,9 +244,10 @@ ADDITIONAL_TOOLS = [
         'tool_name': 'GUNC',
         'description': 'Genome UNClutterer for chimerism and contamination detection in genomes.',
         'parameters': [
-            {'name': 'input_genomes', 'description': 'Genome directory or FASTA file', 'type': 'directory'},
-            {'name': '--out_dir', 'description': 'Output directory', 'type': 'directory', 'default': './gunc_output'},
-            {'name': '--db_file', 'description': 'GUNC database file or directory', 'type': 'string'},
+            {'name': 'command', 'description': 'GUNC operation', 'type': 'string', 'options': ['run'], 'default': 'run', 'positional': True, 'order': 0, 'required': True},
+            {'name': '--input_dir', 'description': 'Directory containing genome FASTA files', 'type': 'directory', 'required': True},
+            {'name': '--out_dir', 'description': 'Output directory', 'type': 'directory', 'default': 'results/gunc', 'path_role': 'output', 'create_output_directory': True},
+            {'name': '--db_file', 'description': 'GUNC database under APPAM_DATABASES_ROOT', 'type': 'string', 'default': 'gunc', 'default_env': 'APPAM_SMK_GUNC_DB', 'path_role': 'input', 'path_scope': 'shared', 'path_kind': 'file', 'path_select': '*.dmnd', 'required': True},
             {'name': '--threads', 'description': 'Number of threads', 'type': 'integer', 'default': 4},
         ],
     },
@@ -222,17 +256,19 @@ ADDITIONAL_TOOLS = [
         'description': 'Mass screening of contigs for antimicrobial resistance and virulence gene databases.',
         'parameters': [
             {'name': '--db', 'description': 'Database name', 'type': 'string', 'options': ['ncbi', 'card', 'vfdb', 'plasmidfinder', 'resfinder'], 'default': 'vfdb'},
-            {'name': 'input_file', 'description': 'Input FASTA file', 'type': 'file', 'extensions': ['.fasta', '.fa', '.fna']},
+            {'name': 'input_file', 'description': 'Input FASTA file', 'type': 'file', 'extensions': ['.fasta', '.fa', '.fna'], 'positional': True, 'order': 100, 'required': True},
             {'name': '--minid', 'description': 'Minimum percent identity', 'type': 'integer', 'default': 80},
             {'name': '--mincov', 'description': 'Minimum percent coverage', 'type': 'integer', 'default': 80},
+            {'name': 'output_file', 'description': 'Screening result table', 'type': 'string', 'default': 'results/abricate/results.tsv', 'path_role': 'output', 'path_kind': 'file', 'stream': 'stdout', 'required': True},
         ],
     },
     {
         'tool_name': 'eggNOG-mapper',
         'description': 'Fast functional annotation using orthology assignments and KEGG/eggNOG databases.',
         'parameters': [
-            {'name': '-i', 'description': 'Input protein FASTA file', 'type': 'file', 'extensions': ['.faa', '.fasta', '.fa']},
-            {'name': '-o', 'description': 'Output prefix', 'type': 'string', 'default': 'eggnog_mapper'},
+            {'name': '-i', 'description': 'Input protein FASTA file', 'type': 'file', 'extensions': ['.faa', '.fasta', '.fa'], 'required': True},
+            {'name': '-o', 'description': 'Output prefix', 'type': 'string', 'default': 'results/eggnog/annotation', 'path_role': 'output', 'path_kind': 'prefix'},
+            {'name': '--data_dir', 'description': 'eggNOG database under APPAM_DATABASES_ROOT', 'type': 'string', 'default': 'eggnog', 'default_env': 'APPAM_SMK_EGGNOG_DB', 'path_role': 'input', 'path_scope': 'shared', 'path_kind': 'directory'},
             {'name': '--cpu', 'description': 'Number of CPUs', 'type': 'integer', 'default': 4},
             {'name': '--itype', 'description': 'Input type', 'type': 'string', 'options': ['proteins', 'CDS'], 'default': 'proteins'},
         ],
@@ -241,37 +277,36 @@ ADDITIONAL_TOOLS = [
         'tool_name': 'ThermoRawFileParser',
         'description': 'Convert Thermo RAW files to mzML for downstream paleoproteomics processing.',
         'parameters': [
-            {'name': '--input', 'description': 'Input Thermo RAW file', 'type': 'file', 'extensions': ['.RAW']},
-            {'name': '--output_file', 'description': 'Output mzML file', 'type': 'string', 'default': 'thermo_output.mzML'},
-            {'name': '--format', 'description': 'Output format', 'type': 'string', 'options': ['0', '1', '2'], 'default': '1'},
-            {'name': '--gzip', 'description': 'Compress output', 'type': 'flag', 'default': False},
+            {'name': '-i', 'description': 'Input Thermo RAW file', 'type': 'file', 'extensions': ['.RAW', '.raw'], 'required': True, 'separator': '='},
+            {'name': '-b', 'description': 'Output mzML file', 'type': 'string', 'default': 'results/paleoproteomics/thermo_output.mzML', 'path_role': 'output', 'path_kind': 'file', 'separator': '='},
+            {'name': '-f', 'description': 'Output format', 'type': 'string', 'options': ['2'], 'default': '2', 'separator': '='},
+            {'name': '-m', 'description': 'Metadata output mode', 'type': 'string', 'options': ['2', '0', '1'], 'default': '2', 'separator': '='},
         ],
     },
     {
         'tool_name': 'timsconvert',
         'description': 'Convert Bruker timsTOF .d datasets into mzML.',
         'parameters': [
-            {'name': '--input', 'description': 'Input Bruker .d directory', 'type': 'directory'},
-            {'name': '--outdir', 'description': 'Output directory', 'type': 'directory', 'default': './timsconvert_output'},
-            {'name': '--outfile', 'description': 'Output filename prefix', 'type': 'string', 'default': 'bruker_output'},
-            {'name': '--mode', 'description': 'Conversion mode', 'type': 'string', 'options': ['centroid', 'profile'], 'default': 'centroid'},
+            {'name': '--input', 'description': 'Input Bruker .d directory', 'type': 'directory', 'required': True},
+            {'name': '--outdir', 'description': 'Output directory', 'type': 'directory', 'default': 'results/paleoproteomics/timsconvert', 'path_role': 'output', 'create_output_directory': True},
+            {'name': '--mode', 'description': 'Conversion mode', 'type': 'string', 'options': ['raw'], 'default': 'raw'},
         ],
     },
     {
         'tool_name': 'OpenMS FileConverter',
         'description': 'Normalize or convert spectra files using OpenMS FileConverter.',
         'parameters': [
-            {'name': '-in', 'description': 'Input spectra file', 'type': 'file', 'extensions': ['.mzML', '.mzXML', '.mgf']},
-            {'name': '-out', 'description': 'Output spectra file', 'type': 'string', 'default': 'converted.mzML'},
+            {'name': '-in', 'description': 'Input spectra file', 'type': 'file', 'extensions': ['.mzML', '.mzXML', '.mgf'], 'required': True},
+            {'name': '-out', 'description': 'Output spectra file', 'type': 'string', 'default': 'results/paleoproteomics/converted.mzML', 'path_role': 'output', 'path_kind': 'file'},
             {'name': '-threads', 'description': 'Number of threads', 'type': 'integer', 'default': 4},
         ],
     },
     {
         'tool_name': 'MaxQuant',
+        'admin_only': True,
         'description': 'Run MaxQuant in batch mode from an mqpar.xml configuration file.',
         'parameters': [
-            {'name': 'maxquant_cmd_dll', 'description': 'Absolute path to MaxQuantCmd.dll', 'type': 'string', 'default': '/opt/tools/MaxQuant_v2.7.5.0/bin/MaxQuantCmd.dll', 'position': 0},
-            {'name': 'mqpar_xml', 'description': 'mqpar.xml file', 'type': 'file', 'extensions': ['.xml'], 'position': 1},
+            {'name': 'mqpar_xml', 'description': 'mqpar.xml file', 'type': 'file', 'extensions': ['.xml'], 'position': 0, 'required': True},
         ],
     },
     {
@@ -295,33 +330,42 @@ ADDITIONAL_TOOLS = [
             {'name': 'profile', 'description': 'Snakemake execution profile', 'type': 'string', 'options': ['local', 'slurm'], 'default': 'local'},
             {'name': 'cores', 'description': 'Local cores or maximum queued jobs', 'type': 'integer', 'default': 4},
             {'name': 'preprocess_method', 'description': 'Preprocessing backend', 'type': 'string', 'options': ['adapter_removal', 'fastp'], 'default': 'fastp'},
-            {'name': 'min_contig_len', 'description': 'Minimum contig length', 'type': 'integer', 'default': 500},
-            {'name': 'use_ancient_contigs', 'description': 'Enable ancient-contig-only binning', 'type': 'flag', 'default': True},
+            {'name': 'min_contig_len', 'description': 'Minimum contig length', 'type': 'integer', 'default': 500, 'minimum': 1},
+            {'name': 'use_ancient_contigs', 'description': 'Experimental: restrict binning to PyDamage-positive contigs', 'type': 'flag', 'default': False},
+            {'name': 'enable_bin_refinement', 'description': 'Refine MetaBAT2/MaxBin2/CONCOCT bins with MetaWRAP and CheckM1', 'type': 'flag', 'default': False},
+            {'name': 'unrefined_binner', 'description': 'Bin set used when refinement is disabled', 'type': 'string', 'options': ['metabat2', 'maxbin2', 'concoct'], 'default': 'metabat2'},
+            {'name': 'enable_checkm1', 'description': 'Run the standalone CheckM1 quality report', 'type': 'flag', 'default': False},
             {'name': 'enable_checkm2', 'description': 'Run CheckM2 MAG quality assessment', 'type': 'flag', 'default': True},
             {'name': 'enable_gunc', 'description': 'Run GUNC contamination assessment', 'type': 'flag', 'default': True},
+            {'name': 'enable_gtdbtk', 'description': 'Run GTDB-Tk taxonomic classification', 'type': 'flag', 'default': True},
             {'name': 'enable_prokka', 'description': 'Run Prokka gene annotation', 'type': 'flag', 'default': True},
-            {'name': 'enable_eggnog', 'description': 'Run eggNOG-mapper functional annotation', 'type': 'flag', 'default': True},
-            {'name': 'enable_abricate', 'description': 'Run ABRicate screening', 'type': 'flag', 'default': True},
+            {'name': 'enable_eggnog', 'description': 'Run eggNOG-mapper functional annotation', 'type': 'flag', 'default': False},
+            {'name': 'enable_abricate', 'description': 'Run ABRicate screening', 'type': 'flag', 'default': False},
             {'name': 'enable_rgi', 'description': 'Run RGI resistome screening', 'type': 'flag', 'default': False},
-            {'name': 'enable_antismash', 'description': 'Run antiSMASH BGC annotation', 'type': 'flag', 'default': True},
+            {'name': 'enable_antismash', 'description': 'Run antiSMASH BGC annotation', 'type': 'flag', 'default': False},
             {'name': 'annotation_threads', 'description': 'Threads for per-sample annotation modules', 'type': 'integer', 'default': 8},
             {'name': 'abricate_db', 'description': 'ABRicate database name', 'type': 'string', 'options': ['ncbi', 'card', 'vfdb', 'plasmidfinder', 'resfinder'], 'default': 'vfdb'},
             {'name': 'target_rule', 'description': 'Optional rule or file target', 'type': 'string'},
             {'name': 'dry_run', 'description': 'Only build the DAG without executing rules', 'type': 'flag', 'default': False},
+            {'name': 'input_hash_mode', 'description': 'Input provenance fingerprint mode', 'type': 'string', 'options': ['metadata', 'sha256'], 'default': 'metadata'},
+            {'name': 'require_database_manifest', 'description': 'Require a versioned appam-db-manifest.json before execution', 'type': 'flag', 'default': False},
             {'name': 'metawrap_env', 'description': 'Override MetaWRAP conda environment path (optional)', 'type': 'string'},
             {'name': 'pydamage_env', 'description': 'Override PyDamage environment path (optional)', 'type': 'string'},
+            {'name': 'checkm1_env', 'description': 'Override CheckM1 conda environment path (optional)', 'type': 'string'},
             {'name': 'checkm_db', 'description': 'Override legacy CheckM1 database path (optional)', 'type': 'string'},
             {'name': 'checkm1_db', 'description': 'Override CheckM1 database path for MetaWRAP refinement (optional)', 'type': 'string'},
             {'name': 'checkm2_env', 'description': 'Override CheckM2 conda environment path (optional)', 'type': 'string'},
             {'name': 'checkm2_db', 'description': 'Override CheckM2 database path (optional)', 'type': 'string'},
             {'name': 'gunc_env', 'description': 'Override GUNC conda environment path (optional)', 'type': 'string'},
             {'name': 'gunc_db', 'description': 'Override GUNC database path (optional)', 'type': 'string'},
+            {'name': 'gtdbtk_env', 'description': 'Override GTDB-Tk conda environment path (optional)', 'type': 'string'},
+            {'name': 'gtdbtk_db', 'description': 'Override GTDB-Tk reference data path (optional)', 'type': 'string'},
             {'name': 'prokka_env', 'description': 'Override Prokka conda environment path (optional)', 'type': 'string'},
             {'name': 'eggnog_env', 'description': 'Override eggNOG-mapper conda environment path (optional)', 'type': 'string'},
             {'name': 'eggnog_db', 'description': 'Override eggNOG database path (optional)', 'type': 'string'},
             {'name': 'abricate_env', 'description': 'Override ABRicate conda environment path (optional)', 'type': 'string'},
             {'name': 'rgi_env', 'description': 'Override RGI conda environment path (optional)', 'type': 'string'},
-            {'name': 'rgi_db_mode', 'description': 'RGI database mode', 'type': 'string', 'options': ['online', 'local'], 'default': 'online'},
+            {'name': 'rgi_db_mode', 'description': 'RGI database mode', 'type': 'string', 'options': ['global', 'local'], 'default': 'global'},
             {'name': 'rgi_db', 'description': 'Override local RGI database path when using local mode (optional)', 'type': 'string'},
             {'name': 'antismash_env', 'description': 'Override antiSMASH conda environment path (optional)', 'type': 'string'},
         ],
@@ -343,15 +387,24 @@ ADDITIONAL_TOOLS = [
         },
         'parameters': [
             {'name': 'sample_table', 'description': 'Project-relative samples.tsv file for paleoproteomics', 'type': 'file', 'extensions': ['.tsv'], 'required': True},
-            {'name': 'fasta_path', 'description': 'Reference FASTA path (project-relative or absolute)', 'type': 'string', 'required': True},
+            {'name': 'fasta_path', 'description': 'Reference FASTA in this project or APPAM_DATABASES_ROOT', 'type': 'string', 'required': True},
             {'name': 'cores', 'description': 'Snakemake cores', 'type': 'integer', 'default': 4},
             {'name': 'match_between_runs', 'description': 'Enable MaxQuant match between runs', 'type': 'flag', 'default': False},
+            {'name': 'enzymes', 'description': 'Comma-separated MaxQuant enzymes', 'type': 'string', 'default': 'Trypsin/P'},
+            {'name': 'enzyme_mode', 'description': 'MaxQuant enzyme mode', 'type': 'integer', 'default': 4, 'minimum': 0, 'maximum': 5},
+            {'name': 'max_missed_cleavages', 'description': 'Maximum missed cleavages', 'type': 'integer', 'default': 0, 'minimum': 0, 'maximum': 10},
+            {'name': 'fixed_modifications', 'description': 'Comma-separated fixed modifications', 'type': 'string', 'default': 'Carbamidomethyl (C)'},
+            {'name': 'variable_modifications', 'description': 'Comma-separated variable modifications', 'type': 'string', 'default': 'Deamidation (NQ),Oxidation (MP),Gln->pyro-Glu,Glu->pyro-Glu,Phospho (ST)'},
+            {'name': 'peptide_fdr', 'description': 'Peptide-level FDR', 'type': 'float', 'default': 0.01, 'minimum': 0, 'maximum': 1},
+            {'name': 'protein_fdr', 'description': 'Protein-level FDR', 'type': 'float', 'default': 0.01, 'minimum': 0, 'maximum': 1},
+            {'name': 'site_fdr', 'description': 'Modification-site FDR', 'type': 'float', 'default': 0.01, 'minimum': 0, 'maximum': 1},
             {'name': 'include_contaminants', 'description': 'Include contaminants database', 'type': 'flag', 'default': True},
-            {'name': 'min_peptide_length', 'description': 'Minimum peptide length', 'type': 'integer', 'default': 7},
-            {'name': 'first_search_tol', 'description': 'First search tolerance (ppm)', 'type': 'float', 'default': 20},
-            {'name': 'main_search_tol', 'description': 'Main search tolerance (ppm)', 'type': 'float', 'default': 4.5},
+            {'name': 'min_peptide_length', 'description': 'Minimum peptide length', 'type': 'integer', 'default': 7, 'minimum': 1},
+            {'name': 'first_search_tol', 'description': 'First search tolerance (ppm)', 'type': 'float', 'default': 20, 'minimum': 0.01},
+            {'name': 'main_search_tol', 'description': 'Main search tolerance (ppm)', 'type': 'float', 'default': 4.5, 'minimum': 0.01},
             {'name': 'target_rule', 'description': 'Optional rule or file target', 'type': 'string'},
             {'name': 'dry_run', 'description': 'Only build the DAG without executing rules', 'type': 'flag', 'default': False},
+            {'name': 'input_hash_mode', 'description': 'Input provenance fingerprint mode', 'type': 'string', 'options': ['metadata', 'sha256'], 'default': 'metadata'},
             {'name': 'dotnet_bin', 'description': 'Override dotnet binary (optional)', 'type': 'string'},
             {'name': 'maxquant_cmd_dll', 'description': 'Override MaxQuantCmd.dll path (optional)', 'type': 'string'},
             {'name': 'thermo_raw_file_parser', 'description': 'Override ThermoRawFileParser binary (optional)', 'type': 'string'},
@@ -404,6 +457,24 @@ def _normalize_tool(raw_tool: dict) -> dict:
     tool['id'] = tool_id
     tool['kind'] = tool.get('kind', 'tool')
     tool['parameters'] = tool.get('parameters', [])
+    max_tool_threads = max(1, int(os.getenv('APPAM_MAX_TOOL_THREADS', str(os.cpu_count() or 1))))
+    max_workflow_cores = max(1, int(os.getenv('APPAM_MAX_WORKFLOW_CORES', str(max(64, os.cpu_count() or 1)))))
+    for parameter in tool['parameters']:
+        default_env = parameter.get('default_env')
+        if default_env and os.getenv(default_env):
+            parameter['default'] = os.getenv(default_env)
+        if tool.get('kind', 'tool') != 'workflow' and parameter.get('type') == 'integer' and parameter.get('name') in THREAD_PARAMETER_NAMES:
+            parameter.setdefault('minimum', 1)
+            parameter.setdefault('maximum', max_tool_threads)
+            if parameter.get('default') is not None:
+                parameter['default'] = min(max_tool_threads, max(1, int(parameter['default'])))
+        if tool.get('kind', 'tool') == 'workflow' and parameter.get('name') in ADMIN_ONLY_WORKFLOW_PARAMETERS:
+            parameter['admin_only'] = True
+        if tool.get('kind', 'tool') == 'workflow' and parameter.get('type') == 'integer' and parameter.get('name') in {'cores', 'annotation_threads'}:
+            parameter.setdefault('minimum', 1)
+            parameter.setdefault('maximum', max_workflow_cores)
+            if parameter.get('default') is not None:
+                parameter['default'] = min(max_workflow_cores, max(1, int(parameter['default'])))
     tool['notes'] = tool.get('notes', [])
     tool['run_label'] = tool.get('run_label') or ('Run Workflow' if tool['kind'] == 'workflow' else 'Run Tool')
 
@@ -420,7 +491,30 @@ def _normalize_tool(raw_tool: dict) -> dict:
         execution.setdefault('mode', 'snakemake')
     else:
         execution.setdefault('mode', 'command')
-        execution.setdefault('command', COMMAND_OVERRIDES.get(tool['tool_name'], tool['tool_name'].lower()))
+        command_env = COMMAND_ENV_OVERRIDES.get(tool['tool_name'])
+        configured_command = os.getenv(command_env) if command_env else None
+        execution.setdefault('command', configured_command or COMMAND_OVERRIDES.get(tool['tool_name'], tool['tool_name'].lower()))
+        prefix_arg_env = PREFIX_ARG_ENV_OVERRIDES.get(tool['tool_name'])
+        if prefix_arg_env:
+            environment_name, fallback = prefix_arg_env
+            execution.setdefault('prefix_args', [os.getenv(environment_name, fallback)])
+        runtime_requirements = TOOL_RUNTIME_REQUIREMENTS.get(tool['tool_name']) or {}
+        runtime_environment = {
+            name: os.getenv(environment_name, fallback)
+            for name, (environment_name, fallback) in (runtime_requirements.get('environment') or {}).items()
+        }
+        if runtime_environment:
+            execution.setdefault('env', runtime_environment)
+        required_paths = [
+            {
+                'path': os.getenv(environment_name, fallback),
+                'kind': kind,
+                'label': label,
+            }
+            for environment_name, fallback, kind, label in runtime_requirements.get('required_paths') or []
+        ]
+        if required_paths:
+            execution.setdefault('required_paths', required_paths)
     tool['execution'] = execution
     return tool
 
@@ -463,3 +557,78 @@ def get_tool_sections():
             'tools': items,
         })
     return sections
+
+
+def get_tool_runtime_status(tool: dict) -> dict:
+    execution = tool.get('execution') or {}
+    if tool.get('kind') == 'workflow':
+        command = os.getenv('APPAM_SNAKEMAKE_BIN', 'snakemake')
+    else:
+        command = execution.get('command')
+
+    if not command:
+        return {'available': False, 'availability_message': 'No executable configured'}
+    command_path = Path(str(command)).expanduser()
+    executable = (
+        str(command_path.resolve())
+        if command_path.is_absolute() and command_path.is_file() and os.access(command_path, os.X_OK)
+        else shutil.which(str(command))
+    )
+    if not executable:
+        return {'available': False, 'availability_message': f'Executable not found: {command}'}
+
+    for requirement in execution.get('required_paths') or []:
+        path = Path(str(requirement.get('path') or '')).expanduser()
+        kind = requirement.get('kind', 'any')
+        exists = path.is_file() if kind == 'file' else path.is_dir() if kind == 'directory' else path.exists()
+        if not exists:
+            return {
+                'available': False,
+                'availability_message': f'{requirement.get("label") or "Runtime resource"} not found',
+            }
+    shared_root = Path(os.getenv('APPAM_DATABASES_ROOT', '/databases')).expanduser().resolve()
+    for parameter in tool.get('parameters') or []:
+        if parameter.get('path_role') != 'input' or parameter.get('path_scope') != 'shared':
+            continue
+        value = parameter.get('default')
+        if not value:
+            continue
+        path = Path(str(value)).expanduser()
+        if not path.is_absolute():
+            path = shared_root / path
+        path = path.resolve()
+        if path != shared_root and shared_root not in path.parents:
+            return {'available': False, 'availability_message': f'{parameter["name"]} is outside APPAM_DATABASES_ROOT'}
+        selector = parameter.get('path_select')
+        if selector and path.is_dir():
+            exists = any(candidate.is_file() for candidate in path.rglob(str(selector)))
+        else:
+            kind = parameter.get('path_kind', 'any')
+            exists = path.is_file() if kind == 'file' else path.is_dir() if kind == 'directory' else path.exists()
+        if not exists:
+            return {
+                'available': False,
+                'availability_message': f'{parameter.get("description") or parameter["name"]} not found',
+            }
+    return {'available': True, 'availability_message': 'Ready'}
+
+
+def get_tool_catalog():
+    tools = []
+    by_id = {}
+    for source in get_tool_library():
+        tool = copy.deepcopy(source)
+        tool.update(get_tool_runtime_status(tool))
+        tools.append(tool)
+        by_id[tool['id']] = tool
+
+    tools_by_key = {
+        key: by_id[source['id']]
+        for key, source in get_tool_library_map().items()
+    }
+    sections = []
+    for source_section in get_tool_sections():
+        section = copy.deepcopy(source_section)
+        section['tools'] = [by_id[tool['id']] for tool in source_section['tools']]
+        sections.append(section)
+    return tools, tools_by_key, sections

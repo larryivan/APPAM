@@ -6,13 +6,18 @@ rule metawrap_binning:
         contigs=lambda wc: f"{RESULTS_DIR}/pydamage/{wc.sample}/ancient.contigs.fa"
         if config["params"].get("use_ancient_contigs", False)
         else f"{RESULTS_DIR}/megahit/{wc.sample}/final.contigs.fa",
-        se = f"{PREPROCESS_DIR}/{{sample}}.single.fastq"
+        all_se=f"{PREPROCESS_DIR}/{{sample}}.all.single.fastq.gz"
     output:
         metabat2 = directory(f"{RESULTS_DIR}/metawrap/binning/{{sample}}/metabat2_bins"),
         concoct  = directory(f"{RESULTS_DIR}/metawrap/binning/{{sample}}/concoct_bins"),
         maxbin2  = directory(f"{RESULTS_DIR}/metawrap/binning/{{sample}}/maxbin2_bins")
     params:
         outdir=lambda wc, output: os.path.dirname(output.metabat2),
+        selected_dir=lambda wc, output: {
+            "metabat2": output.metabat2,
+            "maxbin2": output.maxbin2,
+            "concoct": output.concoct,
+        }[UNREFINED_BINNER],
     log:
         f"{LOGS_DIR}/metawrap_binning/{{sample}}.log"
     benchmark:
@@ -20,11 +25,17 @@ rule metawrap_binning:
     threads: 48
     shell:
         r"""
-        mkdir -p {params.outdir} $(dirname {log})
-        metawrap binning -o {params.outdir} -t {threads} \
+        mkdir -p {params.outdir:q} "$(dirname {log:q})"
+        metawrap binning -o {params.outdir:q} -t {threads} \
             --metabat2 --maxbin2 --concoct  \
-            -a {input.contigs} \
-            --single-end {input.se} &> {log}
+            -a {input.contigs:q} \
+            --single-end {input.all_se:q} &> {log:q}
+        shopt -s nullglob
+        selected_bins=({params.selected_dir:q}/*.fa)
+        if [ "${{#selected_bins[@]}}" -eq 0 ]; then
+            echo "Selected binner produced no FASTA bins: {params.selected_dir}" >> {log:q}
+            exit 1
+        fi
         """
 
 rule metawrap_bin_refinement:
@@ -49,18 +60,18 @@ rule metawrap_bin_refinement:
         mem_mb=128000
     shell:
         r"""
-        mkdir -p {params.outdir} $(dirname {log})
-        find {input.metabat2} {input.maxbin2} {input.concoct} -name "bin.BinMembers.txt" -delete
-        checkm data setRootPath {params.checkm_db}
-        metawrap bin_refinement -o {params.outdir} -t {threads} \
+        mkdir -p {params.outdir:q} "$(dirname {log:q})"
+        find {input.metabat2:q} {input.maxbin2:q} {input.concoct:q} -name "bin.BinMembers.txt" -delete
+        checkm data setRootPath {params.checkm_db:q}
+        metawrap bin_refinement -o {params.outdir:q} -t {threads} \
             -c {params.completeness} -x {params.contamination} \
-            -A {input.metabat2} -B {input.maxbin2} -C {input.concoct} &> {log}
+            -A {input.metabat2:q} -B {input.maxbin2:q} -C {input.concoct:q} &> {log:q}
         """
 
 rule checkm2:
-    conda: config["tools"].get("checkm2_env", "../envs/APPAM-ENV-B.yaml")
+    conda: config["tools"].get("checkm2_env", "../../../docker/tools/environments/checkm2.yml")
     input:
-        f"{RESULTS_DIR}/metawrap/bin_refinement/{{sample}}/metawrap_50_10_bins"
+        FINAL_BINS_PATTERN
     output:
         quality=f"{RESULTS_DIR}/checkm2/{{sample}}/quality_report.tsv"
     params:
@@ -75,24 +86,25 @@ rule checkm2:
         mem_mb=64000
     shell:
         r"""
-        mkdir -p {params.outdir} $(dirname {log})
+        mkdir -p {params.outdir:q} "$(dirname {log:q})"
         checkm2 predict \
-            --input {input} \
-            --output-directory {params.outdir} \
-            --database_path {params.db} \
+            --input {input:q} \
+            --output-directory {params.outdir:q} \
+            --database_path {params.db:q} \
             --threads {threads} \
             -x fa &> {log}
         test -s {output.quality}
         """
 
 rule checkm:
-    conda: "../envs/APPAM-ENV-B.yaml"
+    conda: config["tools"].get("checkm1_env", "../../../docker/tools/environments/checkm.yml")
     input:
-        f"{RESULTS_DIR}/metawrap/bin_refinement/{{sample}}/metawrap_50_10_bins"
+        FINAL_BINS_PATTERN
     output:
         qa=f"{RESULTS_DIR}/checkm/{{sample}}/bins_qa.txt"
     params:
-        outdir=lambda wc, output: os.path.dirname(output.qa)
+        outdir=lambda wc, output: os.path.dirname(output.qa),
+        db=config["databases"]["checkm1_db"]
     log:
         f"{LOGS_DIR}/checkm/{{sample}}.log"
     benchmark: 
@@ -102,15 +114,16 @@ rule checkm:
         mem_mb=64000
     shell:
         r"""
-        mkdir -p {params.outdir} $(dirname {log})
+        mkdir -p {params.outdir:q} "$(dirname {log:q})"
+        checkm data setRootPath {params.db:q}
         checkm lineage_wf -t {threads} -x fa --tab_table \
-            -f {output.qa} {input} {params.outdir} 2> {log}
+            -f {output.qa:q} {input:q} {params.outdir:q} 2> {log:q}
         """
 
 rule gunc:
-    conda: config["tools"].get("gunc_env", "../envs/APPAM-ENV-A.yaml")
+    conda: config["tools"].get("gunc_env", "../../../docker/tools/environments/binning.yml")
     input:
-        f"{RESULTS_DIR}/metawrap/bin_refinement/{{sample}}/metawrap_50_10_bins"
+        FINAL_BINS_PATTERN
     output:
         result=f"{RESULTS_DIR}/gunc/{{sample}}/GUNC.progenomes_2.1.maxCSS_level.tsv"
     params:
@@ -123,8 +136,8 @@ rule gunc:
         mem_mb=64000
     shell:
         r"""
-        mkdir -p {params.outdir} $(dirname {log})
-        db_path="{params.db}"
+        mkdir -p {params.outdir:q} "$(dirname {log:q})"
+        db_path={params.db:q}
         if [ -d "$db_path" ]; then
             db_file="$(find "$db_path" -maxdepth 2 -type f -name '*.dmnd' | head -n 1)"
             if [ -z "$db_file" ]; then
@@ -134,6 +147,6 @@ rule gunc:
         else
             db_file="$db_path"
         fi
-        gunc run --input_dir {input} -t {threads} \
-            --out_dir {params.outdir} --db_file "$db_file" 2> {log}
+        gunc run --input_dir {input:q} -t {threads} \
+            --out_dir {params.outdir:q} --db_file "$db_file" 2> {log:q}
         """

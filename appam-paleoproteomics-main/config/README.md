@@ -75,6 +75,7 @@ Important keys:
 - `results_dir`: root directory for converted mzML files and logs
 - `maxquant_output_dir`: MaxQuant result directory
 - `threads`: threads passed to tools and written into the generated MaxQuant parameters
+- `runtime_env`: existing Conda/Mamba environment prefix activated for every rule
 - `fasta_path`: FASTA database path written into the generated mqpar XML
 - `match_between_runs`
 - `enzymes`
@@ -94,12 +95,12 @@ Important keys:
 - `timsconvert_bin`
 - `openms_fileconverter`
 
-The workflow itself no longer declares a Snakemake `container:` directive. The intended deployment is to run `snakemake` inside your prepared Docker image, or on a host where the required tools are already available on `PATH`.
+The workflow declares one existing Conda/Mamba runtime prefix for every rule. Run Snakemake with `--sdm conda`; the prefix is activated without recreating it.
 
 In the Docker image, `entrypoint.sh` activates the `paleoproteomics` conda environment and exports:
 
 - `/opt/tools/ThermoRawFileParser` to `PATH`
-- `/opt/tools/MaxQuant_v2.7.5.0` to `PATH`
+- `/opt/tools/maxquant-current` to `PATH`
 - `/opt/tools/openms-development/bin` to `PATH`
 - `/opt/tools/openms-development/lib` to `LD_LIBRARY_PATH`
 
@@ -112,7 +113,7 @@ That is why the default config uses command names for most tools:
 
 MaxQuant is the exception. The workflow needs the DLL path passed to `dotnet`, so the default is:
 
-- `maxquant_cmd_dll: /opt/tools/MaxQuant_v2.7.5.0/bin/MaxQuantCmd.dll`
+- `maxquant_cmd_dll: /opt/tools/maxquant-current/bin/MaxQuantCmd.dll`
 
 If you run the workflow outside the image, replace these values with paths that match your host environment.
 

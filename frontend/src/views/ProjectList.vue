@@ -16,6 +16,11 @@
         </template>
       </PageHeader>
 
+      <div v-if="pageError" class="page-notice error" role="alert">
+        <span>{{ pageError }}</span>
+        <button type="button" @click="fetchProjects">Try again</button>
+      </div>
+
       <!-- 搜索和筛选区 -->
       <div class="controls-bar">
         <div class="search-box">
@@ -58,7 +63,11 @@
       </div>
 
       <!-- 项目列表 -->
-      <div v-if="filteredProjects.length === 0" class="empty-state">
+      <div v-if="projectsLoading" class="empty-state" aria-live="polite">
+        <Icon name="rotate-ccw" :size="28" spin />
+        <h3>Loading projects</h3>
+      </div>
+      <div v-else-if="!pageError && filteredProjects.length === 0" class="empty-state">
         <div class="empty-icon"><Icon name="folder-open" :size="40" :stroke-width="1.5" /></div>
         <h3>No Projects</h3>
         <p v-if="searchQuery">No projects found matching "{{ searchQuery }}"</p>
@@ -67,22 +76,30 @@
       </div>
       
       <div v-else :class="['projects-container', viewMode]">
-        <div v-for="project in filteredProjects" :key="project.id" :class="['project-card', viewMode]">
-          <div class="project-info" @click="showProjectDetails(project)">
+        <div
+          v-for="project in filteredProjects"
+          :key="project.id"
+          :class="['project-card', viewMode]"
+          @click="openWorkspace(project.id)"
+        >
+          <div class="project-info">
             <div class="project-header">
             <h3>{{ project.name }}</h3>
             <span class="access-badge" :class="project.access_role">{{ accessRoleLabel(project.access_role) }}</span>
             </div>
+            <span v-if="project.analysis_workflow" class="workflow-badge">
+              {{ workflowName(project.analysis_workflow) }}
+            </span>
             <p class="project-meta">Creator: {{ project.creator || 'Unknown' }}</p>
             <p class="project-meta">Created: {{ formatDate(project.created_at) }}</p>
             <p class="project-meta">Last Accessed: {{ formatDate(project.last_accessed) }}</p>
             <p v-if="project.description" class="project-description">{{ project.description }}</p>
           </div>
           <div class="project-actions">
-            <button @click="openWorkspace(project.id)" class="open-btn">Open</button>
-            <button v-if="canManageProject(project)" @click="openMembersModal(project)" class="share-btn" title="Manage Members"><Icon name="users" :size="15" /></button>
-            <button v-if="canManageProject(project)" @click="openEditModal(project)" class="edit-btn" title="Edit Project"><Icon name="pencil" :size="15" /></button>
-            <button v-if="canManageProject(project)" @click="deleteProject(project.id)" class="delete-btn" title="Delete Project"><Icon name="trash-2" :size="15" /></button>
+            <button @click.stop="openWorkspace(project.id)" class="open-btn">Continue</button>
+            <button v-if="canManageProject(project)" @click.stop="openMembersModal(project)" class="share-btn" title="Manage Members"><Icon name="users" :size="15" /></button>
+            <button v-if="canManageProject(project)" @click.stop="openEditModal(project)" class="edit-btn" title="Edit Project"><Icon name="pencil" :size="15" /></button>
+            <button v-if="canManageProject(project)" @click.stop="deleteProject(project.id)" class="delete-btn" title="Delete Project"><Icon name="trash-2" :size="15" /></button>
           </div>
         </div>
       </div>
@@ -101,33 +118,34 @@
             <input v-model="newProject.name" id="name" type="text" placeholder="Enter project name..." required>
           </div>
           <div class="form-group">
-            <label for="creator">Creator</label>
-            <input v-model="newProject.creator" id="creator" type="text" placeholder="Enter creator name...">
-          </div>
-          <div class="form-group">
             <label for="description">Project Description</label>
             <textarea v-model="newProject.description" id="description" placeholder="Describe the project goals and content..."></textarea>
           </div>
           <div class="form-group">
-            <label>Analysis Type</label>
+            <label>What do you want to analyze?</label>
             <div class="analysis-picker">
-              <label :class="{ active: newProject.analysis_workflow === 'appam-smk' }">
-                <input v-model="newProject.analysis_workflow" type="radio" value="appam-smk">
-                <span>APPAM-SMK</span>
-              </label>
-              <label :class="{ active: newProject.analysis_workflow === 'appam-paleoproteomics' }">
-                <input v-model="newProject.analysis_workflow" type="radio" value="appam-paleoproteomics">
-                <span>Paleoproteomics</span>
+              <label
+                v-for="option in workflowOptions"
+                :key="option.id"
+                :class="{ active: newProject.analysis_workflow === option.id }"
+              >
+                <input v-model="newProject.analysis_workflow" type="radio" :value="option.id">
+                <span>{{ option.label }}</span>
+                <small>{{ option.inputHint }}</small>
               </label>
               <label :class="{ active: newProject.analysis_workflow === '' }">
                 <input v-model="newProject.analysis_workflow" type="radio" value="">
-                <span>Later</span>
+                <span>Set up later</span>
+                <small>Create an empty workspace</small>
               </label>
             </div>
           </div>
+          <p v-if="createError" class="form-error" role="alert">{{ createError }}</p>
           <div class="form-actions">
             <button type="button" @click="closeCreateModal" class="cancel-btn">Cancel</button>
-            <button type="submit" class="submit-btn">Create Project</button>
+            <button type="submit" class="submit-btn" :disabled="creatingProject">
+              {{ creatingProject ? 'Creating...' : 'Create and continue' }}
+            </button>
           </div>
         </form>
       </div>
@@ -146,57 +164,24 @@
             <input v-model="editingProject.name" id="edit-name" type="text" required>
           </div>
           <div class="form-group">
-            <label for="edit-creator">Creator</label>
-            <input v-model="editingProject.creator" id="edit-creator" type="text">
-          </div>
-          <div class="form-group">
             <label for="edit-description">Project Description</label>
             <textarea v-model="editingProject.description" id="edit-description"></textarea>
           </div>
+          <div class="form-group">
+            <label for="edit-workflow">Default analysis</label>
+            <select v-model="editingProject.analysis_workflow" id="edit-workflow">
+              <option value="">Not selected</option>
+              <option v-for="option in workflowOptions" :key="option.id" :value="option.id">
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+          <p v-if="editError" class="form-error" role="alert">{{ editError }}</p>
           <div class="form-actions">
             <button type="button" @click="closeEditModal" class="cancel-btn">Cancel</button>
             <button type="submit" class="submit-btn">Save Changes</button>
           </div>
         </form>
-      </div>
-    </div>
-
-    <!-- 项目详情弹窗 -->
-    <div v-if="showDetailsModal" class="modal-overlay app-modal-viewport app-modal-backdrop" @click="closeDetailsModal">
-      <div class="app-modal project-modal" @click.stop>
-        <div class="modal-header app-modal-header">
-          <h3>Project Details</h3>
-          <button @click="closeDetailsModal" class="close-btn app-modal-close">×</button>
-        </div>
-        <div class="project-details app-modal-body">
-          <div class="detail-item">
-            <strong>Project Name:</strong> {{ selectedProject?.name }}
-          </div>
-          <div class="detail-item">
-            <strong>Project ID:</strong> {{ selectedProject?.id }}
-          </div>
-          <div class="detail-item">
-            <strong>Creator:</strong> {{ selectedProject?.creator || 'Unknown' }}
-          </div>
-          <div class="detail-item">
-            <strong>Your Access:</strong> {{ accessRoleLabel(selectedProject?.access_role) }}
-          </div>
-          <div class="detail-item">
-            <strong>Created:</strong> {{ formatDate(selectedProject?.created_at) }}
-          </div>
-          <div class="detail-item">
-            <strong>Last Accessed:</strong> {{ formatDate(selectedProject?.last_accessed) }}
-          </div>
-          <div v-if="selectedProject?.description" class="detail-item">
-            <strong>Project Description:</strong> 
-            <p class="description-text">{{ selectedProject.description }}</p>
-          </div>
-          <div class="detail-actions">
-            <button @click="openWorkspace(selectedProject?.id)" class="primary-btn">Open Project</button>
-            <button v-if="canManageProject(selectedProject)" @click="openMembersModal(selectedProject)" class="secondary-btn">Manage Access</button>
-            <button v-if="canManageProject(selectedProject)" @click="openEditModal(selectedProject)" class="secondary-btn">Edit Information</button>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -277,6 +262,8 @@ import { ref, onMounted, computed, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import { authState } from '../lib/auth'
 import PageHeader from '../components/ui/PageHeader.vue'
+import Icon from '../components/ui/Icon.vue'
+import { WORKFLOW_OPTIONS, workflowLabel } from '../lib/workflowUi.js'
 
 const projects = ref([]);
 const router = useRouter();
@@ -284,19 +271,22 @@ const router = useRouter();
 // 弹窗状态
 const showCreateModal = ref(false);
 const showEditModal = ref(false);
-const showDetailsModal = ref(false);
 const showMembersModal = ref(false);
+const projectsLoading = ref(true);
+const creatingProject = ref(false);
+const pageError = ref('');
+const createError = ref('');
+const editError = ref('');
+const workflowOptions = WORKFLOW_OPTIONS;
 
 // 项目数据
 const newProject = ref({
   name: '',
-  creator: authState.user?.display_name || authState.user?.username || '',
   description: '',
   analysis_workflow: 'appam-smk'
 });
 
 const editingProject = ref({});
-const selectedProject = ref(null);
 const membersProject = ref(null);
 const projectMembers = ref([]);
 const userDirectory = ref([]);
@@ -312,6 +302,7 @@ const sortBy = ref('last_accessed');
 const sortOrder = ref('desc');
 const viewMode = ref('grid');
 const userDisplayName = computed(() => authState.user?.display_name || authState.user?.username || 'Unknown')
+const workflowName = (workflowId) => workflowLabel(workflowId, 'Not selected')
 const availableUsers = computed(() => {
   const existing = new Set(projectMembers.value.map((member) => member.user_id))
   return userDirectory.value.filter((user) => !existing.has(user.id))
@@ -380,24 +371,29 @@ const accessRoleLabel = (role) => {
 }
 
 const fetchProjects = async () => {
+  projectsLoading.value = true;
+  pageError.value = '';
   try {
     const response = await fetch('/api/projects/');
     if (!response.ok) throw new Error('Failed to fetch projects');
     projects.value = await response.json();
   } catch (error) {
     console.error('Error fetching projects:', error);
+    pageError.value = error.message || 'Projects could not be loaded.';
+  } finally {
+    projectsLoading.value = false;
   }
 };
 
 const createProject = async () => {
   if (!newProject.value.name.trim()) return;
-  
+  createError.value = '';
+  creatingProject.value = true;
   try {
-    const { analysis_workflow, ...projectPayload } = newProject.value;
     const response = await fetch('/api/projects/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(projectPayload)
+      body: JSON.stringify(newProject.value)
     });
     const createdProject = await response.json();
     if (!response.ok) {
@@ -405,22 +401,33 @@ const createProject = async () => {
     }
     projects.value.unshift(createdProject);
     closeCreateModal();
-    if (analysis_workflow) {
-      router.push({ name: 'WorkflowView', params: { id: createdProject.id, workflowId: analysis_workflow } });
+    if (createdProject.analysis_workflow) {
+      router.push({
+        name: 'WorkflowView',
+        params: { id: createdProject.id, workflowId: createdProject.analysis_workflow },
+      });
     } else {
       router.push({ name: 'Overview', params: { id: createdProject.id } });
     }
   } catch (error) {
     console.error('Error creating project:', error);
+    createError.value = error.message || 'The project could not be created.';
+  } finally {
+    creatingProject.value = false;
   }
 };
 
 const updateProject = async () => {
+  editError.value = '';
   try {
     const response = await fetch(`/api/projects/${editingProject.value.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(editingProject.value)
+      body: JSON.stringify({
+        name: editingProject.value.name,
+        description: editingProject.value.description,
+        analysis_workflow: editingProject.value.analysis_workflow || '',
+      })
     });
     
     if (response.ok) {
@@ -432,10 +439,12 @@ const updateProject = async () => {
       }
       closeEditModal();
     } else {
-      console.error('Failed to update project');
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error || 'Failed to update project');
     }
   } catch (error) {
     console.error('Error updating project:', error);
+    editError.value = error.message || 'The project could not be updated.';
   }
 };
 
@@ -444,10 +453,15 @@ const deleteProject = async (id) => {
   if (!project) return;
   if (!confirm('Are you sure you want to delete this project and all related data?')) return;
   try {
-    await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+    const response = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error || 'The project could not be deleted.');
+    }
     projects.value = projects.value.filter(p => p.id !== id);
   } catch (error) {
     console.error('Error deleting project:', error);
+    pageError.value = error.message || 'The project could not be deleted.';
   }
 };
 
@@ -480,7 +494,6 @@ const openMembersModal = async (project) => {
   memberForm.user_id = ''
   memberForm.role = 'viewer'
   showMembersModal.value = true
-  showDetailsModal.value = false
   try {
     await Promise.all([
       fetchProjectMembers(project.id),
@@ -583,20 +596,16 @@ const closeCreateModal = () => {
   showCreateModal.value = false;
   newProject.value = {
     name: '',
-    creator: authState.user?.display_name || authState.user?.username || '',
     description: '',
     analysis_workflow: 'appam-smk'
   };
+  createError.value = '';
 };
 
 const closeEditModal = () => {
   showEditModal.value = false;
   editingProject.value = {};
-};
-
-const closeDetailsModal = () => {
-  showDetailsModal.value = false;
-  selectedProject.value = null;
+  editError.value = '';
 };
 
 const openEditModal = (project) => {
@@ -604,12 +613,6 @@ const openEditModal = (project) => {
     ...project
   };
   showEditModal.value = true;
-  showDetailsModal.value = false;
-};
-
-const showProjectDetails = (project) => {
-  selectedProject.value = project;
-  showDetailsModal.value = true;
 };
 
 // 日期格式化
@@ -625,10 +628,7 @@ const formatDate = (dateString) => {
   });
 };
 
-onMounted(() => {
-  newProject.value.creator = authState.user?.display_name || authState.user?.username || ''
-  fetchProjects()
-});
+onMounted(fetchProjects);
 </script>
 
 <style scoped>
@@ -868,6 +868,29 @@ onMounted(() => {
   font-size: 0.9rem;
 }
 
+.page-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-4);
+  margin-bottom: var(--spacing-4);
+  padding: var(--spacing-3) var(--spacing-4);
+  border: 1px solid rgba(220, 38, 38, 0.22);
+  border-radius: var(--radius-sm);
+  background: var(--error-50);
+  color: var(--error-600);
+  font-size: var(--text-sm);
+}
+
+.page-notice button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+}
+
 .empty-create-btn {
   background: var(--gradient-primary);
   color: white;
@@ -996,6 +1019,18 @@ onMounted(() => {
   -webkit-box-orient: vertical;
 }
 
+.workflow-badge {
+  display: inline-flex;
+  width: fit-content;
+  margin-bottom: var(--spacing-2);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-50);
+  color: var(--primary-700);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+}
+
 .project-actions {
   display: flex;
   gap: 10px;
@@ -1092,7 +1127,8 @@ onMounted(() => {
 }
 
 .form-group input,
-.form-group textarea {
+.form-group textarea,
+.form-group select {
   width: 100%;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
@@ -1104,7 +1140,8 @@ onMounted(() => {
 }
 
 .form-group input:focus,
-.form-group textarea:focus {
+.form-group textarea:focus,
+.form-group select:focus {
   outline: none;
   border-color: var(--primary-500);
   box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.16);
@@ -1123,9 +1160,10 @@ onMounted(() => {
 
 .analysis-picker label {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  min-height: 38px;
+  justify-content: flex-start;
+  min-height: 76px;
   margin: 0;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -1134,12 +1172,38 @@ onMounted(() => {
   font-size: var(--text-sm);
   font-weight: var(--font-semibold);
   cursor: pointer;
+  padding: var(--spacing-3);
+}
+
+.analysis-picker label small {
+  color: var(--gray-500);
+  font-size: var(--text-xs);
+  font-weight: var(--font-normal);
+  line-height: 1.35;
 }
 
 .analysis-picker label.active {
   border-color: rgba(var(--accent-rgb), 0.3);
   background: rgba(var(--accent-rgb), 0.08);
   color: var(--primary-700);
+}
+
+.analysis-picker label.active small {
+  color: var(--primary-600);
+}
+
+.form-error {
+  margin: 0;
+  padding: var(--spacing-3);
+  border-radius: var(--radius-sm);
+  background: var(--error-50);
+  color: var(--error-600);
+  font-size: var(--text-sm);
+}
+
+.submit-btn:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .analysis-picker input {

@@ -1,6 +1,7 @@
 <template>
   <div class="admin-users">
     <div class="admin-users__shell">
+      <AdminNav active="users" />
       <header class="admin-users__header">
         <div>
           <span class="admin-users__label">Administration</span>
@@ -183,6 +184,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { authState, setCurrentUser } from '../lib/auth'
+import AdminNav from '../components/AdminNav.vue'
 
 const users = ref([])
 const searchQuery = ref('')

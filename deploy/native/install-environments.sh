@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+ENV_DIR="${REPO_ROOT}/docker/tools/environments"
+RUNNER="${APPAM_ENV_RUNNER:-mamba}"
+METAWRAP_ROOT="${APPAM_METAWRAP_ROOT:-${HOME}/.local/share/appam/metaWRAP}"
+METAWRAP_REPO="https://github.com/bxlab/metaWRAP.git"
+METAWRAP_REF="c4a23f0fff872abe3cafb63767dc592a8361331b"
+WITH_PALEO=false
+UPDATE=false
+
+usage() {
+  printf 'Usage: %s [--with-paleoproteomics] [--update]\n' "$0"
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --with-paleoproteomics) WITH_PALEO=true ;;
+    --update) UPDATE=true ;;
+    -h|--help) usage; exit 0 ;;
+    *) printf 'Unknown option: %s\n' "$1" >&2; usage >&2; exit 2 ;;
+  esac
+  shift
+done
+
+if ! command -v "${RUNNER}" >/dev/null 2>&1; then
+  printf 'Environment runner not found: %s\n' "${RUNNER}" >&2
+  exit 1
+fi
+
+environment_exists() {
+  "${RUNNER}" env list --json | python3 -c \
+    'import json,sys; name=sys.argv[1]; data=json.load(sys.stdin); raise SystemExit(0 if any(p.rstrip("/").split("/")[-1] == name for p in data.get("envs", [])) else 1)' "$1"
+}
+
+install_environment() {
+  local spec="$1"
+  local name
+  name="$(sed -n 's/^name:[[:space:]]*//p' "${spec}" | head -n 1)"
+  if [[ -z "${name}" ]]; then
+    printf 'Environment file has no name: %s\n' "${spec}" >&2
+    exit 1
+  fi
+  if environment_exists "${name}"; then
+    if [[ "${UPDATE}" == true ]]; then
+      "${RUNNER}" env update -n "${name}" -f "${spec}" --prune
+    else
+      printf '[skip] environment exists: %s\n' "${name}"
+    fi
+  else
+    "${RUNNER}" env create -f "${spec}"
+  fi
+}
+
+for spec in "${ENV_DIR}"/*.yml; do
+  install_environment "${spec}"
+done
+
+if environment_exists appam-backend; then
+  if [[ "${UPDATE}" == true ]]; then
+    "${RUNNER}" install -y -n appam-backend -c conda-forge python=3.12 pip conda
+  fi
+else
+  "${RUNNER}" create -y -n appam-backend -c conda-forge python=3.12 pip conda
+fi
+"${RUNNER}" run -n appam-backend python -m pip install --requirement "${REPO_ROOT}/backend/requirements.txt"
+
+if environment_exists appam-web; then
+  if [[ "${UPDATE}" == true ]]; then
+    "${RUNNER}" install -y -n appam-web -c conda-forge 'nodejs=24.16.0'
+  fi
+else
+  "${RUNNER}" create -y -n appam-web -c conda-forge 'nodejs=24.16.0'
+fi
+"${RUNNER}" run -n appam-web npm install --global --no-audit --no-fund pnpm@11.7.0
+
+mkdir -p "$(dirname "${METAWRAP_ROOT}")"
+if [[ ! -d "${METAWRAP_ROOT}/.git" ]]; then
+  git clone "${METAWRAP_REPO}" "${METAWRAP_ROOT}"
+fi
+git -C "${METAWRAP_ROOT}" fetch --tags origin
+git -C "${METAWRAP_ROOT}" checkout --detach "${METAWRAP_REF}"
+
+mkdir -p "${HOME}/.local/bin"
+install -m 0755 "${REPO_ROOT}/docker/tools/tool-wrapper.sh" "${HOME}/.local/bin/appam-tool"
+for name in \
+  fastp fastqc multiqc adapterremoval AdapterRemoval bwa bowtie2 samtools bedtools \
+  pmdtools pmdtools.py pydamage krakenuniq krona ktImportText ktImportTaxonomy \
+  megahit spades spades.py quast quast.py seqkit \
+  freebayes bcftools metabat2 maxbin2 run_MaxBin.pl concoct gunc checkm checkm2 \
+  metawrap metawrap-mg jgi_summarize_bam_contig_depths cut_up_fasta.py \
+  concoct_coverage_table.py merge_cutup_clustering.py prokka emapper.py rgi \
+  abricate gtdb-tk gtdbtk antismash; do
+  ln -sfn appam-tool "${HOME}/.local/bin/${name}"
+done
+
+if [[ "${WITH_PALEO}" == true ]]; then
+  install_environment "${REPO_ROOT}/appam-paleoproteomics-main/docker/environment.yml"
+  "${RUNNER}" install -y -n paleoproteomics -c bioconda -c conda-forge openms
+  "${RUNNER}" run -n paleoproteomics python -m pip install \
+    --requirement "${REPO_ROOT}/appam-paleoproteomics-main/docker/requirements-pypi.txt"
+  "${RUNNER}" run -n paleoproteomics python -m pip install --no-deps \
+    'git+https://github.com/gtluu/pyimzML.git@fe24388984aa96a18ef2ed54927ec05d6701cc04' \
+    'git+https://github.com/gtluu/pyTDFSDK.git@4808da81d3e37f82da96f392dbb446c3733edacb' \
+    'git+https://github.com/gtluu/pyBaf2Sql.git@06bb37fa3168b113c73b22d1d85fb4203bb83fb9' \
+    'git+https://github.com/gtluu/timsconvert.git@c8bbfd98251e07e24522220fd4309e37eea4d7a9'
+fi
+
+printf '\nEnvironment installation finished.\n'
+printf 'MetaWRAP: %s\n' "${METAWRAP_ROOT}"
+printf 'Next: %s/render-env.sh --help\n' "${SCRIPT_DIR}"

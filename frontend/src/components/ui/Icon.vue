@@ -19,10 +19,10 @@ import {
   MemoryStick, MessageCircle, Minimize2, Pencil, Plus, RotateCcw, Save,
   Scissors, Search, Table, Target, Trash2, TriangleAlert, Users, WandSparkles,
   Wrench, WrapText, X, Zap, ZoomIn, ZoomOut,
-} from 'lucide-vue-next'
+} from '@lucide/vue'
 
 /**
- * 统一图标封装,基于 lucide-vue-next。
+ * 统一图标封装,基于 @lucide/vue。
  * 用法:<Icon name="folder" /> 或 <Icon name="Folder" />,接受 kebab-case 或 PascalCase。
  * 仅显式引入实际用到的图标以便 tree-shaking;新增图标时在下方 registry 注册即可。
  * 替代散落的 emoji 与 inline SVG,不改动任何业务逻辑。

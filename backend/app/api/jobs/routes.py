@@ -2,7 +2,7 @@ import os
 
 from flask import Blueprint, jsonify, request
 
-from app.auth import get_project_for_user, project_role_at_least
+from app.auth import current_user, get_project_for_user, project_role_at_least
 from app.services.job_queue import cancel_enqueued_job
 from app.services.job_store import (
     get_job,
@@ -29,7 +29,7 @@ def list_jobs_endpoint():
         return jsonify({'error': 'project_id is required'}), 400
     if not _project_for_job_access(project_id, min_role='viewer'):
         return jsonify({'error': 'Project not found'}), 404
-    limit = request.args.get('limit', 20, type=int)
+    limit = min(max(request.args.get('limit', 20, type=int) or 20, 1), 200)
     status = request.args.get('status')
     jobs = list_jobs(project_id, limit=limit, status=status)
     return jsonify({'jobs': jobs})
@@ -53,16 +53,28 @@ def get_job_logs(job_id):
     if not _project_for_job_access(job.get('project_id'), min_role='viewer'):
         return jsonify({'error': 'Job not found'}), 404
 
-    offset = request.args.get('offset', 0, type=int)
-    limit = request.args.get('limit', 65536, type=int)
+    offset = max(request.args.get('offset', 0, type=int) or 0, 0)
+    limit = min(max(request.args.get('limit', 65536, type=int) or 65536, 1), 1024 * 1024)
+    tail = min(max(request.args.get('tail', 0, type=int) or 0, 0), 1024 * 1024)
     log_path = job.get('log_path')
     if not log_path or not os.path.exists(log_path):
         return jsonify({
             'job_id': job_id,
             'offset': offset,
             'content': '',
-            'status': job.get('status')
+            'status': job.get('status'),
+            'size': 0,
+            'eof': True,
+            'reset': False,
         })
+
+    file_size = os.path.getsize(log_path)
+    reset = offset > file_size
+    if tail:
+        offset = max(0, file_size - tail)
+        reset = True
+    elif reset:
+        offset = 0
 
     with open(log_path, 'rb') as log_file:
         log_file.seek(offset)
@@ -74,7 +86,10 @@ def get_job_logs(job_id):
         'job_id': job_id,
         'offset': new_offset,
         'content': content,
-        'status': job.get('status')
+        'status': job.get('status'),
+        'size': file_size,
+        'eof': new_offset >= file_size,
+        'reset': reset,
     })
 
 
@@ -88,6 +103,10 @@ def cancel_job(job_id):
         return jsonify({'error': 'Job not found'}), 404
     if not project_role_at_least(project.get('access_role'), 'editor'):
         return jsonify({'error': 'Project write access required'}), 403
+    user = current_user() or {}
+    can_cancel_project_jobs = project_role_at_least(project.get('access_role'), 'owner')
+    if not can_cancel_project_jobs and job.get('submitted_by') != user.get('id'):
+        return jsonify({'error': 'Editors can only cancel jobs they submitted'}), 403
     if job.get('status') not in ('queued', 'starting', 'running'):
         return jsonify({'error': 'Job is not running'}), 400
     if job.get('status') == 'queued':

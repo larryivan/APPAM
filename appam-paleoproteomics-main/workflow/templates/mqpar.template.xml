@@ -123,7 +123,7 @@
    <variationMode>none</variationMode>
    <useSeriesReporters>False</useSeriesReporters>
    <name>Appam paleoproteomics MaxQuant template</name>
-   <maxQuantVersion>2.7.5.0</maxQuantVersion>
+   <maxQuantVersion>2.8.1.0</maxQuantVersion>
    <tempFolder></tempFolder>
    <pluginFolder></pluginFolder>
    <numThreads>4</numThreads>

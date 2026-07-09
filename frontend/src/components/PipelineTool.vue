@@ -16,6 +16,7 @@
             <div class="tool-meta">
               <span class="meta-badge kind">{{ tool.kind === 'workflow' ? 'Workflow' : 'Tool' }}</span>
               <span v-if="tool.section_title" class="meta-badge section">{{ tool.section_title }}</span>
+              <span v-if="tool.available === false" class="meta-badge unavailable" :title="tool.availability_message">Unavailable</span>
             </div>
             <p :title="tool.description">{{ tool.description }}</p>
           </div>
@@ -51,7 +52,8 @@
             </h4>
             <div class="form-header-actions">
               <div class="param-count">{{ tool.parameters.length }}</div>
-              <button 
+              <button
+                v-if="parameterFillAvailable"
                 @click="openParameterSuggestions"
                 class="smart-fill-btn"
                 :class="{ loading: isParameterFilling }"
@@ -125,7 +127,7 @@
               </div>
               
               <!-- Directory input type -->
-              <div v-else-if="param.type === 'directory'" class="file-input-container">
+              <div v-else-if="param.type === 'directory' && param.path_role !== 'output'" class="file-input-container">
                 <div v-if="param.multiple && Array.isArray(formValues[param.name])" class="file-list">
                   <div v-for="(dir, index) in formValues[param.name]" :key="index" class="selected-file">
                     <div class="file-info">
@@ -210,10 +212,12 @@
                 <input 
                   :type="param.type === 'integer' ? 'number' : param.type === 'float' ? 'number' : 'text'"
                   :step="param.type === 'float' ? '0.01' : param.type === 'integer' ? '1' : undefined"
+                  :min="param.minimum"
+                  :max="param.maximum"
                   :id="param.name"
                   v-model="formValues[param.name]"
                   class="param-input"
-                  :placeholder="param.default || 'Input' + param.name"
+                  :placeholder="param.default ?? ('Input ' + param.name)"
                 />
                 <div class="input-icon">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -241,7 +245,12 @@
         </div>
         
         <!-- 运行按钮 -->
-        <button @click="runTool" class="run-button" :disabled="['starting', 'running', 'queued'].includes(taskStatus)">
+        <button
+          @click="runTool"
+          class="run-button"
+          :disabled="runDisabled"
+          :title="tool.available === false ? tool.availability_message : hasMissingRequiredParameters ? 'Complete the required parameters first' : runButtonLabel"
+        >
           <div class="button-content">
             <svg v-if="taskStatus === 'starting' || taskStatus === 'running'" class="spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 12a9 9 0 1 1-9-9c4.97 0 9 4.03 9 9z"></path>
@@ -413,6 +422,7 @@ const toolLibrary = ref({});
 
 // 参数填充相关状态
 const isParameterFilling = ref(false);
+const parameterFillAvailable = ref(false);
 
 const showSuggestionModal = ref(false);
 const suggestionPayload = ref(null);
@@ -544,16 +554,16 @@ const updateTool = () => {
       if (p.type === 'file' || p.type === 'directory') {
         formValues.value[p.name] = p.multiple ? [] : '';
       } else if (p.type === 'flag') {
-        formValues.value[p.name] = p.default || false;
+        formValues.value[p.name] = p.default ?? false;
       } else if (p.options && p.options.length > 0) {
         // For parameters with options, use default if specified and valid, otherwise use first option
-        if (p.default && p.options.includes(p.default)) {
+        if (p.default !== undefined && p.default !== null && p.options.includes(p.default)) {
           formValues.value[p.name] = p.default;
         } else {
           formValues.value[p.name] = p.options[0];
         }
       } else {
-        formValues.value[p.name] = p.default || '';
+        formValues.value[p.name] = p.default ?? '';
       }
     });
     
@@ -595,24 +605,57 @@ const runTool = async () => {
   allLogs.value = []; // Clear previous logs
   stopLogPolling();
 
-  const response = await fetch(`/api/pipeline/${route.params.id}/run/${encodeURIComponent(tool.value.id)}`,
-  {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(formValues.value)
-  });
-  const result = await response.json();
-  
-  if(response.ok) {
-    currentJobId.value = result.job_id || null;
-    logOffset.value = 0;
-    taskStatus.value = result.status || 'queued';
-    allLogs.value.push({ data: `[SYSTEM] Queued job: ${result.job_id}` });
-    startLogPolling();
-  } else {
-    allLogs.value.push({ data: `[SYSTEM] Error: ${result.error || 'Failed to start task'}` });
+  if (hasMissingRequiredParameters.value) {
+    allLogs.value.push({ data: '[SYSTEM] Error: Complete the required parameters before running.' });
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/pipeline/${route.params.id}/run/${encodeURIComponent(tool.value.id)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formValues.value)
+    });
+    const result = await response.json();
+
+    if (response.ok) {
+      currentJobId.value = result.job_id || null;
+      logOffset.value = 0;
+      taskStatus.value = result.status || 'queued';
+      allLogs.value.push({ data: `[SYSTEM] Queued job: ${result.job_id}` });
+      startLogPolling();
+    } else {
+      const details = Array.isArray(result.details) && result.details.length
+        ? ` ${result.details.join('; ')}`
+        : '';
+      allLogs.value.push({ data: `[SYSTEM] Error: ${result.error || 'Failed to start task'}.${details}` });
+    }
+  } catch (error) {
+    taskStatus.value = 'error';
+    allLogs.value.push({ data: `[SYSTEM] Error: ${error.message || 'Backend is unavailable.'}` });
   }
 };
+
+const hasFormValue = (value) => Array.isArray(value)
+  ? value.length > 0
+  : value !== null && value !== undefined && value !== '';
+
+const hasMissingRequiredParameters = computed(() => {
+  if (!tool.value) return true;
+  const missingExplicit = tool.value.parameters.some(
+    (parameter) => parameter.required && !hasFormValue(formValues.value[parameter.name])
+  );
+  const requiredAny = tool.value.required_any || [];
+  const missingRequiredGroup = requiredAny.length > 0
+    && !requiredAny.some((name) => hasFormValue(formValues.value[name]));
+  return missingExplicit || missingRequiredGroup;
+});
+
+const runDisabled = computed(() => (
+  ['starting', 'running', 'queued'].includes(taskStatus.value)
+  || hasMissingRequiredParameters.value
+  || tool.value?.available === false
+));
 
 const runButtonLabel = computed(() => {
   if (!tool.value) {
@@ -689,6 +732,9 @@ const getStatusText = () => {
 };
 
 const getParamTypeDisplay = (param) => {
+  if (param.path_role === 'output') {
+    return 'Output path';
+  }
   if (param.options && param.options.length > 0) {
     return '选择项';
   }
@@ -807,25 +853,11 @@ const suggestionEntries = computed(() => {
 });
 
 const openParameterSuggestions = async () => {
-  if (!tool.value) return;
+  if (!tool.value || !parameterFillAvailable.value) return;
   
   isParameterFilling.value = true;
   
   try {
-    // 准备工具参数schema
-    const toolParameters = {};
-    tool.value.parameters.forEach(param => {
-      toolParameters[param.name] = {
-        type: param.type,
-        description: param.description,
-        required: param.required || false,
-        default: param.default,
-        extensions: param.extensions,
-        multiple: param.multiple
-      };
-    });
-    
-    // 调用参数填充API
     const response = await fetch('/api/parameter-fill/suggest', {
       method: 'POST',
       headers: {
@@ -833,9 +865,7 @@ const openParameterSuggestions = async () => {
       },
       body: JSON.stringify({
         tool_name: tool.value.tool_name,
-        tool_parameters: toolParameters,
-        project_id: route.params.id,
-        user_context: `用户正在配置${tool.value.tool_name}工具的参数`
+        project_id: route.params.id
       })
     });
     
@@ -905,20 +935,8 @@ const applyParameterSuggestions = () => {
 };
 
 const showParameterFillSuccess = (summary = '', warnings = []) => {
-  // Create a temporary success notification
   const successNotification = document.createElement('div');
   successNotification.className = 'parameter-fill-success';
-  
-  let warningsHtml = '';
-  if (warnings.length > 0) {
-    warningsHtml = `
-      <div class="warnings">
-        <small>Notes:</small>
-        ${warnings.map(w => `<small>• ${w}</small>`).join('')}
-      </div>
-    `;
-  }
-  
   successNotification.innerHTML = `
     <div class="success-content">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -926,12 +944,30 @@ const showParameterFillSuccess = (summary = '', warnings = []) => {
       </svg>
       <div class="message">
         <span>Parameter filling successful!</span>
-        ${summary ? `<small>${summary}</small>` : ''}
-        ${warningsHtml}
       </div>
     </div>
   `;
-  
+
+  const message = successNotification.querySelector('.message');
+  if (summary) {
+    const summaryElement = document.createElement('small');
+    summaryElement.textContent = String(summary);
+    message.appendChild(summaryElement);
+  }
+  if (Array.isArray(warnings) && warnings.length > 0) {
+    const warningList = document.createElement('div');
+    warningList.className = 'warnings';
+    const heading = document.createElement('small');
+    heading.textContent = 'Notes:';
+    warningList.appendChild(heading);
+    warnings.forEach((warning) => {
+      const warningElement = document.createElement('small');
+      warningElement.textContent = `• ${String(warning)}`;
+      warningList.appendChild(warningElement);
+    });
+    message.appendChild(warningList);
+  }
+
   document.body.appendChild(successNotification);
   
   // Auto-remove after 3 seconds
@@ -943,7 +979,6 @@ const showParameterFillSuccess = (summary = '', warnings = []) => {
 };
 
 const showParameterFillError = (errorMessage) => {
-  // 创建一个临时的错误提示
   const errorNotification = document.createElement('div');
   errorNotification.className = 'parameter-fill-error';
   errorNotification.innerHTML = `
@@ -955,11 +990,14 @@ const showParameterFillError = (errorMessage) => {
       </svg>
       <div class="message">
         <span>参数填充失败</span>
-        <small>${errorMessage}</small>
       </div>
     </div>
   `;
-  
+
+  const detail = document.createElement('small');
+  detail.textContent = String(errorMessage || 'Parameter suggestion service is unavailable.');
+  errorNotification.querySelector('.message').appendChild(detail);
+
   document.body.appendChild(errorNotification);
   
   // 5秒后自动移除
@@ -970,7 +1008,18 @@ const showParameterFillError = (errorMessage) => {
   }, 5000);
 };
 
+const checkParameterFillAvailability = async () => {
+  try {
+    const response = await fetch('/api/parameter-fill/health');
+    const payload = await response.json();
+    parameterFillAvailable.value = response.ok && payload.available === true;
+  } catch (error) {
+    parameterFillAvailable.value = false;
+  }
+};
+
 onMounted(() => {
+  checkParameterFillAvailability();
   fetchToolLibrary().then(() => {
     updateTool();
     checkTaskStatus();
@@ -1112,7 +1161,7 @@ html, body {
   border-radius: 999px;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0;
   white-space: nowrap;
 }
 
@@ -1125,6 +1174,12 @@ html, body {
   background: var(--surface-2);
   color: var(--gray-600);
   border: 1px solid var(--border-color-light);
+}
+
+.meta-badge.unavailable {
+  background: var(--warning-50, #fff7ed);
+  color: var(--warning-700, #9a3412);
+  border: 1px solid var(--warning-200, #fed7aa);
 }
 
 .tool-title h2 {

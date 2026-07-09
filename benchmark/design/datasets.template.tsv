@@ -1,0 +1,4 @@
+dataset_id	kind	source_url	accession	sha256	license	preservation_context	blank_included	partition	status	notes
+sim-low-damage	simulated	TBD	TBD	TBD	generated	in_silico	false	development	planned	Freeze simulator, seed, truth tables, and reads.
+empirical-context-a	empirical	TBD	TBD	TBD	TBD	TBD	true	test	planned	Independent biological dataset and extraction blank.
+empirical-context-b	empirical	TBD	TBD	TBD	TBD	TBD	true	test	planned	Different preservation context; no threshold tuning.

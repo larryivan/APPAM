@@ -6,3 +6,4 @@ dependencies:
   - megahit==1.2.9
   - spades==4.2.0
   - quast==5.3.0
+  - seqkit==2.8.2

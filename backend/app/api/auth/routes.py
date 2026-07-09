@@ -1,3 +1,5 @@
+import os
+
 from flask import Blueprint, jsonify, request
 
 from app.auth import admin_required, current_user, login_required, login_user, logout_user
@@ -22,9 +24,6 @@ auth_bp = Blueprint('auth', __name__)
 
 
 def _request_ip() -> str | None:
-    forwarded_for = request.headers.get('X-Forwarded-For', '')
-    if forwarded_for:
-        return forwarded_for.split(',')[0].strip()
     return request.remote_addr
 
 
@@ -43,13 +42,20 @@ def get_current_user_endpoint():
 
 @auth_bp.route('/auth/register', methods=['POST'])
 def register():
+    if os.getenv('APPAM_ALLOW_REGISTRATION', 'false').strip().lower() not in {'1', 'true', 'yes', 'on'}:
+        return jsonify({'error': 'Self-registration is disabled. Ask an administrator to create an account.'}), 403
     data = request.get_json() or {}
     username = data.get('username', '')
     password = data.get('password', '')
     display_name = data.get('display_name', '')
 
     try:
-        user = create_user(username=username, password=password, display_name=display_name)
+        role = 'user'
+        if os.getenv('APPAM_ALLOW_FIRST_USER_ADMIN', 'false').strip().lower() in {'1', 'true', 'yes', 'on'}:
+            from app.services.auth_service import count_users
+            if count_users() == 0:
+                role = 'admin'
+        user = create_user(username=username, password=password, display_name=display_name, role=role)
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 400
 
@@ -185,6 +191,22 @@ def search_users():
 def admin_list_users():
     search = request.args.get('search', '')
     return jsonify({'users': list_users(search=search)})
+
+
+@auth_bp.route('/admin/users', methods=['POST'])
+@admin_required
+def admin_create_user():
+    data = request.get_json() or {}
+    try:
+        user = create_user(
+            username=data.get('username', ''),
+            password=data.get('password', ''),
+            display_name=data.get('display_name', ''),
+            role=data.get('role', 'user'),
+        )
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    return jsonify({'message': 'User created.', 'user': user}), 201
 
 
 @auth_bp.route('/admin/users/<user_id>', methods=['GET'])

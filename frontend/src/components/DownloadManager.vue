@@ -29,7 +29,7 @@
             <polygon points="5 3 19 12 5 21 5 3"></polygon>
           </svg>
         </button>
-        <button @click="clearCompleted" class="control-btn" title="Clear Completed" v-if="completedDownloads > 0">
+        <button @click="clearCompleted" class="control-btn" title="Clear Finished" v-if="finishedDownloads > 0">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="3 6 5 6 21 6"></polyline>
             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -190,16 +190,10 @@
             <label>Download Link</label>
             <input 
               v-model="newDownloadUrl" 
-              placeholder="Enter download link (HTTP/HTTPS/FTP supported)" 
+              placeholder="https://example.org/data.fastq.gz"
               class="url-input"
               @keyup.enter="addDownload"
             />
-            <div class="url-help">
-              <small>
-                Supported protocols: HTTP, HTTPS, FTP<br/>
-                Examples: https://example.com/file.zip or ftp://ftp.example.com/path/file.gz
-              </small>
-            </div>
           </div>
           <div class="input-group">
             <label>Filename (Optional)</label>
@@ -213,11 +207,8 @@
             <label class="checkbox-label">
               <input type="checkbox" v-model="enableConcurrentDownload" />
               <span class="checkmark"></span>
-              Enable multi-threaded download (for HTTP/HTTPS large files)
+              Enable multi-threaded download for large files
             </label>
-            <div class="options-help">
-              <small>Note: FTP protocol currently only supports single-threaded downloads, but supports resume functionality</small>
-            </div>
           </div>
         </div>
         <div class="modal-footer app-modal-footer">
@@ -256,17 +247,29 @@ const showAddUrlModal = ref(false)
 const newDownloadUrl = ref('')
 const newDownloadFilename = ref('')
 const enableConcurrentDownload = ref(true)
+const pollTimers = new Map()
 
 // 下载状态统计
 const activeDownloads = computed(() => 
-  downloadTasks.value.filter(task => task.status === 'downloading').length
+  downloadTasks.value.filter(task => ['preparing', 'downloading'].includes(task.status)).length
 )
 const pausedDownloads = computed(() => 
   downloadTasks.value.filter(task => task.status === 'paused').length
 )
-const completedDownloads = computed(() => 
-  downloadTasks.value.filter(task => task.status === 'completed').length
+const finishedDownloads = computed(() =>
+  downloadTasks.value.filter(task => ['completed', 'error', 'cancelled'].includes(task.status)).length
 )
+
+const clearPollTimer = (taskId) => {
+  const timer = pollTimers.get(taskId)
+  if (timer) window.clearTimeout(timer)
+  pollTimers.delete(taskId)
+}
+
+const schedulePoll = (taskId, delay = 1000) => {
+  clearPollTimer(taskId)
+  pollTimers.set(taskId, window.setTimeout(() => pollDownloadProgress(taskId), delay))
+}
 
 // 方法
 const addDownload = async () => {
@@ -287,6 +290,7 @@ const addDownload = async () => {
     speed: 0,
     timeRemaining: null,
     startTime: Date.now(),
+    path: props.currentPath,
     concurrent: isFtp ? false : enableConcurrentDownload.value  // Force single-threaded for FTP
   }
   
@@ -311,18 +315,19 @@ const startDownload = async (taskId) => {
       body: JSON.stringify({
         url: task.url,
         filename: task.filename,
-        path: props.currentPath,
-        concurrent: task.concurrent,
-        task_id: taskId
+        path: task.path || props.currentPath,
+        concurrent: task.concurrent
       })
     })
-    
+
+    const payload = await response.json()
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      throw new Error(payload.error || `HTTP error! status: ${response.status}`)
     }
-    
+
+    task.id = payload.task_id
     // 开始轮询下载进度
-    pollDownloadProgress(taskId)
+    pollDownloadProgress(payload.task_id)
     
   } catch (error) {
     console.error('Download error:', error)
@@ -333,7 +338,10 @@ const startDownload = async (taskId) => {
 
 const pollDownloadProgress = async (taskId) => {
   const task = downloadTasks.value.find(t => t.id === taskId)
-  if (!task || task.status === 'completed' || task.status === 'error') return
+  if (!task || ['completed', 'error', 'cancelled', 'paused'].includes(task.status)) {
+    clearPollTimer(taskId)
+    return
+  }
   
   try {
     const response = await fetch(`/api/filemanager/${props.projectId}/download-progress/${taskId}`)
@@ -353,23 +361,25 @@ const pollDownloadProgress = async (taskId) => {
     
     if (task.status === 'completed') {
       emit('file-downloaded', task.filename)
-    } else if (task.status === 'downloading' || task.status === 'paused' || task.status === 'preparing') {
-      setTimeout(() => pollDownloadProgress(taskId), 1000)
+    } else if (task.status === 'downloading' || task.status === 'preparing') {
+      schedulePoll(taskId)
     }
     
   } catch (error) {
     console.error('Progress polling error:', error)
-    setTimeout(() => pollDownloadProgress(taskId), 2000)
+    schedulePoll(taskId, 2000)
   }
 }
 
 const pauseDownload = async (taskId) => {
   try {
-    await fetch(`/api/filemanager/${props.projectId}/download-pause/${taskId}`, {
+    const response = await fetch(`/api/filemanager/${props.projectId}/download-pause/${taskId}`, {
       method: 'POST'
     })
+    if (!response.ok) throw new Error('Failed to pause download')
     const task = downloadTasks.value.find(t => t.id === taskId)
     if (task) task.status = 'paused'
+    clearPollTimer(taskId)
   } catch (error) {
     console.error('Pause error:', error)
   }
@@ -377,9 +387,11 @@ const pauseDownload = async (taskId) => {
 
 const resumeDownload = async (taskId) => {
   try {
-    await fetch(`/api/filemanager/${props.projectId}/download-resume/${taskId}`, {
+    const response = await fetch(`/api/filemanager/${props.projectId}/download-resume/${taskId}`, {
       method: 'POST'
     })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(payload.error || 'Failed to resume download')
     const task = downloadTasks.value.find(t => t.id === taskId)
     if (task) {
       task.status = 'downloading'
@@ -393,6 +405,8 @@ const resumeDownload = async (taskId) => {
 const retryDownload = async (taskId) => {
   const task = downloadTasks.value.find(t => t.id === taskId)
   if (task) {
+    await fetch(`/api/filemanager/${props.projectId}/download-cancel/${taskId}`, { method: 'POST' })
+    clearPollTimer(taskId)
     task.status = 'preparing'
     task.progress = 0
     task.downloadedSize = 0
@@ -409,6 +423,7 @@ const removeDownload = async (taskId) => {
   } catch (error) {
     console.error('Cancel error:', error)
   } finally {
+    clearPollTimer(taskId)
     const index = downloadTasks.value.findIndex(t => t.id === taskId)
     if (index > -1) downloadTasks.value.splice(index, 1)
   }
@@ -426,8 +441,19 @@ const resumeAll = () => {
     .forEach(task => resumeDownload(task.id))
 }
 
-const clearCompleted = () => {
-  downloadTasks.value = downloadTasks.value.filter(task => task.status !== 'completed')
+const clearCompleted = async () => {
+  try {
+    const response = await fetch(`/api/filemanager/${props.projectId}/download-cleanup`, { method: 'POST' })
+    if (!response.ok) throw new Error('Failed to clear download history')
+    downloadTasks.value
+      .filter(task => ['completed', 'error', 'cancelled'].includes(task.status))
+      .forEach(task => clearPollTimer(task.id))
+    downloadTasks.value = downloadTasks.value.filter(
+      task => !['completed', 'error', 'cancelled'].includes(task.status)
+    )
+  } catch (error) {
+    console.error('Download cleanup error:', error)
+  }
 }
 
 const openFile = (task) => {
@@ -491,6 +517,7 @@ const getProgressText = (task) => {
       return 'Downloading'
     case 'paused': return 'Paused'
     case 'completed': return 'Completed'
+    case 'cancelled': return 'Cancelled'
     case 'error': return task.error || 'Download failed'
     default: return 'Unknown status'
   }
@@ -513,14 +540,16 @@ const loadExistingDownloads = async () => {
         totalSize: task.total_size || 0,
         speed: task.speed || 0,
         timeRemaining: task.time_remaining ?? null,
-        error: task.error || null
+        error: task.error || null,
+        path: task.path || props.currentPath,
+        concurrent: task.concurrent !== false
       }))
       .filter(task => task.id)
 
     downloadTasks.value = tasks
 
     tasks.forEach(task => {
-      if (task.status !== 'completed' && task.status !== 'error') {
+      if (task.status === 'downloading' || task.status === 'preparing') {
         pollDownloadProgress(task.id)
       }
     })
@@ -535,7 +564,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  // Clean up timers
+  pollTimers.forEach(timer => window.clearTimeout(timer))
+  pollTimers.clear()
 })
 </script>
 

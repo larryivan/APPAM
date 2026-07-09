@@ -15,11 +15,11 @@
           <span class="status-dot"></span>
           <span>{{ statusText }}</span>
         </div>
-        <button class="hero-btn primary" @click="handleOneClickDryRun" :disabled="disableRunActions || !hasInputSetup">
-          Prepare + Dry Run
+        <button class="hero-btn primary" @click="handleOneClickRun" :disabled="disableRunActions || !hasReadyInputs">
+          {{ startButtonLabel }}
         </button>
         <button class="hero-btn secondary" @click="openRunDialog" :disabled="disableRunActions">
-          Run...
+          Customize
         </button>
         <button
           v-if="activeWorkflowRun"
@@ -33,6 +33,7 @@
           <summary class="hero-btn subtle icon-only" aria-label="More actions">···</summary>
           <div class="workflow-more-menu">
             <button class="more-menu-item" @click="safeRefresh" :disabled="loadingState">Refresh</button>
+            <button class="more-menu-item" @click="handleOneClickDryRun" :disabled="disableRunActions">Validate setup only</button>
             <button class="more-menu-item" @click="handleResume" :disabled="!canResumeRun">Resume</button>
             <button class="more-menu-item" @click="safeFetchHealth" :disabled="loadingState">Runtime Health</button>
             <button class="more-menu-item" @click="handleTemplate" :disabled="loadingState">Create Template</button>
@@ -44,7 +45,14 @@
     </header>
 
     <div v-if="actionError" class="workflow-banner error">
-      {{ actionError }}
+      <div class="workflow-banner-copy">
+        <strong>{{ actionError }}</strong>
+        <span v-if="actionErrorHint">{{ actionErrorHint }}</span>
+      </div>
+      <details v-if="actionErrorDetails" class="error-details">
+        <summary>Technical details</summary>
+        <pre>{{ actionErrorDetails }}</pre>
+      </details>
     </div>
 
     <div v-if="busyByOtherJob" class="workflow-banner warning">
@@ -55,17 +63,11 @@
       <div class="panel-header compact">
         <div>
           <h2>Input Setup</h2>
-          <p>{{ inputSetupSubtitle }}</p>
+          <p>{{ inputSetupSubtitle }}. APPAM creates and validates the sample table automatically.</p>
         </div>
         <div class="input-actions">
-          <button class="hero-btn primary" @click="handleOneClickDryRun" :disabled="disableRunActions || loadingState">
-            Prepare + Dry Run
-          </button>
-          <button class="hero-btn secondary" @click="handlePrepareInputs" :disabled="loadingState">
-            Prepare Table
-          </button>
-          <button class="hero-btn subtle" @click="handleValidateInputs" :disabled="loadingState || !preparedTablePath">
-            Validate
+          <button class="hero-btn subtle" @click="handleRescanInputs" :disabled="loadingState">
+            Rescan inputs
           </button>
         </div>
       </div>
@@ -77,7 +79,6 @@
         <span class="setup-state" :class="inputSetupState">
           {{ inputSetupStatus || defaultInputStatus }}
         </span>
-        <span v-if="preparedTablePath" class="setup-path mono">{{ preparedTablePath }}</span>
       </div>
 
       <div v-if="workflow.id === 'appam-paleoproteomics'" class="input-setup-row reference-row">
@@ -92,8 +93,25 @@
         </span>
       </div>
 
-      <div v-if="detectedSamples.length" class="sample-table-wrap">
-        <table class="sample-table">
+      <div v-if="!detectedSamples.length" class="quick-upload">
+        <DragDropUpload
+          :project-id="projectId"
+          :current-path="quickUploadPath"
+          @upload-complete="handleQuickUploadComplete"
+          @upload-error="handleQuickUploadError"
+        />
+        <p>
+          Files are uploaded to <span class="mono">{{ quickUploadPath }}</span>.
+          <router-link :to="{ name: 'FileManager', params: { id: projectId } }">Open full file manager</router-link>
+        </p>
+      </div>
+
+      <details v-if="detectedSamples.length" class="sample-review">
+        <summary>
+          Review {{ detectedSamples.length }} detected sample{{ detectedSamples.length === 1 ? '' : 's' }}
+        </summary>
+        <div class="sample-table-wrap">
+          <table class="sample-table">
           <thead>
             <tr v-if="workflow.id === 'appam-smk'">
               <th>Sample</th>
@@ -126,11 +144,20 @@
               </template>
             </tr>
           </tbody>
-        </table>
-      </div>
+          </table>
+        </div>
+      </details>
     </section>
 
-    <section class="workflow-graph-card">
+    <div class="workflow-map-toggle-row">
+      <button type="button" class="workflow-map-toggle" @click="showWorkflowMap = !showWorkflowMap">
+        <Icon :name="showWorkflowMap ? 'chevron-down' : 'layout-dashboard'" :size="15" />
+        {{ showWorkflowMap ? 'Hide workflow map' : 'Show workflow map' }}
+      </button>
+      <span>Optional technical detail</span>
+    </div>
+
+    <section v-if="showWorkflowMap" class="workflow-graph-card">
       <div class="panel-header">
         <div>
           <h2>Workflow Map</h2>
@@ -187,7 +214,7 @@
       </div>
     </section>
 
-    <section class="workflow-activity-card">
+    <section v-if="workflowRuns.length || displayRun" class="workflow-activity-card">
       <div class="panel-header tabs">
         <div class="tab-buttons">
           <button :class="{ active: activeTab === 'logs' }" @click="activeTab = 'logs'">Logs</button>
@@ -231,23 +258,54 @@
         </div>
       </div>
 
-      <div v-else class="activity-panel">
-        <div v-if="!displayRun || (displayRun.artifacts || []).length === 0" class="empty-activity">
+      <div v-else class="activity-panel result-panel">
+        <div v-if="!hasParsedResults" class="empty-activity">
           <p>No parsed results yet.</p>
           <span>Completed workflow artifacts and summaries will appear here.</span>
         </div>
-        <div v-else class="history-grid">
-          <div v-for="artifact in displayRun.artifacts" :key="artifact.path" class="history-card artifact-card">
-            <div class="history-card-top">
-              <strong>{{ artifact.label || artifact.kind || 'Result file' }}</strong>
-              <span class="history-state completed">{{ artifact.kind || 'artifact' }}</span>
-            </div>
-            <div class="history-card-bottom artifact-card-bottom">
-              <span class="mono">{{ artifact.path }}</span>
-              <span v-if="artifact.size_bytes">{{ formatBytes(artifact.size_bytes) }}</span>
-            </div>
+        <template v-else>
+          <div v-if="resultMetricCards.length" class="result-metric-grid">
+            <article v-for="metric in resultMetricCards" :key="metricKey(metric)" class="result-metric">
+              <span>{{ humanizeMetric(metric.metric_name) }}</span>
+              <strong>{{ displayMetric(metric) }}</strong>
+              <small>{{ metric.sample_id || humanizeMetric(metric.metric_group) }}</small>
+            </article>
           </div>
-        </div>
+
+          <section v-for="group in artifactGroups" :key="group.kind" class="artifact-group">
+            <header>
+              <h4>{{ group.label }}</h4>
+              <span>{{ group.items.length }}</span>
+            </header>
+            <div class="artifact-list">
+              <div v-for="artifact in group.items" :key="artifact.id || artifact.path" class="artifact-row">
+                <div class="artifact-copy">
+                  <strong>{{ artifact.label || artifactFileName(artifact) }}</strong>
+                  <span class="mono">{{ artifact.project_path || artifactFileName(artifact) }}</span>
+                </div>
+                <span class="artifact-size">{{ formatBytes(artifact.size_bytes) }}</span>
+                <div class="artifact-actions">
+                  <button
+                    type="button"
+                    title="Preview result"
+                    :disabled="!artifact.project_path"
+                    @click="openArtifactPreview(artifact)"
+                  >
+                    <Icon name="eye" :size="15" />
+                  </button>
+                  <button
+                    type="button"
+                    title="Download result"
+                    :disabled="!artifact.project_path"
+                    @click="downloadArtifact(artifact)"
+                  >
+                    <Icon name="download" :size="15" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </template>
       </div>
     </section>
 
@@ -259,6 +317,16 @@
       :select-directories="currentPickerParam?.type === 'directory'"
       v-model="tempFileSelection"
       @close="closeFilePicker"
+    />
+
+    <FilePreviewModal
+      :show-modal="artifactPreviewOpen"
+      :file-name="artifactPreviewName"
+      :preview-data="artifactPreviewData"
+      :project-id="projectId"
+      :file-path="artifactPreviewPath"
+      @close="closeArtifactPreview"
+      @download="downloadPreviewArtifact"
     />
 
     <div v-if="showRunDialog" class="run-dialog-backdrop" @click.self="closeRunDialog">
@@ -287,8 +355,8 @@
 
           <div v-for="param in visibleParameters" :key="param.name" class="compact-field dialog-field">
             <div class="field-topline">
-              <label :for="param.name">{{ param.name }}</label>
-              <span class="field-tag">{{ param.type }}</span>
+              <label :for="param.name">{{ parameterLabel(param.name) }}</label>
+              <span v-if="showAdvancedParams" class="field-tag">{{ param.type }}</span>
             </div>
             <p class="field-help">{{ param.description }}</p>
 
@@ -324,15 +392,20 @@
               v-model="formValues[param.name]"
               :type="param.type === 'integer' || param.type === 'float' ? 'number' : 'text'"
               :step="param.type === 'float' ? '0.01' : undefined"
+              :min="param.minimum"
+              :max="param.maximum"
               class="compact-input"
               :placeholder="param.default ?? ''"
             />
           </div>
 
-          <label class="run-mode-toggle">
-            <input v-model="runDialogDryRun" type="checkbox" />
-            <span>Run as dry-run first</span>
-          </label>
+          <details class="run-technical-options">
+            <summary>Technical run options</summary>
+            <label class="run-mode-toggle">
+              <input v-model="runDialogDryRun" type="checkbox" />
+              <span>Validate the workflow graph without running analysis</span>
+            </label>
+          </details>
 
           <button v-if="advancedParameters.length" class="advanced-toggle" @click="showAdvancedParams = !showAdvancedParams">
             {{ showAdvancedParams ? 'Hide Advanced Parameters' : `Show Advanced Parameters (${advancedParameters.length})` }}
@@ -342,7 +415,7 @@
         <div class="run-dialog-footer">
           <button class="hero-btn secondary" @click="closeRunDialog">Cancel</button>
           <button class="hero-btn primary" @click="handleRunConfirm" :disabled="loadingState">
-            {{ runDialogDryRun ? 'Start Dry Run' : 'Start Workflow' }}
+            {{ runDialogDryRun ? 'Validate setup' : 'Start analysis' }}
           </button>
         </div>
       </div>
@@ -358,7 +431,11 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import FilePicker from '@/components/FilePicker.vue'
+import FilePreviewModal from '@/components/FilePreviewModal.vue'
+import DragDropUpload from '@/components/DragDropUpload.vue'
+import Icon from '@/components/ui/Icon.vue'
 import WorkflowDiagram from '@/components/workflow/WorkflowDiagram.vue'
+import { parameterLabel } from '@/lib/workflowUi.js'
 import {
   getWorkflowDefinition,
   initWorkflowFormValues,
@@ -381,6 +458,8 @@ const loadingState = ref(false)
 const selectedNodeId = ref(null)
 const activeTab = ref('history')
 const actionError = ref('')
+const actionErrorHint = ref('')
+const actionErrorDetails = ref('')
 const showRunDialog = ref(false)
 const runDialogDryRun = ref(false)
 const showAdvancedParams = ref(false)
@@ -395,8 +474,31 @@ const manifestStatus = ref('')
 const manifestScan = ref(null)
 const inputDataDir = ref('')
 const inputValidation = ref(null)
+const refreshingState = ref(false)
+const logOffset = ref(0)
+const logJobId = ref(null)
+const logEof = ref(false)
+const artifactPreviewOpen = ref(false)
+const artifactPreviewName = ref('')
+const artifactPreviewPath = ref('')
+const artifactPreviewData = ref({})
+const showWorkflowMap = ref(false)
 
 let refreshTimer = null
+
+function scheduleRefresh(delay = 0) {
+  if (refreshTimer) window.clearTimeout(refreshTimer)
+  refreshTimer = window.setTimeout(async () => {
+    try {
+      await refreshAll()
+    } catch (error) {
+      console.error('Workflow refresh failed:', error)
+    } finally {
+      const active = Boolean(activeWorkflowRun.value)
+      scheduleRefresh(active ? 4000 : 12000)
+    }
+  }, delay)
+}
 
 const runtimeState = computed(() => {
   if (!workflow.value) {
@@ -434,6 +536,7 @@ const statusClass = computed(() => {
 
 const statusText = computed(() => {
   if (busyByOtherJob.value) return 'Project Busy'
+  if (!displayRun.value && currentProjectTask.value.status === 'not_found') return 'Not started'
   return humanizeStatus(displayRun.value?.status || currentProjectTask.value.status || 'not_found')
 })
 
@@ -441,6 +544,10 @@ const disableRunActions = computed(() => {
   if (loadingState.value || !workflowTool.value) return true
   if (busyByOtherJob.value) return true
   return ['queued', 'starting', 'running'].includes(activeWorkflowRun.value?.status)
+})
+const startButtonLabel = computed(() => {
+  if (!hasReadyInputs.value) return 'Add data to continue'
+  return loadingState.value ? 'Preparing analysis...' : 'Start analysis'
 })
 const canRetryRun = computed(() => Boolean(displayRun.value && !['queued', 'starting', 'running'].includes(displayRun.value.status)))
 const canResumeRun = computed(() => Boolean(displayRun.value && ['failed', 'canceled'].includes(displayRun.value.status)))
@@ -454,6 +561,10 @@ const defaultTablePath = computed(() => {
   if (workflow.value?.id === 'appam-paleoproteomics') return 'workflow_templates/appam-paleoproteomics/samples.tsv'
   return 'workflow_templates/appam-smk/samples.tsv'
 })
+const quickUploadPath = computed(() => {
+  const current = String(inputDataDir.value || '').trim()
+  return current && current !== '.' ? current : defaultInputDir.value
+})
 const preparedTablePath = computed(() => {
   if (workflow.value?.id === 'appam-paleoproteomics') return formValues.value.sample_table
   return formValues.value.sample_manifest
@@ -465,6 +576,13 @@ const inputSetupSubtitle = computed(() => {
 const detectedSamples = computed(() => {
   if (workflow.value?.id === 'appam-paleoproteomics') return manifestScan.value?.proteomics_samples || []
   return manifestScan.value?.fastq_samples || []
+})
+const hasReadyInputs = computed(() => {
+  if (!detectedSamples.value.length) return false
+  if (workflow.value?.id === 'appam-smk') {
+    return (manifestScan.value?.counts?.complete_fastq_pairs || 0) > 0
+  }
+  return true
 })
 const defaultInputStatus = computed(() => {
   const count = detectedSamples.value.length
@@ -499,8 +617,11 @@ const basicParameterNames = computed(() => {
       'cores',
       'preprocess_method',
       'use_ancient_contigs',
+      'enable_bin_refinement',
+      'enable_checkm1',
       'enable_checkm2',
       'enable_gunc',
+      'enable_gtdbtk',
       'enable_prokka',
       'enable_eggnog',
       'enable_abricate',
@@ -526,31 +647,37 @@ const workflowPresets = computed(() => {
   if (workflow.value?.id === 'appam-smk') {
     return [
       {
+        id: 'recommended',
+        label: 'Recommended',
+        values: {},
+      },
+      {
         id: 'quick-validation',
         label: 'Quick validation',
-        values: { dry_run: true, enable_antismash: false, enable_rgi: false, enable_eggnog: false, enable_abricate: false, cores: 4 },
+        values: { dry_run: true, use_ancient_contigs: false, enable_bin_refinement: false, enable_checkm1: false, enable_checkm2: false, enable_gunc: false, enable_gtdbtk: false, enable_prokka: false, enable_antismash: false, enable_rgi: false, enable_eggnog: false, enable_abricate: false, cores: 4 },
       },
       {
         id: 'mag-recovery',
         label: 'MAG recovery',
-        values: { dry_run: false, enable_checkm2: true, enable_gunc: true, enable_prokka: false, enable_eggnog: false, enable_abricate: false, enable_rgi: false, enable_antismash: false },
+        values: { dry_run: false, use_ancient_contigs: false, enable_bin_refinement: false, enable_checkm1: false, enable_checkm2: true, enable_gunc: true, enable_gtdbtk: true, enable_prokka: false, enable_eggnog: false, enable_abricate: false, enable_rgi: false, enable_antismash: false },
       },
       {
         id: 'full-annotation',
         label: 'Full annotation',
-        values: { dry_run: false, enable_checkm2: true, enable_gunc: true, enable_prokka: true, enable_eggnog: true, enable_abricate: true, enable_rgi: false, enable_antismash: true },
+        values: { dry_run: false, use_ancient_contigs: false, enable_bin_refinement: false, enable_checkm1: false, enable_checkm2: true, enable_gunc: true, enable_gtdbtk: true, enable_prokka: true, enable_eggnog: true, enable_abricate: true, enable_rgi: false, enable_antismash: true },
       },
       {
         id: 'publication-run',
         label: 'Publication run',
-        values: { dry_run: false, enable_checkm2: true, enable_gunc: true, enable_prokka: true, enable_eggnog: true, enable_abricate: true, enable_rgi: true, enable_antismash: true },
+        values: { dry_run: false, input_hash_mode: 'sha256', require_database_manifest: true, use_ancient_contigs: false, enable_bin_refinement: false, enable_checkm1: false, enable_checkm2: true, enable_gunc: true, enable_gtdbtk: true, enable_prokka: true, enable_eggnog: false, enable_abricate: false, enable_rgi: false, enable_antismash: false },
       },
     ]
   }
   if (workflow.value?.id === 'appam-paleoproteomics') {
     return [
+      { id: 'recommended', label: 'Recommended', values: {} },
       { id: 'quick-validation', label: 'Quick validation', values: { dry_run: true, cores: 4, match_between_runs: false } },
-      { id: 'publication-run', label: 'Publication run', values: { dry_run: false, cores: 8, match_between_runs: true, include_contaminants: true } },
+      { id: 'publication-run', label: 'Publication run', values: { dry_run: false, input_hash_mode: 'sha256', cores: 8, match_between_runs: false, include_contaminants: true } },
     ]
   }
   return []
@@ -566,6 +693,59 @@ const configuredParameterCount = computed(() => {
     }
     return value !== '' && value !== null && value !== undefined
   }).length
+})
+
+const hasParsedResults = computed(() => Boolean(
+  displayRun.value && (
+    (displayRun.value.artifacts || []).length > 0
+    || (displayRun.value.metrics || []).length > 0
+  )
+))
+
+const resultMetricCards = computed(() => {
+  const priority = ['counts', 'checkm2', 'gunc', 'gtdbtk', 'maxquant', 'paleoproteomics_qc', 'abricate', 'rgi', 'antismash']
+  const metrics = [...(displayRun.value?.metrics || [])]
+  metrics.sort((left, right) => {
+    const leftRank = priority.indexOf(left.metric_group)
+    const rightRank = priority.indexOf(right.metric_group)
+    return (leftRank === -1 ? priority.length : leftRank) - (rightRank === -1 ? priority.length : rightRank)
+  })
+  const seen = new Set()
+  return metrics.filter((metric) => {
+    const key = metricKey(metric)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return (metric.metric_value !== null && metric.metric_value !== undefined) || metric.metric_text
+  }).slice(0, 8)
+})
+
+const artifactGroups = computed(() => {
+  const labels = {
+    summary: 'Summary',
+    report: 'Reports',
+    quality: 'Quality control',
+    taxonomy: 'Taxonomy',
+    annotation: 'Annotations',
+    maxquant: 'MaxQuant tables',
+    spectra: 'Spectra',
+    damage: 'Damage analysis',
+    fasta: 'Sequences',
+    config: 'Configuration',
+  }
+  const order = Object.keys(labels)
+  const groups = new Map()
+  for (const artifact of displayRun.value?.artifacts || []) {
+    const kind = artifact.kind || 'files'
+    if (!groups.has(kind)) groups.set(kind, [])
+    groups.get(kind).push(artifact)
+  }
+  return [...groups.entries()]
+    .map(([kind, items]) => ({ kind, label: labels[kind] || humanizeMetric(kind), items }))
+    .sort((left, right) => {
+      const leftRank = order.indexOf(left.kind)
+      const rightRank = order.indexOf(right.kind)
+      return (leftRank === -1 ? order.length : leftRank) - (rightRank === -1 ? order.length : rightRank)
+    })
 })
 
 const logLines = computed(() => {
@@ -605,6 +785,81 @@ function formatBytes(bytes) {
   return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${units[unitIndex]}`
 }
 
+function humanizeMetric(value) {
+  return String(value || 'Result')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (character) => character.toUpperCase())
+}
+
+function metricKey(metric) {
+  return [metric.id, metric.metric_group, metric.metric_name, metric.sample_id].filter(Boolean).join(':')
+}
+
+function displayMetric(metric) {
+  if (metric.metric_value !== null && metric.metric_value !== undefined && metric.metric_value !== '') {
+    const numeric = Number(metric.metric_value)
+    const value = Number.isFinite(numeric)
+      ? (Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(2))
+      : String(metric.metric_value)
+    return `${value}${metric.unit || ''}`
+  }
+  return metric.metric_text || 'Recorded'
+}
+
+function artifactFileName(artifact) {
+  const path = String(artifact?.project_path || artifact?.path || '')
+  return path.split('/').pop() || 'Result file'
+}
+
+function resetLogState() {
+  logText.value = ''
+  logOffset.value = 0
+  logJobId.value = null
+  logEof.value = false
+}
+
+async function openArtifactPreview(artifact) {
+  if (!artifact?.project_path) return
+  actionError.value = ''
+  try {
+    const path = artifact.project_path
+    const response = await fetch(`/api/filemanager/${projectId.value}/preview?path=${encodeURIComponent(path)}`)
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(payload.error || 'Result preview is unavailable.')
+    artifactPreviewName.value = artifactFileName(artifact)
+    artifactPreviewPath.value = path
+    artifactPreviewData.value = { ...payload, editable: false }
+    artifactPreviewOpen.value = true
+  } catch (error) {
+    showActionError(error)
+  }
+}
+
+function closeArtifactPreview() {
+  artifactPreviewOpen.value = false
+  artifactPreviewName.value = ''
+  artifactPreviewPath.value = ''
+  artifactPreviewData.value = {}
+}
+
+function downloadProjectPath(path) {
+  if (!path) return
+  const anchor = document.createElement('a')
+  anchor.href = `/api/filemanager/${projectId.value}/download?path=${encodeURIComponent(path)}`
+  anchor.download = String(path).split('/').pop() || 'result'
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+}
+
+function downloadArtifact(artifact) {
+  downloadProjectPath(artifact?.project_path)
+}
+
+function downloadPreviewArtifact(payload) {
+  downloadProjectPath(payload?.filePath || artifactPreviewPath.value)
+}
+
 function humanizeStatus(status) {
   const mapping = {
     queued: 'Queued',
@@ -614,6 +869,8 @@ function humanizeStatus(status) {
     failed: 'Failed',
     error: 'Failed',
     canceled: 'Canceled',
+    skipped: 'Skipped',
+    interrupted: 'Interrupted',
     not_found: 'Ready',
     blocked: 'Project Busy',
   }
@@ -646,14 +903,18 @@ function compactCheckMessage(check) {
 }
 
 function applyPreset(preset) {
+  const preservedInputs = {}
+  for (const name of ['sample_manifest', 'raw_data_dir', 'sample_table', 'fasta_path']) {
+    if (formValues.value[name]) preservedInputs[name] = formValues.value[name]
+  }
   activePresetId.value = preset.id
   formValues.value = {
-    ...formValues.value,
+    ...initWorkflowFormValues(workflowTool.value?.parameters || []),
+    ...preservedInputs,
     ...preset.values,
   }
-  if (Object.prototype.hasOwnProperty.call(preset.values, 'dry_run')) {
-    runDialogDryRun.value = Boolean(preset.values.dry_run)
-  }
+  applyWorkflowDefaults()
+  runDialogDryRun.value = Boolean(preset.values.dry_run)
 }
 
 function applyWorkflowDefaults() {
@@ -678,10 +939,11 @@ function applyWorkflowDefaults() {
   }
 }
 
-function inspectHistoryRun(run) {
+async function inspectHistoryRun(run) {
   displayRun.value = run
   activeTab.value = 'logs'
-  fetchLogsForRun(run)
+  await fetchDisplayRunDetail(run.id)
+  fetchLogsForRun(displayRun.value, { reset: true })
 }
 
 async function fetchProject() {
@@ -714,11 +976,55 @@ async function fetchCurrentTask() {
 async function fetchWorkflowRuns() {
   if (!workflowTool.value) return
   const response = await fetch(
-    `/api/pipeline/${projectId.value}/workflow-runs?workflow_id=${encodeURIComponent(workflow.value.id)}&limit=20`,
+    `/api/pipeline/${projectId.value}/workflow-runs?workflow_id=${encodeURIComponent(workflow.value.id)}&limit=20&include_results=false`,
   )
   const payload = await response.json()
   if (!response.ok) return
-  workflowRuns.value = payload.workflow_runs || []
+  const cachedDetails = new Map(
+    workflowRuns.value
+      .filter((run) => Object.prototype.hasOwnProperty.call(run, 'artifacts'))
+      .map((run) => [run.id, run])
+  )
+  workflowRuns.value = (payload.workflow_runs || []).map((summary) => {
+    const cached = cachedDetails.get(summary.id)
+    if (!cached) return summary
+    return {
+      ...cached,
+      ...summary,
+      artifacts: cached.artifacts,
+      metrics: cached.metrics,
+      events: cached.events,
+    }
+  })
+}
+
+async function fetchDisplayRunDetail(runId = '') {
+  const targetId = String(
+    runId
+    || route.query.run
+    || currentProjectTask.value.workflow_run_id
+    || displayRun.value?.id
+    || workflowRuns.value[0]?.id
+    || ''
+  )
+  if (!targetId) return null
+  const cached = workflowRuns.value.find((run) => run.id === targetId)
+  const isActive = ['queued', 'starting', 'running'].includes(cached?.status)
+  if (cached && !isActive && Object.prototype.hasOwnProperty.call(cached, 'artifacts')) {
+    displayRun.value = cached
+    return cached
+  }
+  const response = await fetch(`/api/pipeline/${projectId.value}/workflow-runs/${encodeURIComponent(targetId)}`)
+  if (!response.ok) return null
+  const detail = await response.json()
+  const index = workflowRuns.value.findIndex((run) => run.id === detail.id)
+  if (index >= 0) {
+    workflowRuns.value[index] = detail
+  } else {
+    workflowRuns.value.unshift(detail)
+  }
+  displayRun.value = detail
+  return detail
 }
 
 async function fetchRuntimeHealth() {
@@ -731,16 +1037,38 @@ async function fetchRuntimeHealth() {
   runtimeHealth.value = payload
 }
 
-async function fetchLogsForRun(run) {
+async function fetchLogsForRun(run, { reset = false } = {}) {
   const jobId = run?.job_id
   if (!jobId) {
-    logText.value = ''
+    resetLogState()
     return
   }
-  const response = await fetch(`/api/jobs/${jobId}/logs?offset=0&limit=262144`)
+  const jobChanged = logJobId.value !== jobId
+  if (jobChanged || reset) {
+    logText.value = ''
+    logOffset.value = 0
+    logEof.value = false
+    logJobId.value = jobId
+  }
+  const terminal = !['queued', 'starting', 'running'].includes(run?.status)
+  if (!reset && !jobChanged && terminal && logEof.value) return
+
+  const query = jobChanged || reset
+    ? 'tail=262144&limit=262144'
+    : `offset=${logOffset.value}&limit=65536`
+  const response = await fetch(`/api/jobs/${jobId}/logs?${query}`)
   const payload = await response.json()
   if (!response.ok) return
-  logText.value = payload.content || ''
+  if (payload.reset || jobChanged || reset) {
+    logText.value = payload.content || ''
+  } else if (payload.content) {
+    logText.value += payload.content
+  }
+  if (logText.value.length > 524288) {
+    logText.value = logText.value.slice(-524288)
+  }
+  logOffset.value = Number(payload.offset) || 0
+  logEof.value = Boolean(payload.eof)
 }
 
 function syncDisplayRun() {
@@ -782,8 +1110,8 @@ function syncDisplayRun() {
 
 async function refreshAll() {
   if (!workflow.value) return
-  if (loadingState.value) return
-  loadingState.value = true
+  if (refreshingState.value) return
+  refreshingState.value = true
   try {
     if (!workflowTool.value) {
       await Promise.all([fetchProject(), fetchWorkflowTool()])
@@ -805,15 +1133,57 @@ async function refreshAll() {
       }
     }
     syncDisplayRun()
+    await fetchDisplayRunDetail()
     await fetchLogsForRun(displayRun.value)
   } finally {
-    loadingState.value = false
+    refreshingState.value = false
   }
 }
 
 function showActionError(error) {
-  actionError.value = error instanceof Error ? error.message : String(error)
+  const raw = error instanceof Error ? error.message : String(error)
+  actionErrorHint.value = ''
+  actionErrorDetails.value = ''
+
+  if (raw.startsWith('Missing APPAM-SMK runtime resources:') || raw.startsWith('Missing paleoproteomics runtime resources:')) {
+    actionError.value = 'This analysis is not available yet.'
+    actionErrorHint.value = 'The server setup is incomplete. Ask an administrator to finish System Setup.'
+    actionErrorDetails.value = raw
+    return
+  }
+  if (raw.includes('No complete FASTQ pairs')) {
+    actionError.value = 'No complete FASTQ pairs were found.'
+    actionErrorHint.value = 'Upload matching R1 and R2 files, then rescan the input folder.'
+    actionErrorDetails.value = raw
+    return
+  }
+  if (raw.includes('No RAW/.d files')) {
+    actionError.value = 'No mass spectrometry inputs were found.'
+    actionErrorHint.value = 'Upload Thermo RAW files or add a Bruker .d dataset, then rescan.'
+    actionErrorDetails.value = raw
+    return
+  }
+  if (raw.toLowerCase().includes('queue limit')) {
+    actionError.value = 'The analysis queue is currently full.'
+    actionErrorHint.value = 'Try again after one of the queued jobs has started or finished.'
+    actionErrorDetails.value = raw
+    return
+  }
+  if (raw.length > 240) {
+    actionError.value = 'The analysis could not be started.'
+    actionErrorHint.value = 'Review the technical details or ask an administrator for help.'
+    actionErrorDetails.value = raw
+    return
+  }
+  actionError.value = raw
 }
+
+watch(actionError, (value) => {
+  if (!value) {
+    actionErrorHint.value = ''
+    actionErrorDetails.value = ''
+  }
+}, { flush: 'sync' })
 
 async function safeRefresh() {
   actionError.value = ''
@@ -950,13 +1320,15 @@ async function prepareInputTable({ overwrite = true } = {}) {
 
   const scan = await scanBestInputDir()
   const inferredRoot = inferInputRootFromScan(scan)
-  inputDataDir.value = inferredRoot || scan.root || inputDataDir.value || defaultInputDir.value
-
   const count = readySampleCount(scan)
   if (count < 1) {
+    const current = String(inputDataDir.value || '').trim()
+    inputDataDir.value = current && current !== '.' ? current : defaultInputDir.value
+    manifestScan.value = scan
     const label = workflow.value.id === 'appam-paleoproteomics' ? 'RAW/.d files' : 'complete FASTQ pairs'
     throw new Error(`No ${label} found in ${inputDataDir.value}`)
   }
+  inputDataDir.value = inferredRoot || scan.root || inputDataDir.value || defaultInputDir.value
   manifestScan.value = inferredRoot && inferredRoot !== scan.root ? await scanInputData(inferredRoot) : scan
 
   const body = {
@@ -992,11 +1364,31 @@ async function prepareInputTable({ overwrite = true } = {}) {
   return payload
 }
 
-async function handlePrepareInputs() {
+async function refreshDetectedInputs() {
+  const scan = await scanBestInputDir()
+  const inferredRoot = inferInputRootFromScan(scan)
+  const nextScan = inferredRoot && inferredRoot !== scan.root
+    ? await scanInputData(inferredRoot)
+    : scan
+  const count = readySampleCount(nextScan)
+  if (count) {
+    inputDataDir.value = inferredRoot || scan.root || inputDataDir.value || defaultInputDir.value
+  } else {
+    const current = String(inputDataDir.value || '').trim()
+    inputDataDir.value = current && current !== '.' ? current : defaultInputDir.value
+  }
+  manifestScan.value = nextScan
+  manifestStatus.value = count
+    ? `${count} sample${count === 1 ? '' : 's'} detected`
+    : defaultInputStatus.value
+  return manifestScan.value
+}
+
+async function handleRescanInputs() {
   actionError.value = ''
   loadingState.value = true
   try {
-    await prepareInputTable({ overwrite: true })
+    await refreshDetectedInputs()
   } catch (error) {
     showActionError(error)
   } finally {
@@ -1004,16 +1396,13 @@ async function handlePrepareInputs() {
   }
 }
 
-async function handleValidateInputs() {
-  actionError.value = ''
-  loadingState.value = true
-  try {
-    await validatePreparedInputs({ throwOnError: true })
-  } catch (error) {
-    showActionError(error)
-  } finally {
-    loadingState.value = false
-  }
+async function handleQuickUploadComplete() {
+  await handleRescanInputs()
+}
+
+function handleQuickUploadError(payload) {
+  const error = payload?.error
+  showActionError(error || new Error('One or more files could not be uploaded.'))
 }
 
 async function handleOneClickDryRun() {
@@ -1021,13 +1410,27 @@ async function handleOneClickDryRun() {
   loadingState.value = true
   try {
     await prepareInputTable({ overwrite: true })
+    await runWorkflow(true)
   } catch (error) {
     showActionError(error)
+  } finally {
     loadingState.value = false
-    return
   }
-  loadingState.value = false
-  await handleRun(true)
+}
+
+async function handleOneClickRun() {
+  actionError.value = ''
+  loadingState.value = true
+  try {
+    await prepareInputTable({ overwrite: true })
+    await runWorkflow(false)
+    activeTab.value = 'logs'
+    showWorkflowMap.value = true
+  } catch (error) {
+    showActionError(error)
+  } finally {
+    loadingState.value = false
+  }
 }
 
 function validateRequiredFields() {
@@ -1051,22 +1454,6 @@ async function runWorkflow(forceDryRun) {
     ...formValues.value,
     dry_run: Boolean(forceDryRun),
   }
-  const preflightResponse = await fetch(`/api/pipeline/${projectId.value}/preflight/${workflowTool.value.id}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  const preflightResult = await preflightResponse.json()
-  if (!preflightResponse.ok) {
-    throw new Error(preflightResult.error || 'Preflight failed')
-  }
-  if (!preflightResult.ok) {
-    const firstError = (preflightResult.checks || []).find((check) => check.status === 'error')
-    throw new Error(firstError?.message || 'Preflight failed')
-  }
-  if (preflightResult.preflight_id) {
-    payload._preflight_id = preflightResult.preflight_id
-  }
   const response = await fetch(`/api/pipeline/${projectId.value}/run/${workflowTool.value.id}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1074,10 +1461,13 @@ async function runWorkflow(forceDryRun) {
   })
   const result = await response.json()
   if (!response.ok) {
-    throw new Error(result.error || 'Failed to start workflow')
+    const firstError = (result.preflight?.checks || []).find((check) => check.status === 'error')
+    const details = Array.isArray(result.details) ? result.details[0] : ''
+    throw new Error(firstError?.message || details || result.error || 'Failed to start analysis')
   }
   showRunDialog.value = false
   await refreshAll()
+  scheduleRefresh(4000)
 }
 
 async function cancelActiveRun() {
@@ -1119,11 +1509,15 @@ async function createTemplate() {
 }
 
 async function handleRun(forceDryRun) {
+  if (loadingState.value) return
   actionError.value = ''
+  loadingState.value = true
   try {
     await runWorkflow(forceDryRun)
   } catch (error) {
     showActionError(error)
+  } finally {
+    loadingState.value = false
   }
 }
 
@@ -1131,6 +1525,7 @@ function openRunDialog() {
   actionError.value = ''
   runDialogDryRun.value = false
   showAdvancedParams.value = false
+  activePresetId.value = 'recommended'
   showRunDialog.value = true
 }
 
@@ -1236,7 +1631,7 @@ watch(
     if (!workflow.value) return
     workflowTool.value = null
     displayRun.value = null
-    logText.value = ''
+    resetLogState()
     runtimeHealth.value = null
     activePresetId.value = ''
     showAdvancedParams.value = false
@@ -1247,6 +1642,14 @@ watch(
     actionError.value = ''
     activeTab.value = ['logs', 'history', 'results'].includes(route.query.tab) ? route.query.tab : 'history'
     await refreshAll()
+    if (hasInputSetup.value && !activeWorkflowRun.value) {
+      await refreshDetectedInputs().catch(() => {})
+    }
+    if (!route.query.tab) {
+      if (displayRun.value?.status === 'completed') activeTab.value = 'results'
+      else if (['queued', 'starting', 'running'].includes(displayRun.value?.status)) activeTab.value = 'logs'
+    }
+    showWorkflowMap.value = Boolean(activeWorkflowRun.value)
     selectedNodeId.value = runtimeState.value.currentStageId || workflow.value.nodes[0]?.id || null
   },
   { immediate: true },
@@ -1268,23 +1671,21 @@ watch(
       activeTab.value = route.query.tab
     }
     syncDisplayRun()
-    if (activeTab.value === 'logs') {
-      fetchLogsForRun(displayRun.value)
-    }
+    fetchDisplayRunDetail().then(() => {
+      if (activeTab.value === 'logs') {
+        fetchLogsForRun(displayRun.value, { reset: true })
+      }
+    })
   },
 )
 
 onMounted(() => {
-  refreshTimer = window.setInterval(() => {
-    refreshAll().catch((error) => {
-      console.error('Workflow refresh failed:', error)
-    })
-  }, 4000)
+  scheduleRefresh(12000)
 })
 
 onUnmounted(() => {
   if (refreshTimer) {
-    window.clearInterval(refreshTimer)
+    window.clearTimeout(refreshTimer)
   }
 })
 </script>
@@ -1541,6 +1942,43 @@ onUnmounted(() => {
   color: #b91c1c;
 }
 
+.workflow-banner-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.workflow-banner-copy span {
+  font-size: 0.84rem;
+  font-weight: 500;
+}
+
+.error-details {
+  margin-top: 9px;
+  border-top: 1px solid rgba(220, 38, 38, 0.14);
+}
+
+.error-details summary {
+  width: fit-content;
+  padding-top: 8px;
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+
+.error-details pre {
+  max-height: 180px;
+  margin: 8px 0 0;
+  padding: 10px;
+  overflow: auto;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #7f1d1d;
+  font-family: var(--font-family-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
 .workflow-banner.warning {
   background: rgba(124, 58, 237, 0.08);
   border: 1px solid rgba(124, 58, 237, 0.14);
@@ -1552,7 +1990,7 @@ onUnmounted(() => {
 .workflow-activity-card {
   background: rgba(255, 255, 255, 0.88);
   border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 22px;
+  border-radius: 8px;
   box-shadow: 0 14px 30px rgba(15, 23, 42, 0.05);
 }
 
@@ -1598,10 +2036,45 @@ onUnmounted(() => {
 
 .input-setup-row {
   display: grid;
-  grid-template-columns: minmax(180px, 260px) auto minmax(0, 1fr);
+  grid-template-columns: minmax(180px, 320px) auto;
   align-items: center;
   gap: 10px;
   padding: 0 18px 14px;
+}
+
+.sample-review {
+  margin: 0 18px 16px;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.quick-upload {
+  margin: 0 18px 16px;
+}
+
+.quick-upload > p {
+  margin: 8px 0 0;
+  color: #64748b;
+  font-size: 0.76rem;
+}
+
+.quick-upload a {
+  margin-left: 5px;
+  color: #1d4ed8;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.sample-review summary {
+  width: fit-content;
+  padding: 12px 0;
+  color: #475569;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sample-review .sample-table-wrap {
+  margin: 0 0 2px;
 }
 
 .input-setup-row.reference-row {
@@ -1646,18 +2119,11 @@ onUnmounted(() => {
   color: #b91c1c;
 }
 
-.setup-path {
-  min-width: 0;
-  color: #64748b;
-  font-size: 0.78rem;
-  overflow-wrap: anywhere;
-}
-
 .sample-table-wrap {
   max-height: 260px;
   margin: 0 18px 18px;
   overflow: auto;
-  border-radius: 16px;
+  border-radius: 8px;
   border: 1px solid rgba(148, 163, 184, 0.16);
   background: #fff;
 }
@@ -1689,6 +2155,34 @@ onUnmounted(() => {
 
 .sample-table tbody tr:last-child td {
   border-bottom: none;
+}
+
+.workflow-map-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 24px 0;
+}
+
+.workflow-map-toggle-row > span {
+  color: #94a3b8;
+  font-size: 0.76rem;
+}
+
+.workflow-map-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #475569;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .compact-cell {
@@ -1873,7 +2367,9 @@ onUnmounted(() => {
 .stage-state-badge.queued { background: rgba(239, 141, 39, 0.12); color: #b45309; }
 .stage-state-badge.failed,
 .stage-state-badge.canceled { background: rgba(220, 38, 38, 0.12); color: #b91c1c; }
-.stage-state-badge.optional { background: rgba(148, 163, 184, 0.16); color: #475569; }
+.stage-state-badge.optional,
+.stage-state-badge.skipped { background: rgba(148, 163, 184, 0.16); color: #475569; }
+.stage-state-badge.interrupted { background: rgba(217, 119, 6, 0.14); color: #92400e; }
 
 .compact-form {
   display: grid;
@@ -2062,6 +2558,25 @@ onUnmounted(() => {
   color: #1e3a8a;
 }
 
+.run-technical-options {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.05);
+}
+
+.run-technical-options > summary {
+  padding: 11px 13px;
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.run-technical-options .run-mode-toggle {
+  margin: 0 10px 10px;
+  border-radius: 8px;
+}
+
 .run-dialog-footer {
   display: flex;
   justify-content: flex-end;
@@ -2158,14 +2673,6 @@ onUnmounted(() => {
   box-shadow: var(--shadow-sm);
 }
 
-.artifact-card {
-  cursor: default;
-}
-
-.artifact-card:hover {
-  transform: none;
-}
-
 .history-card-top,
 .history-card-bottom {
   display: flex;
@@ -2180,13 +2687,154 @@ onUnmounted(() => {
   font-size: 0.82rem;
 }
 
-.artifact-card-bottom {
-  align-items: flex-start;
+.result-panel {
+  display: grid;
+  gap: 22px;
 }
 
-.artifact-card-bottom .mono {
+.result-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.result-metric {
   min-width: 0;
+  min-height: 92px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.result-metric span,
+.result-metric small {
   overflow-wrap: anywhere;
+  color: #64748b;
+  font-size: 0.74rem;
+}
+
+.result-metric strong {
+  overflow-wrap: anywhere;
+  color: #172033;
+  font-size: 1.08rem;
+}
+
+.artifact-group {
+  min-width: 0;
+}
+
+.artifact-group > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.artifact-group h4 {
+  margin: 0;
+  color: #172033;
+  font-size: 0.92rem;
+}
+
+.artifact-group > header span {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.artifact-list {
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.artifact-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 76px;
+  align-items: center;
+  gap: 14px;
+  min-height: 58px;
+  padding: 9px 4px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.artifact-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.artifact-copy strong {
+  overflow-wrap: anywhere;
+  color: #1e293b;
+  font-size: 0.84rem;
+}
+
+.artifact-copy span {
+  min-width: 0;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-size {
+  color: #64748b;
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.artifact-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.artifact-actions button {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 5px;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+}
+
+.artifact-actions button:hover:not(:disabled) {
+  border-color: rgba(47, 111, 237, 0.4);
+  color: #1d4ed8;
+}
+
+.artifact-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+@media (max-width: 820px) {
+  .result-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .result-metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .artifact-row {
+    grid-template-columns: minmax(0, 1fr) 70px;
+  }
+
+  .artifact-size {
+    display: none;
+  }
 }
 
 .history-state {
@@ -2253,6 +2901,11 @@ onUnmounted(() => {
 
   .workflow-input-card,
   .workflow-graph-card {
+    margin-left: 16px;
+    margin-right: 16px;
+  }
+
+  .workflow-map-toggle-row {
     margin-left: 16px;
     margin-right: 16px;
   }

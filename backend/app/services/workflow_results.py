@@ -4,6 +4,7 @@ import hashlib
 import csv
 import json
 import os
+import html
 from pathlib import Path
 
 
@@ -39,10 +40,12 @@ APPAM_SMK_PATTERNS = (
 )
 
 PALEO_PATTERNS = (
-    ('mqpar', 'mqpar.xml', 'config'),
+    ('mqpar', '**/*.mqpar.xml', 'config'),
     ('mzML', '**/*.mzML', 'spectra'),
     ('proteinGroups', '**/proteinGroups.txt', 'maxquant'),
     ('peptides', '**/peptides.txt', 'maxquant'),
+    ('Paleoproteomics QC', '**/paleoproteomics-qc.json', 'quality'),
+    ('Paleoproteomics QC report', '**/paleoproteomics-qc.html', 'report'),
 )
 
 
@@ -242,6 +245,19 @@ def build_paleoproteomics_metrics(results_dir: Path, summary: dict | None = None
     for report in sorted(results_dir.rglob('peptides.txt')):
         row_count = _count_tsv_rows(report)
         metrics.append(_metric('maxquant', 'peptide_count', value=row_count, text=str(row_count), payload={'path': str(report)}))
+    for report in sorted(results_dir.rglob('paleoproteomics-qc.json')):
+        try:
+            payload = json.loads(report.read_text(encoding='utf-8'))
+        except Exception:
+            continue
+        for name, value in (payload.get('counts') or {}).items():
+            numeric = _numeric(value)
+            if numeric is not None:
+                metrics.append(_metric('paleoproteomics_qc', name, value=numeric, text=str(value)))
+        for name, value in (payload.get('rates') or {}).items():
+            numeric = _numeric(value)
+            if numeric is not None:
+                metrics.append(_metric('paleoproteomics_qc', name, value=numeric, text=str(value)))
     return metrics
 
 
@@ -292,6 +308,7 @@ def build_paleoproteomics_summary(results_dir: Path) -> dict:
             'mqpar_files': len(list(results_dir.rglob('mqpar.xml'))),
             'protein_groups': len(list(results_dir.rglob('proteinGroups.txt'))),
             'peptides': len(list(results_dir.rglob('peptides.txt'))),
+            'qc_reports': len(list(results_dir.rglob('paleoproteomics-qc.json'))),
         },
     }
 
@@ -307,6 +324,58 @@ def build_result_summary(workflow_id: str | None, results_dir: str | None) -> di
     if workflow_id == 'appam-paleoproteomics':
         return build_paleoproteomics_summary(base)
     return {'workflow_id': workflow_id, 'counts': {'files': sum(1 for path in base.rglob('*') if path.is_file())}}
+
+
+def render_result_report(summary: dict) -> str:
+    workflow_id = str(summary.get('workflow_id') or 'workflow')
+    count_rows = ''.join(
+        f'<tr><th>{html.escape(str(name).replace("_", " ").title())}</th><td>{html.escape(str(value))}</td></tr>'
+        for name, value in (summary.get('counts') or {}).items()
+    ) or '<tr><td>No count metrics were produced.</td></tr>'
+
+    metric_rows = []
+    for metric in summary.get('metrics') or []:
+        value = metric.get('metric_value', metric.get('value'))
+        if value in (None, ''):
+            value = metric.get('metric_text', metric.get('text'))
+        metric_rows.append(
+            '<tr>'
+            f'<td>{html.escape(str(metric.get("metric_group") or metric.get("group") or ""))}</td>'
+            f'<td>{html.escape(str(metric.get("metric_name") or metric.get("name") or ""))}</td>'
+            f'<td>{html.escape(str(metric.get("sample_id") or ""))}</td>'
+            f'<td>{html.escape(str(value if value is not None else ""))}</td>'
+            f'<td>{html.escape(str(metric.get("unit") or ""))}</td>'
+            '</tr>'
+        )
+    metrics_table = ''.join(metric_rows) or '<tr><td colspan="5">No detailed metrics were produced.</td></tr>'
+
+    preview_sections = []
+    for name, preview in (summary.get('previews') or {}).items():
+        rows = preview.get('rows') if isinstance(preview, dict) else None
+        if not rows:
+            continue
+        columns = list(rows[0])
+        header = ''.join(f'<th>{html.escape(str(column))}</th>' for column in columns)
+        body = ''.join(
+            '<tr>' + ''.join(f'<td>{html.escape(str(row.get(column, "")))}</td>' for column in columns) + '</tr>'
+            for row in rows[:20]
+        )
+        preview_sections.append(
+            f'<h2>{html.escape(str(name).replace("_", " ").title())} preview</h2>'
+            f'<div class="table-wrap"><table><thead><tr>{header}</tr></thead><tbody>{body}</tbody></table></div>'
+        )
+
+    return f'''<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>APPAM result report</title><style>
+body{{font:14px/1.5 system-ui,sans-serif;max-width:1180px;margin:32px auto;padding:0 24px;color:#172235;background:#fff}}
+h1{{font-size:26px;margin-bottom:4px}}h2{{font-size:18px;margin-top:30px}}.muted{{color:#607085}}
+table{{border-collapse:collapse;width:100%}}th,td{{padding:8px 10px;border-bottom:1px solid #dfe6ed;text-align:left;vertical-align:top}}
+thead th{{background:#f3f6f9}}.table-wrap{{overflow:auto}}code{{background:#f3f6f9;padding:2px 5px}}
+</style></head><body><h1>APPAM result report</h1><p class="muted">Workflow: <code>{html.escape(workflow_id)}</code></p>
+<h2>Output summary</h2><table>{count_rows}</table>
+<h2>Detailed metrics</h2><div class="table-wrap"><table><thead><tr><th>Group</th><th>Metric</th><th>Sample</th><th>Value</th><th>Unit</th></tr></thead><tbody>{metrics_table}</tbody></table></div>
+{''.join(preview_sections)}</body></html>'''
 
 
 def collect_workflow_artifacts(workflow_context: dict | None) -> list[dict]:
@@ -335,7 +404,10 @@ def collect_workflow_artifacts(workflow_context: dict | None) -> list[dict]:
         reports_path.mkdir(parents=True, exist_ok=True)
         summary_path = reports_path / 'result-summary.json'
         summary_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding='utf-8')
+        report_path = reports_path / 'result-report.html'
+        report_path.write_text(render_result_report(summary), encoding='utf-8')
         artifacts.insert(0, _artifact('Result summary', summary_path, 'summary'))
+        artifacts.insert(1, _artifact('Result report', report_path, 'report'))
     return artifacts
 
 

@@ -11,6 +11,7 @@ from .job_store import (
     get_job,
     list_stale_jobs,
     mark_job_finished,
+    request_cancel,
 )
 
 
@@ -150,8 +151,15 @@ def stop_embedded_worker(timeout: float = 5.0) -> None:
             return
         _WORKER_STOP.set()
         _WORKER_WAKE.set()
+        current_job_id = _WORKER_STATE.get('current_job_id')
+        if current_job_id:
+            try:
+                request_cancel(current_job_id)
+            except Exception as exc:
+                _WORKER_STATE['last_error'] = f'Could not request cancellation during shutdown: {exc}'
         _WORKER_THREAD.join(timeout=timeout)
-        _WORKER_THREAD = None
+        if not _WORKER_THREAD.is_alive():
+            _WORKER_THREAD = None
 
 
 def embedded_worker_running() -> bool:

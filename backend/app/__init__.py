@@ -2,10 +2,39 @@ import os
 from flask import Flask, jsonify, request
 from flask_socketio import SocketIO
 from flask_cors import CORS
+from werkzeug.middleware.proxy_fix import ProxyFix
+
+
+def _allowed_origins():
+    configured = os.getenv('APPAM_ALLOWED_ORIGINS', '').strip()
+    if configured:
+        return [origin.strip().rstrip('/') for origin in configured.split(',') if origin.strip()]
+    return []
+
+
+def _secret_key() -> str:
+    configured = os.getenv('FLASK_SECRET_KEY', '').strip()
+    if configured:
+        return configured
+    if os.getenv('FLASK_DEBUG', 'false').strip().lower() in {'1', 'true', 'yes', 'on'}:
+        return 'appam-local-dev-secret'
+    raise RuntimeError('FLASK_SECRET_KEY is required when FLASK_DEBUG is disabled.')
+
+
+def _max_request_bytes() -> int:
+    try:
+        max_chunk = max(1, int(os.getenv('APPAM_MAX_UPLOAD_CHUNK_BYTES', str(16 * 1024 * 1024))))
+    except ValueError:
+        max_chunk = 16 * 1024 * 1024
+    try:
+        return max(1024 * 1024, int(os.getenv('APPAM_MAX_REQUEST_BYTES', str(max_chunk + 1024 * 1024))))
+    except ValueError:
+        return max_chunk + 1024 * 1024
+
 
 # Initialize extensions
 socketio = SocketIO(
-    cors_allowed_origins="*",
+    cors_allowed_origins=_allowed_origins() or None,
     async_mode=os.getenv('SOCKETIO_ASYNC_MODE', 'threading')
 )
 cors = CORS()
@@ -13,22 +42,29 @@ cors = CORS()
 def create_app():
     """Create and configure an instance of the Flask application."""
     app = Flask(__name__)
-    app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'appam-local-dev-secret')
+    if os.getenv('APPAM_TRUST_PROXY_HEADERS', 'false').strip().lower() in {'1', 'true', 'yes', 'on'}:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+    app.config['SECRET_KEY'] = _secret_key()
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
     app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
+    app.config['MAX_CONTENT_LENGTH'] = _max_request_bytes()
 
     # Initialize extensions with the app
     socketio.init_app(app)
-    cors.init_app(app)
+    allowed_origins = _allowed_origins()
+    if allowed_origins:
+        cors.init_app(app, origins=allowed_origins, supports_credentials=True)
 
     from .database import init_db
     from .auth import load_current_user, current_user
     from .services.auth_service import bootstrap_admin_users_from_env
+    from .services.download_manager import restore_download_tasks
 
     # Initialize the database
     init_db()
     bootstrap_admin_users_from_env()
+    restore_download_tasks()
 
     @app.before_request
     def enforce_authentication():
@@ -36,14 +72,33 @@ def create_app():
         if request.method == 'OPTIONS':
             return None
 
-        public_api_prefixes = (
+        public_api_paths = {
+            '/api/health',
             '/api/auth/login',
             '/api/auth/register',
             '/api/auth/me',
-        )
-        if request.path.startswith('/api/') and not any(request.path.startswith(prefix) for prefix in public_api_prefixes):
+        }
+        if request.path.startswith('/api/') and request.path not in public_api_paths:
             if not current_user():
                 return jsonify({'error': 'Authentication required'}), 401
+
+        if request.method in {'POST', 'PUT', 'PATCH', 'DELETE'}:
+            if request.headers.get('Sec-Fetch-Site', '').lower() == 'cross-site':
+                return jsonify({'error': 'Cross-site request rejected'}), 403
+            origin = request.headers.get('Origin', '').rstrip('/')
+            same_origin = origin and origin == f'{request.scheme}://{request.host}'.rstrip('/')
+            if origin and not same_origin and origin not in _allowed_origins():
+                return jsonify({'error': 'Origin not allowed'}), 403
+
+    @app.get('/api/health')
+    def health_check():
+        return jsonify({'status': 'ok', 'service': 'appam-backend'})
+
+    @app.errorhandler(413)
+    def request_too_large(_error):
+        if request.path.startswith('/api/'):
+            return jsonify({'error': 'Request body is too large'}), 413
+        return 'Request body is too large', 413
 
     # --- Register Blueprints ---
     from .api.filemanager.routes import filemanager_bp

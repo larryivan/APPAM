@@ -1,4 +1,5 @@
 import csv
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -69,6 +70,14 @@ with log_path.open("w") as log_handle, tempfile.TemporaryDirectory() as tmpdir:
     log_handle.write(f"predicted_accuracy_min={thresholds['predicted_accuracy_min']}\n")
     log_handle.write(f"ancient_id_count={len(ancient_ids)}\n")
     log_handle.flush()
+
+    if not ancient_ids:
+        ancient_path.write_text("")
+        shutil.copyfile(contigs_path, modern_path)
+        raise ValueError(
+            "PyDamage did not select any contigs at the configured thresholds. "
+            "Use the conservative all-contig mode or revise the pre-declared ablation thresholds."
+        )
 
     subprocess.run(
         [

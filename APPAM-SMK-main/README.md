@@ -1,132 +1,109 @@
 # APPAM-SMK
 
-APPAM-SMK is the Snakemake workflow component of APPAM, providing automated and reproducible processing for ancient metaproteomics and metagenomics data.
+APPAM-SMK is the ancient-metagenomics workflow used by APPAM. It performs paired-read preprocessing, metagenome assembly, read-to-contig mapping, PyDamage analysis, binning, MAG quality control, taxonomy, and optional annotation.
 
-## Features
-- Reproducible, user-friendly, efficient, and actively maintained workflow
-- End-to-end processing from raw reads to bins, taxonomy, MAG quality assessment, and genome annotation
-- Built-in QC, assembly, damage assessment, variant calling, binning, CheckM/CheckM2/GUNC assessment, classification, and annotation
-- Optional preprocessing backend: `fastqc + AdapterRemoval` or `fastp`
-- Ready-to-use local and SLURM execution profiles
+The conservative default bins all assembled contigs. Restricting binning to PyDamage-positive contigs is an experimental ablation (`use_ancient_contigs: true`), not an established correction method.
 
-## Requirements
+## Input contract
 
-## Installation
-```bash
-git clone git@github.com:XREAL1TY/APPAM-SMK.git
-cd APPAM-SMK
-```
+`config/samples.tsv` must contain unique sample IDs and explicit paired FASTQ paths:
 
-Snakemake will create environments from `workflow/envs/` when you run with `--use-conda` (enabled in profiles).  
-MetaWRAP and PyDamage environments are external and must be created separately, then referenced by path in `config/config.yaml`.
-
-## Input Data
-- Raw paired-end reads: `{sample}_R1.fastq.gz` and `{sample}_R2.fastq.gz` under `paths.raw_data_dir` in `config/config.yaml`
-- Sample manifest: `config/samples.tsv` with a `sample_id` column
-
-Example `config/samples.tsv`:
 ```tsv
-sample_id
-sample1
+sample_id	forward_reads	reverse_reads
+sample1	raw/sample1_R1.fastq.gz	raw/sample1_R2.fastq.gz
 ```
+
+Standalone Snakemake paths may be absolute or relative to the sample table/raw-data directory. Web runs require reads inside the current project workspace. Supported suffixes are `.fastq`, `.fq`, `.fastq.gz`, and `.fq.gz`. Sample IDs may contain letters, numbers, dots, underscores, and hyphens.
+
+APPAM Web runs copy this table into the run directory with resolved absolute paths. Changing or deleting the original table therefore does not change a retry or resume.
+
+## Read handling
+
+- `fastp` mode keeps surviving read pairs, merged reads, and unpaired reads.
+- `adapter_removal` mode keeps surviving read pairs, collapsed reads, truncated collapsed reads, and singletons.
+- MEGAHIT receives paired reads and the single-read stream separately.
+- Bowtie2 damage mapping receives paired and single reads.
+- MetaWRAP receives a combined single-end stream only because its binning interface consumes coverage reads in that form.
 
 ## Configuration
-Main config file: `config/config.yaml`
 
-Key sections:
-- `paths`: input/output/log/benchmark directories
-- `params`: tool parameters (e.g., `min_contig_len`, `pydamage_window`)
-- `tools`: external environment paths (e.g., `metawrap_env`, `pydamage_env`)
-- `databases`: external database paths (e.g., `checkm1_db`, `checkm2_db`, `gunc_db`, `eggnog_db`)
-- `tools`: external environment paths for Docker/Conda-backed runtime modules
+Edit a local copy of `config/config.yaml`. Important switches are:
 
-Optional preprocessing mode:
-- `preprocess_method`: `adapter_removal` (default) or `fastp`
-- `fastp_detect_adapter_for_pe`: enable `--detect_adapter_for_pe` when using `fastp` (default `true`)
+- `preprocess_method`: `fastp` or `adapter_removal`.
+- `use_ancient_contigs`: experimental damage-filtered binning; default `false`.
+- `enable_bin_refinement`: MetaWRAP refinement; default `false`.
+- `unrefined_binner`: output used when refinement is disabled; default `metabat2`.
+- `enable_checkm1`: legacy CheckM1 report; default `false`.
+- `enable_checkm2`, `enable_gunc`, `enable_gtdbtk`, `enable_prokka`: core result modules.
+- `enable_eggnog`, `enable_abricate`, `enable_rgi`, `enable_antismash`: optional expensive/specialized modules.
+- `require_database_manifest`: fail before execution when a versioned database manifest is absent; enabled by the Web publication preset.
 
-Optional ancient-only binning (based on PyDamage results):
-- `use_ancient_contigs`: enable/disable filtering before binning
-- `pydamage_qvalue_max`: q-value threshold (default `0.05`)
-- `pydamage_predicted_accuracy_min`: minimum `predicted_accuracy` (default `0.5`)
-- `pydamage_contig_column`, `pydamage_qvalue_column`, `pydamage_predicted_accuracy_column`: column names in `pydamage_results.csv`
+The `tools` entries may point to existing Conda/Mamba environment prefixes. Snakemake activates those prefixes through the local or Slurm profile. Environment specifications used by APPAM are under `../docker/tools/environments/`.
 
-## Quick Start
-Dry run:
+## Databases
+
+Core publication runs normally require:
+
+- CheckM2 database (`checkm2_db`)
+- GUNC database or `.dmnd` file (`gunc_db`)
+- GTDB-Tk release directory (`gtdbtk_db`)
+
+eggNOG is needed only when eggNOG annotation is enabled. CheckM1 is needed only for CheckM1 reporting or MetaWRAP refinement. ABRicate, Prokka, and antiSMASH can use their configured software databases; record those releases in the APPAM database manifest. RGI `global` mode uses CARD data loaded into its environment; `local` mode uses a configured directory prepared with `rgi load --local`. Both require an explicit CARD release in the manifest. APPAM records the manifest content and checksum in run provenance.
+
+## Run
+
+From this directory:
+
 ```bash
-snakemake --profile profiles/local -n
+snakemake --snakefile workflow/Snakefile \
+  --configfile config/config.local.yaml \
+  --profile profiles/local
 ```
 
-Run locally:
+Dry-run:
+
 ```bash
-snakemake --profile profiles/local
+snakemake --snakefile workflow/Snakefile \
+  --configfile config/config.local.yaml \
+  --profile profiles/local --dry-run
 ```
 
-Run on SLURM:
+For Slurm, use `--profile profiles/slurm` after adapting account/partition defaults to the cluster policy. The Slurm executor plugin must be installed in the Snakemake environment.
+
+## Principal outputs
+
+- `fastp/` or `adapterremoval/`: preprocessing products and reports.
+- `megahit/{sample}/final.contigs.fa`: assembled contigs.
+- `bowtie2/{sample}/`: sorted/indexed contig alignment.
+- `pydamage/{sample}/pydamage_results.csv`: upstream PyDamage output.
+- `pydamage/{sample}/ancient.contigs.fa`: threshold-selected contigs for the optional ablation.
+- `metawrap/binning/{sample}/`: three initial binner outputs.
+- `metawrap/bin_refinement/{sample}/`: optional refined bins.
+- `checkm2/`, `gunc/`, `gtdbtk/`: MAG quality and taxonomy.
+- `prokka/`, `eggnog/`, `abricate/`, `rgi/`, `antismash/`: enabled annotations.
+- benchmark and log directories declared in the effective config.
+
+Variant calling outputs are auxiliary and are not interpreted as a general ancient-DNA damage correction.
+
+## Scientific boundaries
+
+- The tracked input contract currently requires paired-end libraries; single-end-only studies need a separate preprocessing contract.
+- Host depletion is not performed automatically. Apply and document study-appropriate host screening before APPAM when required.
+- The Prokka workflow currently uses bacterial metagenome mode. Archaeal or mixed-domain MAG sets require taxonomy-aware annotation outside this rule.
+- Empty selected bin sets and empty annotation inputs are treated as failures rather than successful zero-result runs.
+- Negative controls, extraction blanks, damage thresholds, and downstream biological interpretation remain study-design decisions and must be reported separately.
+
+## Validation
+
+Repository dry-run tests exercise both conservative `fastp` and ancient-only AdapterRemoval/refinement DAGs:
+
 ```bash
-snakemake --profile profiles/slurm
+python -m unittest ../tests/test_appam_smk_dry_run.py -v
+snakemake --snakefile workflow/Snakefile --configfile tests/config/ci.yaml --lint
 ```
 
-Visualize the DAG:
-```bash
-snakemake --profile profiles/local --dag | dot -Tsvg > dag.svg
-```
+These checks validate workflow construction, not biological performance. Use the root `benchmark/` protocol before making comparative recovery or speed claims.
 
-Rerun a specific rule:
-```bash
-snakemake --profile profiles/local --forcerun <rule_name>
-```
+## Citation and license
 
-## Workflow Overview
-Default targets in `rule all` include:
-- Read QC and adapter trimming/collapsing
-- Assembly
-- Mapping and damage assessment
-- Binning and refinement
-- Bin quality assessment with CheckM1 and optional CheckM2
-- Contamination/chimerism assessment with optional GUNC
-- Taxonomic classification
-- Optional genome annotation with Prokka, eggNOG-mapper, ABRicate, RGI, and antiSMASH
-
-Additional rules exist but are not in the default targets:
-- Variant calling
-- Contig filtering by damage (ancient vs modern)
-
-## Outputs
-Primary outputs are under `paths.results_dir` in `config/config.yaml`. Examples (relative to `paths.results_dir`):
-- `preprocess/` (both modes write preprocessing outputs here)
-- `megahit/`
-- `bowtie2/`
-- `pydamage/`
-- `metawrap/`
-- `checkm/`
-- `checkm2/`
-- `gunc/`
-- `gtdbtk/`
-- `annotation/prokka/`
-- `annotation/eggnog/`
-- `annotation/abricate/`
-- `annotation/rgi/`
-- `annotation/antismash/`
-
-Logs and benchmarks are written to `paths.logs_dir` and `paths.benchmark_dir`.  
-Runtime directories like `work/` and `.snakemake/` are gitignored.
-
-When ancient-only binning is enabled, filtered contigs are written to:
-- `pydamage/{sample}/ancient.contigs.fa`
-- `pydamage/{sample}/modern.contigs.fa`
-
-## Project Structure
-- `workflow/Snakefile`: workflow entry point
-- `workflow/rules/`: pipeline stages (`preprocess.smk`, `assembly.smk`, `damage.smk`, `contigs_filter.smk`, `variants.smk`, `binning.smk`, `classify.smk`)
-- `workflow/envs/`: Conda environment specs
-- `profiles/`: execution profiles (`local`, `slurm`)
-- `config/`: configuration and sample manifest
-
-## Contributing
-Issues and pull requests are welcome. Please keep changes focused and describe the workflow impact, commands run, and any config or environment updates.
-
-## License
-MIT. See `LICENSE`.
-
-## Citation
-See `CITATION.md`.
+See the repository-root `CITATION.cff` and `LICENSE`.

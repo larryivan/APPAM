@@ -2,7 +2,7 @@
 
 
 rule split_contigs_by_pydamage:
-    conda: "../envs/APPAM-ENV-A.yaml"
+    conda: config["tools"]["assembly_env"]
     input:
         contigs=f"{RESULTS_DIR}/megahit/{{sample}}/final.contigs.fa",
         pydamage=f"{RESULTS_DIR}/pydamage/{{sample}}/pydamage_results.csv"

@@ -2,12 +2,12 @@
 import os
 
 
-REFINED_BINS = f"{RESULTS_DIR}/metawrap/bin_refinement/{{sample}}/metawrap_50_10_bins"
+REFINED_BINS = FINAL_BINS_PATTERN
 ANNOTATION_THREADS = int(config["params"].get("annotation_threads", 8))
 
 
 rule prokka_annotation:
-    conda: config["tools"].get("prokka_env", "../envs/APPAM-ENV-B.yaml")
+    conda: config["tools"].get("prokka_env", "../../../docker/tools/environments/prokka.yml")
     input:
         bins_dir=REFINED_BINS
     output:
@@ -22,12 +22,17 @@ rule prokka_annotation:
         mem_mb=32000
     shell:
         r"""
-        mkdir -p {output.outdir} $(dirname {log})
-        : > {log}
+        mkdir -p {output.outdir:q} "$(dirname {log:q})"
+        : > {log:q}
         shopt -s nullglob
-        for bin in {input.bins_dir}/*.fa; do
+        bins=({input.bins_dir:q}/*.fa)
+        if [ "${{#bins[@]}}" -eq 0 ]; then
+            echo "No MAG FASTA files found under {input.bins_dir}" >> {log:q}
+            exit 1
+        fi
+        for bin in "${{bins[@]}}"; do
             bin_name="$(basename "$bin" .fa)"
-            bin_out="{output.outdir}/$bin_name"
+            bin_out={output.outdir:q}/"$bin_name"
             rm -rf "$bin_out"
             prokka "$bin" \
                 --outdir "$bin_out" \
@@ -35,14 +40,14 @@ rule prokka_annotation:
                 --cpus {threads} \
                 --kingdom Bacteria \
                 --metagenome \
-                --force >> {log} 2>&1
+                --force >> {log:q} 2>&1
         done
-        touch {output.done}
+        touch {output.done:q}
         """
 
 
 rule eggnog_annotation:
-    conda: config["tools"].get("eggnog_env", "../envs/APPAM-ENV-B.yaml")
+    conda: config["tools"].get("eggnog_env", "../../../docker/tools/environments/eggnog_py310.yml")
     input:
         prokka_done=f"{RESULTS_DIR}/annotation/prokka/{{sample}}/prokka.done",
         prokka_dir=f"{RESULTS_DIR}/annotation/prokka/{{sample}}"
@@ -60,26 +65,31 @@ rule eggnog_annotation:
         mem_mb=64000
     shell:
         r"""
-        mkdir -p {output.outdir} $(dirname {log})
-        : > {log}
+        mkdir -p {output.outdir:q} "$(dirname {log:q})"
+        : > {log:q}
         shopt -s nullglob
-        for faa in {input.prokka_dir}/*/*.faa; do
+        faa_files=({input.prokka_dir:q}/*/*.faa)
+        if [ "${{#faa_files[@]}}" -eq 0 ]; then
+            echo "No Prokka protein FASTA files found under {input.prokka_dir}" >> {log:q}
+            exit 1
+        fi
+        for faa in "${{faa_files[@]}}"; do
             prefix="$(basename "$faa" .faa)"
             emapper.py \
                 -i "$faa" \
                 --itype proteins \
-                --data_dir {params.db} \
+                --data_dir {params.db:q} \
                 -o "$prefix" \
-                --output_dir {output.outdir} \
+                --output_dir {output.outdir:q} \
                 --cpu {threads} \
-                --override >> {log} 2>&1
+                --override >> {log:q} 2>&1
         done
-        touch {output.done}
+        touch {output.done:q}
         """
 
 
 rule abricate_annotation:
-    conda: config["tools"].get("abricate_env", "../envs/APPAM-ENV-B.yaml")
+    conda: config["tools"].get("abricate_env", "../../../docker/tools/environments/abricate.yml")
     input:
         bins_dir=REFINED_BINS
     output:
@@ -99,35 +109,41 @@ rule abricate_annotation:
         mem_mb=16000
     shell:
         r"""
-        mkdir -p {output.outdir} $(dirname {log})
-        : > {log}
-        : > {output.combined}
+        mkdir -p {output.outdir:q} "$(dirname {log:q})"
+        : > {log:q}
+        : > {output.combined:q}
         shopt -s nullglob
+        bins=({input.bins_dir:q}/*.fa)
+        if [ "${{#bins[@]}}" -eq 0 ]; then
+            echo "No MAG FASTA files found under {input.bins_dir}" >> {log:q}
+            exit 1
+        fi
         first=1
-        for bin in {input.bins_dir}/*.fa; do
+        for bin in "${{bins[@]}}"; do
             bin_name="$(basename "$bin" .fa)"
-            out="{output.outdir}/$bin_name.tsv"
-            abricate --db {params.db} --minid {params.minid} --mincov {params.mincov} "$bin" > "$out" 2>> {log}
+            out={output.outdir:q}/"$bin_name.tsv"
+            abricate --db {params.db:q} --minid {params.minid} --mincov {params.mincov} "$bin" > "$out" 2>> {log:q}
             if [ "$first" -eq 1 ]; then
-                cat "$out" >> {output.combined}
+                cat "$out" >> {output.combined:q}
                 first=0
             else
-                tail -n +2 "$out" >> {output.combined}
+                tail -n +2 "$out" >> {output.combined:q}
             fi
         done
-        touch {output.done}
+        touch {output.done:q}
         """
 
 
 rule rgi_annotation:
-    conda: config["tools"].get("rgi_env", "../envs/APPAM-ENV-B.yaml")
+    conda: config["tools"].get("rgi_env", "../../../docker/tools/environments/rgi.yml")
     input:
         bins_dir=REFINED_BINS
     output:
         outdir=directory(f"{RESULTS_DIR}/annotation/rgi/{{sample}}"),
         done=f"{RESULTS_DIR}/annotation/rgi/{{sample}}/rgi.done"
     params:
-        mode=config["databases"].get("rgi_db_mode", "online")
+        mode=config["databases"].get("rgi_db_mode", "global"),
+        db=config["databases"].get("rgi_db", "")
     log:
         f"{LOGS_DIR}/annotation/rgi/{{sample}}.log"
     benchmark:
@@ -137,29 +153,39 @@ rule rgi_annotation:
         mem_mb=32000
     shell:
         r"""
-        mkdir -p {output.outdir} $(dirname {log})
-        : > {log}
+        mkdir -p {output.outdir:q} "$(dirname {log:q})"
+        : > {log:q}
         shopt -s nullglob
-        local_flag=""
-        if [ "{params.mode}" = "local" ]; then
-            local_flag="--local"
+        bins=({input.bins_dir:q}/*.fa)
+        if [ "${{#bins[@]}}" -eq 0 ]; then
+            echo "No MAG FASTA files found under {input.bins_dir}" >> {log:q}
+            exit 1
         fi
-        for bin in {input.bins_dir}/*.fa; do
+        for bin in "${{bins[@]}}"; do
             bin_name="$(basename "$bin" .fa)"
-            rgi main \
-                --input_sequence "$bin" \
-                --output_file "{output.outdir}/$bin_name" \
-                --input_type contig \
-                --num_threads {threads} \
-                $local_flag \
-                --clean >> {log} 2>&1
+            bin_abs="$(readlink -f "$bin")"
+            output_prefix="$(cd {output.outdir:q} && pwd)/$bin_name"
+            if [ {params.mode:q} = "local" ]; then
+                if [ ! -d {params.db:q} ]; then
+                    echo "RGI local database directory not found: {params.db}" >> {log:q}
+                    exit 1
+                fi
+                (
+                    cd {params.db:q}
+                    rgi main --input_sequence "$bin_abs" --output_file "$output_prefix" \
+                        --input_type contig --num_threads {threads} --local --clean
+                ) >> {log:q} 2>&1
+            else
+                rgi main --input_sequence "$bin_abs" --output_file "$output_prefix" \
+                    --input_type contig --num_threads {threads} --clean >> {log:q} 2>&1
+            fi
         done
-        touch {output.done}
+        touch {output.done:q}
         """
 
 
 rule antismash_annotation:
-    conda: config["tools"].get("antismash_env", "../envs/APPAM-ENV-A.yaml")
+    conda: config["tools"].get("antismash_env", "../../../docker/tools/environments/antismash.yml")
     input:
         bins_dir=REFINED_BINS
     output:
@@ -174,17 +200,22 @@ rule antismash_annotation:
         mem_mb=64000
     shell:
         r"""
-        mkdir -p {output.outdir} $(dirname {log})
-        : > {log}
+        mkdir -p {output.outdir:q} "$(dirname {log:q})"
+        : > {log:q}
         shopt -s nullglob
-        for bin in {input.bins_dir}/*.fa; do
+        bins=({input.bins_dir:q}/*.fa)
+        if [ "${{#bins[@]}}" -eq 0 ]; then
+            echo "No MAG FASTA files found under {input.bins_dir}" >> {log:q}
+            exit 1
+        fi
+        for bin in "${{bins[@]}}"; do
             bin_name="$(basename "$bin" .fa)"
-            bin_out="{output.outdir}/$bin_name"
+            bin_out={output.outdir:q}/"$bin_name"
             rm -rf "$bin_out"
             antismash "$bin" \
                 --output-dir "$bin_out" \
                 --cpus {threads} \
-                --genefinding-tool prodigal >> {log} 2>&1
+                --genefinding-tool prodigal >> {log:q} 2>&1
         done
-        touch {output.done}
+        touch {output.done:q}
         """

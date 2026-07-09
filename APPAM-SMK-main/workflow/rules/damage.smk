@@ -1,7 +1,7 @@
 # workflow/rules/damage.smk
 import os
 rule bowtie2_index:
-    conda: "../envs/APPAM-ENV-A.yaml"
+    conda: config["tools"]["mapping_env"]
     input:
         contigs=f"{RESULTS_DIR}/megahit/{{sample}}/final.contigs.fa"
     output:
@@ -23,17 +23,19 @@ rule bowtie2_index:
         mem_mb=64000
     shell:
         r"""
-        mkdir -p {params.outdir} $(dirname {log})
+        mkdir -p {params.outdir:q} "$(dirname {log:q})"
         bowtie2-build --threads {threads} \
-            {input.contigs} \
-            {params.index_prefix} \
-            2> {log}
+            {input.contigs:q} \
+            {params.index_prefix:q} \
+            2> {log:q}
         """
 
 rule bowtie2_align:
-    conda: "../envs/APPAM-ENV-A.yaml"
+    conda: config["tools"]["mapping_env"]
     input:
-        se      = f"{PREPROCESS_DIR}/{{sample}}.single.fastq",
+        r1      = f"{PREPROCESS_DIR}/{{sample}}.paired_R1.fastq.gz",
+        r2      = f"{PREPROCESS_DIR}/{{sample}}.paired_R2.fastq.gz",
+        se      = f"{PREPROCESS_DIR}/{{sample}}.single.fastq.gz",
         contigs = f"{RESULTS_DIR}/megahit/{{sample}}/final.contigs.fa",
         index   = f"{RESULTS_DIR}/bowtie2/{{sample}}/{{sample}}_index.1.bt2"
     output:
@@ -47,21 +49,12 @@ rule bowtie2_align:
         f"{LOGS_DIR}/bowtie2/{{sample}}_align.log"
     benchmark:
         f"{BENCHMARK_DIR}/bowtie2_align/{{sample}}.txt"
-    shell:
-        r"""
-        mkdir -p $(dirname {log})
-        (bowtie2 -p {threads} --very-sensitive -N 1 \
-            -x {params.index_prefix} \
-            -U {input.se} | \
-        samtools view -@ {threads} -h -Sb - | \
-        samtools calmd -@ {threads} -u - {input.contigs} | \
-        samtools sort -@ {threads} -l 4 -o {output.bam} -) 2> {log}
-
-        """
+    script:
+        "../scripts/run_bowtie2_align.py"
 
 
 rule index_bam:
-    conda: "../envs/APPAM-ENV-A.yaml"
+    conda: config["tools"]["mapping_env"]
     input:
         f"{RESULTS_DIR}/bowtie2/{{sample}}/{{sample}}.sorted.bam"
     output:
@@ -75,8 +68,8 @@ rule index_bam:
         f"{BENCHMARK_DIR}/bowtie2_index_bam/{{sample}}.txt"
     shell:
         r"""
-        mkdir -p $(dirname {log})
-        samtools index -@ {threads} {input} 2> {log}
+        mkdir -p "$(dirname {log:q})"
+        samtools index -@ {threads} {input:q} 2> {log:q}
         """
 
 rule pydamage:
@@ -98,7 +91,7 @@ rule pydamage:
         mem_mb=64000
     shell:
         r"""
-        mkdir -p {params.outdir}
-        mkdir -p $(dirname {log})
-        pydamage -o {params.outdir} analyze -w {params.window} -p {threads} --force {input.bam} 2> {log}
+        mkdir -p {params.outdir:q}
+        mkdir -p "$(dirname {log:q})"
+        pydamage -o {params.outdir:q} analyze -w {params.window} -p {threads} --force {input.bam:q} 2> {log:q}
         """

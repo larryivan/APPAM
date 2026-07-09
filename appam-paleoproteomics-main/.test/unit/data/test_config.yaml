@@ -3,6 +3,8 @@ match_between_runs: false
 enzymes:
   - Trypsin/P
 enzyme_mode: 4
+max_missed_cleavages: 0
+maxquant_version: 2.8.1.0
 fixed_modifications:
   - Carbamidomethyl (C)
 variable_modifications:

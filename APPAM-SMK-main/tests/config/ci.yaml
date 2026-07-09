@@ -1,0 +1,19 @@
+samples_file: tests/data/samples.tsv
+paths:
+  raw_data_dir: tests/data
+  results_dir: /tmp/appam-smk-ci/results
+  logs_dir: /tmp/appam-smk-ci/logs
+  benchmark_dir: /tmp/appam-smk-ci/benchmarks
+params:
+  preprocess_method: fastp
+  use_ancient_contigs: false
+  enable_bin_refinement: false
+  enable_checkm1: false
+  enable_checkm2: false
+  enable_gunc: false
+  enable_gtdbtk: false
+  enable_prokka: false
+  enable_eggnog: false
+  enable_abricate: false
+  enable_rgi: false
+  enable_antismash: false

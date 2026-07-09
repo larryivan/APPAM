@@ -8,6 +8,7 @@ from snakemake.exceptions import WorkflowError
 
 
 REQUIRED_SAMPLE_COLUMNS = ["sample_id", "input_path", "experiment", "fraction"]
+SAMPLE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 
 
 def _load_samples() -> list[dict[str, str]]:
@@ -26,11 +27,18 @@ def _load_samples() -> list[dict[str, str]]:
             sample_id = (row.get("sample_id") or "").strip()
             if not sample_id:
                 raise WorkflowError("empty sample_id in samples.tsv")
+            if not SAMPLE_ID_PATTERN.fullmatch(sample_id):
+                raise WorkflowError(
+                    f"invalid sample_id in samples.tsv: {sample_id!r}; "
+                    "use 1-100 letters, numbers, dots, underscores, or hyphens"
+                )
             if sample_id in seen_sample_ids:
                 raise WorkflowError(f"duplicate sample_id in samples.tsv: {sample_id}")
             seen_sample_ids.add(sample_id)
             rows.append({key: (value or "").strip() for key, value in row.items()})
 
+        if not rows:
+            raise WorkflowError("samples.tsv has no sample rows")
         return rows
 
 

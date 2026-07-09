@@ -350,10 +350,11 @@ def search_active_users(query: str = '', exclude_user_id: str | None = None, lim
         conn.close()
 
 
-def create_user(username: str, password: str, display_name: str = ''):
+def create_user(username: str, password: str, display_name: str = '', role: str = 'user'):
     username = validate_username(username)
     password = validate_password(password)
     display_name = validate_display_name(display_name)
+    role = _validate_role(role)
 
     conn = get_db_connection()
     try:
@@ -361,8 +362,6 @@ def create_user(username: str, password: str, display_name: str = ''):
         if existing:
             raise ValueError('Username already exists.')
 
-        user_count_row = conn.execute('SELECT COUNT(*) AS count FROM users').fetchone()
-        role = 'admin' if int(user_count_row['count']) == 0 else 'user'
         user_id = str(uuid.uuid4())
         conn.execute(
             '''

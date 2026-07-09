@@ -14,3 +14,5 @@ rule all:
         expand("<results>/mzml/{sample}.mzML", sample=SAMPLE_IDS),
         "<maxquant>/mqpar/all_samples.mqpar.xml",
         "<maxquant>/combined/txt/proteinGroups.txt",
+        "<results>/reports/paleoproteomics-qc.json",
+        "<results>/reports/paleoproteomics-qc.html",

@@ -1,0 +1,9 @@
+allowBuilds:
+  esbuild: true
+  vue-demi: true
+
+overrides:
+  form-data: 4.0.6
+  postcss: 8.5.10
+  socket.io-parser: 4.2.6
+  ws: 8.21.0

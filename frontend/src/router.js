@@ -1,17 +1,19 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import Index from './views/Index.vue'
-import AuthView from './views/AuthView.vue'
-import Documentation from './views/Documentation.vue'
-import ProjectList from './views/ProjectList.vue'
-import SettingsView from './views/SettingsView.vue'
-import AdminUsersView from './views/AdminUsersView.vue'
-import WorkerStatusView from './views/WorkerStatusView.vue'
-import Workspace from './views/Workspace.vue'
-import Overview from './views/Overview.vue'
-import WorkflowView from './views/WorkflowView.vue'
-import PipelineTool from './components/PipelineTool.vue'
-import FileManagerOptimized from './components/FileManagerOptimized.vue'
 import { authState, loadCurrentUser } from './lib/auth'
+
+const Index = () => import('./views/Index.vue')
+const AuthView = () => import('./views/AuthView.vue')
+const Documentation = () => import('./views/Documentation.vue')
+const ProjectList = () => import('./views/ProjectList.vue')
+const SettingsView = () => import('./views/SettingsView.vue')
+const AdminUsersView = () => import('./views/AdminUsersView.vue')
+const AdminCenterView = () => import('./views/AdminCenterView.vue')
+const WorkerStatusView = () => import('./views/WorkerStatusView.vue')
+const Workspace = () => import('./views/Workspace.vue')
+const Overview = () => import('./views/Overview.vue')
+const WorkflowView = () => import('./views/WorkflowView.vue')
+const PipelineTool = () => import('./components/PipelineTool.vue')
+const FileManagerOptimized = () => import('./components/FileManagerOptimized.vue')
 
 const routes = [
   {
@@ -43,6 +45,12 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/admin',
+    name: 'AdminCenter',
+    component: AdminCenterView,
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
     path: '/admin/users',
     name: 'AdminUsers',
     component: AdminUsersView,
@@ -56,7 +64,6 @@ const routes = [
   },
   {
     path: '/workspace/:id',
-    name: 'Workspace',
     component: Workspace,
     meta: { requiresAuth: true },
     children: [

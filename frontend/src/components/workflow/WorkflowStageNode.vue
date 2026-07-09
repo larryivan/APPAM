@@ -32,7 +32,7 @@
     </div>
 
     <div class="stage-note">
-      {{ data.optional ? 'Optional branch' : data.stateLabel }}
+      {{ data.stateLabel }}
     </div>
   </div>
 </template>
@@ -153,8 +153,13 @@ const nodeVars = computed(() => ({
   background: #dc2626;
 }
 
-.stage-node.state-optional .stage-status-dot {
+.stage-node.state-optional .stage-status-dot,
+.stage-node.state-skipped .stage-status-dot {
   background: #94a3b8;
+}
+
+.stage-node.state-interrupted .stage-status-dot {
+  background: #d97706;
 }
 
 .stage-file-mark {

@@ -46,8 +46,8 @@ fi
 
 if OPENCODE_COMMAND="$(resolve_opencode_command)"; then
   export OPENCODE_CLI_COMMAND="${OPENCODE_COMMAND}"
-  echo "[appam-tools] Starting OpenCode API on 0.0.0.0:${OPENCODE_PORT}" >&2
-  "${OPENCODE_COMMAND}" serve --hostname 0.0.0.0 --port "${OPENCODE_PORT}" --print-logs >>"${OPENCODE_LOG}" 2>&1 &
+  echo "[appam-tools] Starting optional OpenCode API on 127.0.0.1:${OPENCODE_PORT}" >&2
+  "${OPENCODE_COMMAND}" serve --hostname 127.0.0.1 --port "${OPENCODE_PORT}" --print-logs >>"${OPENCODE_LOG}" 2>&1 &
   OPENCODE_PID=$!
 else
   echo "[appam-tools] Warning: opencode command not found; OpenCode API will be unavailable." >&2
@@ -69,7 +69,10 @@ cleanup() {
 
 trap cleanup INT TERM
 
-micromamba run -n backend python /opt/appam/backend/run.py >>"${BACKEND_LOG}" 2>&1 &
+/opt/conda/envs/backend/bin/gunicorn \
+  --config /opt/appam/backend/gunicorn.conf.py \
+  --chdir /opt/appam/backend \
+  wsgi:app >>"${BACKEND_LOG}" 2>&1 &
 BACKEND_PID=$!
 
 set +e

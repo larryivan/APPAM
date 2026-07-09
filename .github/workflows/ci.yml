@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python-and-workflows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install Python and workflow dependencies
+        run: python -m pip install --upgrade pip && pip install -r backend/requirements.txt pip-audit==2.10.1
+      - name: Python dependency audit
+        run: pip-audit -r backend/requirements.txt --progress-spinner off
+      - name: Backend tests
+        run: python -m unittest discover -s backend/tests -v
+      - name: Paleoproteomics unit tests
+        working-directory: appam-paleoproteomics-main
+        run: python -m unittest discover -s .test/unit -v
+      - name: Paleoproteomics integration tests
+        working-directory: appam-paleoproteomics-main
+        run: python -m unittest discover -s .test/integration -v
+      - name: Root and APPAM-SMK tests
+        run: python -m unittest discover -s tests -v
+      - name: Benchmark dry-run and analysis
+        run: |
+          snakemake -s benchmark/Snakefile --cores 1 --lint
+          snakemake -s benchmark/Snakefile --cores 1
+      - name: APPAM-SMK lint
+        working-directory: APPAM-SMK-main
+        run: snakemake --snakefile workflow/Snakefile --configfile tests/config/ci.yaml --lint
+      - name: Compose validation
+        env:
+          FLASK_SECRET_KEY: ci-only-secret
+        run: docker compose config --quiet
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.16.0
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: Frontend tests
+        working-directory: frontend
+        run: pnpm test
+      - name: Frontend dependency audit
+        working-directory: frontend
+        run: pnpm audit --prod
+      - name: Frontend production build
+        working-directory: frontend
+        run: pnpm build

@@ -133,9 +133,9 @@
             </div>
             <div v-if="htmlTab === 'rendered'" class="html-render-container">
               <iframe 
-                :srcdoc="previewData.content" 
+                :srcdoc="renderHtml(previewData.content)"
                 class="html-iframe"
-                sandbox="allow-same-origin allow-scripts"
+                sandbox
                 frameborder="0"
               ></iframe>
             </div>
@@ -631,7 +631,9 @@
 
 <script setup>
 import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
-import * as echarts from 'echarts'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
+import echarts from '../lib/echarts'
 
 const props = defineProps({
   showModal: {
@@ -1118,30 +1120,15 @@ const formatSize = (bytes) => {
 
 const renderMarkdown = (content) => {
   if (!content) return ''
-  
-  // Basic markdown to HTML conversion
-  let html = content
-    // Headers
-    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-    // Bold
-    .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
-    .replace(/__(.*?)__/gim, '<strong>$1</strong>')
-    // Italic
-    .replace(/\*(.*)\*/gim, '<em>$1</em>')
-    .replace(/_(.*?)_/gim, '<em>$1</em>')
-    // Code blocks
-    .replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>')
-    // Inline code
-    .replace(/`(.*?)`/gim, '<code>$1</code>')
-    // Links
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/gim, '<a href="$2" target="_blank">$1</a>')
-    // Line breaks
-    .replace(/\n/gim, '<br>')
-  
-  return html
+
+  const html = marked.parse(String(content), { gfm: true, breaks: true })
+  return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } })
 }
+
+const renderHtml = (content) => DOMPurify.sanitize(
+  String(content || ''),
+  { USE_PROFILES: { html: true } }
+)
 
 const cancelEdit = () => {
   if (hasChanges.value) {

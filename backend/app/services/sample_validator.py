@@ -9,6 +9,7 @@ from ..paths import get_project_dir, resolve_project_path
 
 FASTQ_EXTENSIONS = ('.fastq.gz', '.fq.gz', '.fastq', '.fq')
 THERMO_RAW_EXTENSIONS = ('.raw',)
+SAMPLE_ID_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$')
 
 
 def _project_relative(project_id: str, path: Path) -> str:
@@ -39,16 +40,38 @@ def _sample_id(value) -> str:
     return str(value or '').strip()
 
 
-def _resolve_read_path(project_id: str, raw_dir: Path, value: str | None, default_name: str) -> Path:
+def _safe_project_candidate(project_id: str, base: Path, value: str) -> Path:
+    project_dir = get_project_dir(project_id).resolve()
+    candidate = (base / value).resolve()
+    if candidate != project_dir and project_dir not in candidate.parents:
+        raise ValueError(f'Path escapes project workspace: {value}')
+    return candidate
+
+
+def _resolve_manifest_path(project_id: str, manifest_path: Path, value: str) -> Path:
+    project_candidate = resolve_project_path(project_id, value)
+    manifest_candidate = _safe_project_candidate(project_id, manifest_path.parent, value)
+    for candidate in (project_candidate, manifest_candidate):
+        if candidate.exists():
+            return candidate
+    return manifest_candidate
+
+
+def _resolve_read_path(project_id: str, manifest_path: Path, raw_dir: Path, value: str | None, default_name: str) -> Path:
     if not value:
         return raw_dir / default_name
     raw_value = str(value).strip()
     if not raw_value:
         return raw_dir / default_name
-    candidate = resolve_project_path(project_id, raw_value)
-    if candidate.exists() or '/' in raw_value or '\\' in raw_value:
-        return candidate
-    return raw_dir / raw_value
+    candidates = [
+        _resolve_manifest_path(project_id, manifest_path, raw_value),
+        _safe_project_candidate(project_id, raw_dir, raw_value),
+        _safe_project_candidate(project_id, raw_dir, Path(raw_value).name),
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
 
 
 def validate_appam_smk_manifest(project_id: str, sample_manifest: str, raw_data_dir: str) -> dict:
@@ -83,6 +106,9 @@ def validate_appam_smk_manifest(project_id: str, sample_manifest: str, raw_data_
         if not sample_id:
             checks.append(_check('error', f'row_{index}', f'Missing sample_id at row {index}'))
             continue
+        if not SAMPLE_ID_RE.fullmatch(sample_id):
+            checks.append(_check('error', sample_id, f'Invalid sample_id: {sample_id}. Use letters, numbers, dots, underscores, and hyphens.'))
+            continue
         if sample_id in seen:
             checks.append(_check('error', sample_id, f'Duplicate sample_id: {sample_id}'))
             continue
@@ -90,10 +116,12 @@ def validate_appam_smk_manifest(project_id: str, sample_manifest: str, raw_data_
 
         forward_value = row.get('forward_reads') or row.get('r1') or row.get('R1')
         reverse_value = row.get('reverse_reads') or row.get('r2') or row.get('R2')
-        forward_path = _resolve_read_path(project_id, raw_dir, forward_value, f'{sample_id}_R1.fastq.gz')
-        reverse_path = _resolve_read_path(project_id, raw_dir, reverse_value, f'{sample_id}_R2.fastq.gz')
+        forward_path = _resolve_read_path(project_id, manifest_path, raw_dir, forward_value, f'{sample_id}_R1.fastq.gz')
+        reverse_path = _resolve_read_path(project_id, manifest_path, raw_dir, reverse_value, f'{sample_id}_R2.fastq.gz')
         forward_exists = forward_path.is_file()
         reverse_exists = reverse_path.is_file()
+        forward_fastq = str(forward_path).lower().endswith(FASTQ_EXTENSIONS)
+        reverse_fastq = str(reverse_path).lower().endswith(FASTQ_EXTENSIONS)
 
         samples.append({
             'sample_id': sample_id,
@@ -102,8 +130,8 @@ def validate_appam_smk_manifest(project_id: str, sample_manifest: str, raw_data_
             'forward_exists': forward_exists,
             'reverse_exists': reverse_exists,
         })
-        checks.append(_check('ok' if forward_exists else 'error', f'{sample_id}_R1', f'R1 found: {forward_path}' if forward_exists else f'R1 missing: {forward_path}'))
-        checks.append(_check('ok' if reverse_exists else 'error', f'{sample_id}_R2', f'R2 found: {reverse_path}' if reverse_exists else f'R2 missing: {reverse_path}'))
+        checks.append(_check('ok' if forward_exists and forward_fastq else 'error', f'{sample_id}_R1', f'R1 found: {forward_path}' if forward_exists and forward_fastq else f'R1 missing or not FASTQ: {forward_path}'))
+        checks.append(_check('ok' if reverse_exists and reverse_fastq else 'error', f'{sample_id}_R2', f'R2 found: {reverse_path}' if reverse_exists and reverse_fastq else f'R2 missing or not FASTQ: {reverse_path}'))
 
     if not rows:
         checks.append(_check('error', 'sample_rows', 'samples.tsv has no sample rows'))
@@ -138,6 +166,9 @@ def validate_paleoproteomics_table(project_id: str, sample_table: str) -> dict:
         if not sample_id:
             checks.append(_check('error', f'row_{index}', f'Missing sample_id at row {index}'))
             continue
+        if not SAMPLE_ID_RE.fullmatch(sample_id):
+            checks.append(_check('error', sample_id, f'Invalid sample_id: {sample_id}. Use letters, numbers, dots, underscores, and hyphens.'))
+            continue
         if sample_id in seen:
             checks.append(_check('error', sample_id, f'Duplicate sample_id: {sample_id}'))
             continue
@@ -147,16 +178,30 @@ def validate_paleoproteomics_table(project_id: str, sample_table: str) -> dict:
         if not raw_input_path:
             checks.append(_check('error', sample_id, f'Missing input_path for sample {sample_id}'))
             continue
-        input_path = resolve_project_path(project_id, raw_input_path)
+        input_path = _resolve_manifest_path(project_id, table_path, raw_input_path)
         exists = input_path.exists()
+        is_supported = (
+            input_path.is_file() and input_path.suffix.lower() in THERMO_RAW_EXTENSIONS
+        ) or (
+            input_path.is_dir() and input_path.name.lower().endswith('.d')
+        )
+        experiment = str(row.get('experiment') or '').strip()
+        fraction = str(row.get('fraction') or '').strip()
         samples.append({
             'sample_id': sample_id,
             'input_path': _project_relative(project_id, input_path),
-            'experiment': row.get('experiment'),
-            'fraction': row.get('fraction'),
+            'experiment': experiment,
+            'fraction': fraction,
             'exists': exists,
         })
-        checks.append(_check('ok' if exists else 'error', sample_id, f'Input found: {input_path}' if exists else f'Input missing: {input_path}'))
+        checks.append(_check('ok' if exists and is_supported else 'error', sample_id, f'Input found: {input_path}' if exists and is_supported else f'Input missing or unsupported (expected .RAW file or .d directory): {input_path}'))
+        checks.append(_check('ok' if experiment else 'error', f'{sample_id}_experiment', f'Experiment: {experiment}' if experiment else 'Experiment is required'))
+        try:
+            fraction_value = int(fraction)
+            fraction_valid = -32768 <= fraction_value <= 32767
+        except (TypeError, ValueError):
+            fraction_valid = False
+        checks.append(_check('ok' if fraction_valid else 'error', f'{sample_id}_fraction', f'Fraction: {fraction}' if fraction_valid else f'Fraction must be an integer: {fraction!r}'))
 
     if not rows:
         checks.append(_check('error', 'sample_rows', 'samples.tsv has no sample rows'))
@@ -254,3 +299,32 @@ def write_paleoproteomics_manifest(project_id: str, data_dir: str, output_path: 
                 'fraction': '1',
             })
     return {'path': _project_relative(project_id, destination), 'samples_written': len(scan['proteomics_samples']), 'scan': scan}
+
+
+def write_resolved_appam_smk_manifest(project_id: str, validation: dict, destination: Path) -> Path:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with destination.open('w', encoding='utf-8', newline='') as handle:
+        writer = csv.DictWriter(handle, fieldnames=['sample_id', 'forward_reads', 'reverse_reads'], delimiter='\t')
+        writer.writeheader()
+        for sample in validation.get('samples') or []:
+            writer.writerow({
+                'sample_id': sample['sample_id'],
+                'forward_reads': str(resolve_project_path(project_id, sample['forward_reads'])),
+                'reverse_reads': str(resolve_project_path(project_id, sample['reverse_reads'])),
+            })
+    return destination
+
+
+def write_resolved_paleoproteomics_table(project_id: str, validation: dict, destination: Path) -> Path:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with destination.open('w', encoding='utf-8', newline='') as handle:
+        writer = csv.DictWriter(handle, fieldnames=['sample_id', 'input_path', 'experiment', 'fraction'], delimiter='\t')
+        writer.writeheader()
+        for sample in validation.get('samples') or []:
+            writer.writerow({
+                'sample_id': sample['sample_id'],
+                'input_path': str(resolve_project_path(project_id, sample['input_path'])),
+                'experiment': sample['experiment'],
+                'fraction': sample['fraction'],
+            })
+    return destination

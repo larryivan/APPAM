@@ -1,12 +1,23 @@
 from flask import Blueprint, jsonify, request
 from app.auth import admin_required
 from app.services.local_executor import get_worker_status
+from app.services.system_readiness import collect_system_readiness
 from app.services.system_info import system_info_service
 import traceback
 
 system_bp = Blueprint('system', __name__)
 
+
+@system_bp.route('/readiness', methods=['GET'])
+@admin_required
+def get_system_readiness():
+    return jsonify({
+        'success': True,
+        'data': collect_system_readiness(),
+    })
+
 @system_bp.route('/info', methods=['GET'])
+@admin_required
 def get_system_info():
     """获取系统信息"""
     try:
@@ -23,7 +34,7 @@ def get_system_info():
         elif info_type == 'network':
             data = system_info_service.get_network_info()
         elif info_type == 'processes':
-            limit = request.args.get('limit', 10, type=int)
+            limit = min(max(request.args.get('limit', 10, type=int) or 10, 1), 100)
             data = system_info_service.get_process_info(limit=limit)
         elif info_type == 'gpu':
             data = system_info_service.get_gpu_info()
@@ -63,6 +74,7 @@ def get_worker_runtime_status():
         }), 500
 
 @system_bp.route('/recommendations', methods=['GET'])
+@admin_required
 def get_bioinformatics_recommendations():
     """获取生物信息学分析建议"""
     try:
@@ -82,6 +94,7 @@ def get_bioinformatics_recommendations():
         }), 500
 
 @system_bp.route('/status', methods=['GET'])
+@admin_required
 def get_system_status():
     """获取系统状态摘要"""
     try:

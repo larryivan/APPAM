@@ -1,5 +1,6 @@
 <template>
   <div class="worker-status">
+    <AdminNav active="worker" />
     <header class="worker-status__hero">
       <div>
         <div class="worker-status__kicker">Execution Runtime</div>
@@ -119,6 +120,7 @@
 
 <script setup>
 import { onMounted, onUnmounted, ref } from 'vue'
+import AdminNav from '../components/AdminNav.vue'
 
 const data = ref(null)
 const error = ref('')
