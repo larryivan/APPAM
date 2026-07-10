@@ -39,23 +39,56 @@
     <main class="workspace-content">
       <router-view />
     </main>
+
+    <div v-if="isAdmin" class="admin-runtime-tools" role="group" aria-label="Administrator tools">
+      <FloatingSystemMonitor />
+      <button
+        type="button"
+        class="opencode-trigger"
+        :disabled="opencodeAvailable !== true"
+        :title="openCodeTitle"
+        aria-label="Open OpenCode assistant"
+        @click="openOpenCodeWindow"
+      >
+        <Icon name="wand-sparkles" :size="20" />
+      </button>
+      <FloatingTerminal
+        v-if="opencodeAvailable === true"
+        ref="openCodeRef"
+        preset="opencode"
+        title="OpenCode"
+        :show-trigger="false"
+      />
+      <FloatingTerminal />
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import Icon from '@/components/ui/Icon.vue'
+import { authState } from '@/lib/auth.js'
 import { getWorkflowOption } from '@/lib/workflowUi.js'
+
+const FloatingSystemMonitor = defineAsyncComponent(() => import('@/components/FloatingSystemMonitor.vue'))
+const FloatingTerminal = defineAsyncComponent(() => import('@/components/FloatingTerminal.vue'))
 
 const route = useRoute()
 const router = useRouter()
 const project = ref(null)
+const openCodeRef = ref(null)
+const opencodeAvailable = ref(null)
 
 const projectId = computed(() => String(route.params.id || ''))
+const isAdmin = computed(() => authState.user?.role === 'admin')
 const defaultWorkflowId = computed(() => project.value?.analysis_workflow || 'appam-smk')
 const workflowName = computed(() => getWorkflowOption(defaultWorkflowId.value)?.shortLabel || 'Not selected')
+const openCodeTitle = computed(() => {
+  if (opencodeAvailable.value === null) return 'Checking OpenCode availability'
+  return opencodeAvailable.value ? 'Open OpenCode assistant' : 'OpenCode is not configured on this server'
+})
 
 const overviewRoute = computed(() => ({ name: 'Overview', params: { id: projectId.value } }))
 const analysisRoute = computed(() => ({
@@ -65,6 +98,22 @@ const analysisRoute = computed(() => ({
 const filesRoute = computed(() => ({ name: 'FileManager', params: { id: projectId.value } }))
 const toolsRoute = computed(() => ({ name: 'ToolLibrary', params: { id: projectId.value } }))
 const toolsRouteActive = computed(() => ['ToolLibrary', 'PipelineTool'].includes(String(route.name || '')))
+
+function openOpenCodeWindow() {
+  if (opencodeAvailable.value === true) openCodeRef.value?.openWindow?.()
+}
+
+async function checkOpenCodeAvailability(admin) {
+  opencodeAvailable.value = null
+  if (!admin) return
+  try {
+    const response = await fetch('/api/parameter-fill/health')
+    const payload = await response.json().catch(() => ({}))
+    opencodeAvailable.value = response.ok && payload.available === true
+  } catch {
+    opencodeAvailable.value = false
+  }
+}
 
 async function loadProject() {
   if (!projectId.value) return
@@ -82,6 +131,7 @@ async function loadProject() {
 }
 
 watch(projectId, loadProject, { immediate: true })
+watch(isAdmin, checkOpenCodeAvailability, { immediate: true })
 </script>
 
 <style scoped>
@@ -201,6 +251,41 @@ watch(projectId, loadProject, { immediate: true })
   overflow: hidden;
 }
 
+.opencode-trigger {
+  position: fixed;
+  right: 88px;
+  bottom: 24px;
+  z-index: var(--z-fixed, 1000);
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 1px solid rgba(var(--accent-rgb), 0.25);
+  border-radius: 50%;
+  background: var(--surface-1);
+  color: var(--primary-600);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+
+.opencode-trigger:hover:not(:disabled) {
+  background: var(--surface-2);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.opencode-trigger:disabled {
+  border-color: var(--border-color-light);
+  color: var(--gray-400);
+  cursor: not-allowed;
+  box-shadow: var(--shadow-xs);
+}
+
+:deep(.monitor-trigger) {
+  right: 152px;
+}
+
 @media (max-width: 760px) {
   .workspace-layout {
     grid-template-columns: minmax(0, 1fr);
@@ -239,6 +324,15 @@ watch(projectId, loadProject, { immediate: true })
 
   .project-nav-footer {
     display: none;
+  }
+
+  .opencode-trigger {
+    right: max(60px, calc(60px + env(safe-area-inset-right)));
+    bottom: max(20px, env(safe-area-inset-bottom));
+  }
+
+  :deep(.monitor-trigger) {
+    right: max(116px, calc(116px + env(safe-area-inset-right)));
   }
 }
 

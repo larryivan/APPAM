@@ -58,7 +58,7 @@ The complete native installation, systemd, nginx, database, and port procedure i
 
 For routine laboratory use, create a project and select **Ancient metagenomics** or **Paleoproteomics**. Upload input files directly on the analysis page, review the automatically detected samples, and select **Start analysis**. APPAM generates the sample table, validates inputs, runs preflight checks, and submits the job to the shared queue without requiring users to edit TSV or YAML files.
 
-Each project has four stable destinations: **Overview**, **Analysis**, **Files**, and **Tools**. The **Options** dialog exposes versioned presets and scientific settings only when a study needs to depart from the recommended defaults. The searchable Tools page provides individual programs without mixing them into the routine workflow. Runtime paths, database setup, worker diagnostics, and other deployment controls remain in the Admin Center.
+Each project has four stable destinations: **Overview**, **Analysis**, **Files**, and **Tools**. The **Options** dialog exposes versioned presets and scientific settings only when a study needs to depart from the recommended defaults. The searchable Tools page provides individual programs without mixing them into the routine workflow. Runtime paths, database setup, and worker diagnostics remain in the Admin Center. Project terminals, live system monitoring, and OpenCode are loaded as administrator-only floating tools and are never rendered for regular users.
 
 ## Workflow inputs
 

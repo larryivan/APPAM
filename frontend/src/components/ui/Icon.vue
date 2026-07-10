@@ -15,10 +15,10 @@ import {
   ChevronDown, Circle, CircleCheck, CircleX, ClipboardList, ClipboardPaste,
   Copy, Cpu, Dna, Download, Eye, File, FileArchive, FileCode, FileMusic,
   FilePen, FileSpreadsheet, FileText, FileVideo, Folder, FolderOpen, FolderUp,
-  Globe, HardDrive, LayoutDashboard, LayoutGrid, Lightbulb, List, MapPin,
-  MemoryStick, MessageCircle, Minimize2, MoreHorizontal, Pencil, Plus, RotateCcw, Save,
+  Globe, HardDrive, Keyboard, LayoutDashboard, LayoutGrid, Lightbulb, List, MapPin,
+  Maximize2, MemoryStick, MessageCircle, Minimize2, MoreHorizontal, Pencil, Plus, RotateCcw, Save,
   Scissors, Search, Table, Target, Trash2, TriangleAlert, Users, WandSparkles,
-  Wrench, WrapText, X, Zap, ZoomIn, ZoomOut,
+  SquareTerminal, Wrench, WrapText, X, Zap, ZoomIn, ZoomOut,
 } from '@lucide/vue'
 
 /**
@@ -32,10 +32,10 @@ const registry = {
   ChevronDown, Circle, CircleCheck, CircleX, ClipboardList, ClipboardPaste,
   Copy, Cpu, Dna, Download, Eye, File, FileArchive, FileCode, FileMusic,
   FilePen, FileSpreadsheet, FileText, FileVideo, Folder, FolderOpen, FolderUp,
-  Globe, HardDrive, LayoutDashboard, LayoutGrid, Lightbulb, List, MapPin,
-  MemoryStick, MessageCircle, Minimize2, MoreHorizontal, Pencil, Plus, RotateCcw, Save,
+  Globe, HardDrive, Keyboard, LayoutDashboard, LayoutGrid, Lightbulb, List, MapPin,
+  Maximize2, MemoryStick, MessageCircle, Minimize2, MoreHorizontal, Pencil, Plus, RotateCcw, Save,
   Scissors, Search, Table, Target, Trash2, TriangleAlert, Users, WandSparkles,
-  Wrench, WrapText, X, Zap, ZoomIn, ZoomOut,
+  SquareTerminal, Wrench, WrapText, X, Zap, ZoomIn, ZoomOut,
 }
 
 const props = defineProps({
