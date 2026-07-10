@@ -2,12 +2,11 @@
   <div v-if="workflow && workflowTool" class="workflow-view">
     <header class="workflow-hero">
       <div class="workflow-hero-copy">
-        <div class="workflow-kicker">Workflow Automation</div>
+        <div class="workflow-kicker">Analysis</div>
         <h1>{{ workflow.title }}</h1>
         <p>{{ workflow.description }}</p>
         <div class="workflow-hero-meta">
           <span class="hero-pill">{{ project?.name || `Project ${projectId}` }}</span>
-          <span class="hero-pill subtle">{{ progress.completed }}/{{ progress.total }} tracked stages</span>
         </div>
       </div>
       <div class="workflow-hero-actions">
@@ -19,7 +18,7 @@
           {{ startButtonLabel }}
         </button>
         <button class="hero-btn secondary" @click="openRunDialog" :disabled="disableRunActions">
-          Customize
+          Options
         </button>
         <button
           v-if="activeWorkflowRun"
@@ -29,16 +28,12 @@
         >
           Stop
         </button>
-        <details class="workflow-more">
+        <details v-if="canResumeRun || canRetryRun || displayRun?.id" class="workflow-more">
           <summary class="hero-btn subtle icon-only" aria-label="More actions">···</summary>
           <div class="workflow-more-menu">
-            <button class="more-menu-item" @click="safeRefresh" :disabled="loadingState">Refresh</button>
-            <button class="more-menu-item" @click="handleOneClickDryRun" :disabled="disableRunActions">Validate setup only</button>
-            <button class="more-menu-item" @click="handleResume" :disabled="!canResumeRun">Resume</button>
-            <button class="more-menu-item" @click="safeFetchHealth" :disabled="loadingState">Runtime Health</button>
-            <button class="more-menu-item" @click="handleTemplate" :disabled="loadingState">Create Template</button>
-            <button class="more-menu-item" @click="handleRetry" :disabled="!canRetryRun">Retry</button>
-            <button class="more-menu-item" @click="handleProvenanceExport" :disabled="!displayRun?.id">Export Provenance</button>
+            <button v-if="canResumeRun" class="more-menu-item" @click="handleResume">Resume</button>
+            <button v-if="canRetryRun" class="more-menu-item" @click="handleRetry">Retry</button>
+            <button v-if="displayRun?.id" class="more-menu-item" @click="handleProvenanceExport">Export run record</button>
           </div>
         </details>
       </div>
@@ -62,12 +57,12 @@
     <section v-if="hasInputSetup" class="workflow-input-card">
       <div class="panel-header compact">
         <div>
-          <h2>Input Setup</h2>
-          <p>{{ inputSetupSubtitle }}. APPAM creates and validates the sample table automatically.</p>
+          <h2>Data</h2>
+          <p>{{ inputSetupSubtitle }}. Samples are detected and validated automatically.</p>
         </div>
         <div class="input-actions">
           <button class="hero-btn subtle" @click="handleRescanInputs" :disabled="loadingState">
-            Rescan inputs
+            Rescan
           </button>
         </div>
       </div>
@@ -100,10 +95,7 @@
           @upload-complete="handleQuickUploadComplete"
           @upload-error="handleQuickUploadError"
         />
-        <p>
-          Files are uploaded to <span class="mono">{{ quickUploadPath }}</span>.
-          <router-link :to="{ name: 'FileManager', params: { id: projectId } }">Open full file manager</router-link>
-        </p>
+        <p><router-link :to="{ name: 'FileManager', params: { id: projectId } }">Browse all project files</router-link></p>
       </div>
 
       <details v-if="detectedSamples.length" class="sample-review">
@@ -149,77 +141,12 @@
       </details>
     </section>
 
-    <div class="workflow-map-toggle-row">
-      <button type="button" class="workflow-map-toggle" @click="showWorkflowMap = !showWorkflowMap">
-        <Icon :name="showWorkflowMap ? 'chevron-down' : 'layout-dashboard'" :size="15" />
-        {{ showWorkflowMap ? 'Hide workflow map' : 'Show workflow map' }}
-      </button>
-      <span>Optional technical detail</span>
-    </div>
-
-    <section v-if="showWorkflowMap" class="workflow-graph-card">
-      <div class="panel-header">
-        <div>
-          <h2>Workflow Map</h2>
-          <p>Live workflow status.</p>
-        </div>
-        <div class="graph-side">
-          <div class="graph-meta-bar">
-            <span class="graph-meta-pill">{{ currentStage?.title || 'Waiting for run' }}</span>
-            <span class="graph-meta-pill mono">{{ runtimeState.currentRule || 'No active rule' }}</span>
-            <span class="graph-meta-pill subtle">Output: {{ displayRun?.output_root || workflow.outputRoot }}</span>
-          </div>
-          <div class="graph-legend">
-            <span><i class="legend-dot completed"></i>Completed</span>
-            <span><i class="legend-dot starting"></i>Starting</span>
-            <span><i class="legend-dot running"></i>Running</span>
-            <span><i class="legend-dot queued"></i>Queued</span>
-            <span><i class="legend-dot pending"></i>Pending</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="workflow-canvas-shell">
-        <WorkflowDiagram
-          :workflow="workflow"
-          :node-states="runtimeState.stateByNode"
-          :selected-node-id="selectedNodeId"
-          @select-node="selectedNodeId = $event"
-        />
-      </div>
-      <div v-if="selectedNode" class="graph-inspector">
-        <div class="graph-inspector-main">
-          <div class="selected-stage-title compact">
-            <span class="stage-state-badge" :class="nodeVisualState(selectedNode)">
-              {{ displayStageLabel(selectedNode.id) }}
-            </span>
-            <h4>{{ selectedNode.title }}</h4>
-          </div>
-          <p>{{ selectedNode.description }}</p>
-        </div>
-        <div class="graph-inspector-meta">
-          <span class="inline-pill mono">{{ runtimeState.currentRule || 'No active rule' }}</span>
-          <span class="inline-pill">Configured {{ configuredParameterCount }}/{{ workflowTool?.parameters?.length || 0 }}</span>
-          <span v-if="displayRun?.failure_label && displayRun.status === 'failed'" class="inline-pill alert">
-            {{ displayRun.failure_label }}
-          </span>
-        </div>
-      </div>
-      <div v-if="runtimeHealthChecks.length" class="runtime-checks">
-        <div v-for="check in runtimeHealthChecks" :key="`${check.name}-${check.message}`" class="runtime-check" :class="check.status || 'warn'">
-          <span class="status-dot"></span>
-          <strong>{{ check.name }}</strong>
-          <span>{{ check.message }}</span>
-        </div>
-      </div>
-    </section>
-
     <section v-if="workflowRuns.length || displayRun" class="workflow-activity-card">
       <div class="panel-header tabs">
         <div class="tab-buttons">
-          <button :class="{ active: activeTab === 'logs' }" @click="activeTab = 'logs'">Logs</button>
-          <button :class="{ active: activeTab === 'history' }" @click="activeTab = 'history'">Runs</button>
           <button :class="{ active: activeTab === 'results' }" @click="activeTab = 'results'">Results</button>
+          <button :class="{ active: activeTab === 'history' }" @click="activeTab = 'history'">History</button>
+          <button :class="{ active: activeTab === 'logs' }" @click="activeTab = 'logs'">Details</button>
         </div>
         <div class="activity-meta">
           <span v-if="displayRun" class="mono">{{ displayRun.id }}</span>
@@ -228,8 +155,7 @@
 
       <div v-if="activeTab === 'logs'" class="activity-panel">
         <div v-if="logLines.length === 0" class="empty-activity">
-          <p>No workflow logs yet.</p>
-          <span>Start a run to populate the execution console.</span>
+          <p>No run details yet.</p>
         </div>
         <div v-else class="workflow-log-console">
           <div v-for="(line, index) in logLines" :key="`${index}-${line}`" class="log-row">
@@ -434,13 +360,10 @@ import FilePicker from '@/components/FilePicker.vue'
 import FilePreviewModal from '@/components/FilePreviewModal.vue'
 import DragDropUpload from '@/components/DragDropUpload.vue'
 import Icon from '@/components/ui/Icon.vue'
-import WorkflowDiagram from '@/components/workflow/WorkflowDiagram.vue'
 import { parameterLabel } from '@/lib/workflowUi.js'
 import {
   getWorkflowDefinition,
   initWorkflowFormValues,
-  runtimeStateFromWorkflowRun,
-  stageLabelFromState,
 } from '@/lib/workflowDefinitions'
 
 const route = useRoute()
@@ -455,7 +378,6 @@ const workflowRuns = ref([])
 const displayRun = ref(null)
 const logText = ref('')
 const loadingState = ref(false)
-const selectedNodeId = ref(null)
 const activeTab = ref('history')
 const actionError = ref('')
 const actionErrorHint = ref('')
@@ -469,7 +391,6 @@ const formValues = ref({})
 const showFilePicker = ref(false)
 const currentPickerParam = ref(null)
 const tempFileSelection = ref(null)
-const runtimeHealth = ref(null)
 const manifestStatus = ref('')
 const manifestScan = ref(null)
 const inputDataDir = ref('')
@@ -482,7 +403,6 @@ const artifactPreviewOpen = ref(false)
 const artifactPreviewName = ref('')
 const artifactPreviewPath = ref('')
 const artifactPreviewData = ref({})
-const showWorkflowMap = ref(false)
 
 let refreshTimer = null
 
@@ -499,25 +419,6 @@ function scheduleRefresh(delay = 0) {
     }
   }, delay)
 }
-
-const runtimeState = computed(() => {
-  if (!workflow.value) {
-    return { stateByNode: {}, currentStageId: null, currentRule: null, progress: { completed: 0, total: 0 } }
-  }
-  return runtimeStateFromWorkflowRun(workflow.value, displayRun.value)
-})
-
-const progress = computed(() => runtimeState.value.progress)
-
-const currentStage = computed(() => {
-  if (!workflow.value || !runtimeState.value.currentStageId) return null
-  return workflow.value.nodes.find((node) => node.id === runtimeState.value.currentStageId) || null
-})
-
-const selectedNode = computed(() => {
-  if (!workflow.value) return null
-  return workflow.value.nodes.find((node) => node.id === selectedNodeId.value) || workflow.value.nodes[0] || null
-})
 
 const activeWorkflowRun = computed(() => {
   if (!workflowTool.value) return null
@@ -549,9 +450,8 @@ const startButtonLabel = computed(() => {
   if (!hasReadyInputs.value) return 'Add data to continue'
   return loadingState.value ? 'Preparing analysis...' : 'Start analysis'
 })
-const canRetryRun = computed(() => Boolean(displayRun.value && !['queued', 'starting', 'running'].includes(displayRun.value.status)))
+const canRetryRun = computed(() => Boolean(displayRun.value && ['failed', 'canceled'].includes(displayRun.value.status)))
 const canResumeRun = computed(() => Boolean(displayRun.value && ['failed', 'canceled'].includes(displayRun.value.status)))
-const runtimeHealthChecks = computed(() => runtimeHealth.value?.checks || [])
 const hasInputSetup = computed(() => ['appam-smk', 'appam-paleoproteomics'].includes(workflow.value?.id))
 const defaultInputDir = computed(() => {
   if (workflow.value?.id === 'appam-paleoproteomics') return 'raw_ms'
@@ -570,8 +470,8 @@ const preparedTablePath = computed(() => {
   return formValues.value.sample_manifest
 })
 const inputSetupSubtitle = computed(() => {
-  if (workflow.value?.id === 'appam-paleoproteomics') return 'RAW/.d files and sample table'
-  return 'FASTQ pairs and sample table'
+  if (workflow.value?.id === 'appam-paleoproteomics') return 'RAW or Bruker .d files'
+  return 'Paired FASTQ files'
 })
 const detectedSamples = computed(() => {
   if (workflow.value?.id === 'appam-paleoproteomics') return manifestScan.value?.proteomics_samples || []
@@ -682,19 +582,6 @@ const workflowPresets = computed(() => {
   }
   return []
 })
-const configuredParameterCount = computed(() => {
-  return (workflowTool.value?.parameters || []).filter((param) => {
-    const value = formValues.value[param.name]
-    if (param.type === 'flag') {
-      return Boolean(value)
-    }
-    if (Array.isArray(value)) {
-      return value.length > 0
-    }
-    return value !== '' && value !== null && value !== undefined
-  }).length
-})
-
 const hasParsedResults = computed(() => Boolean(
   displayRun.value && (
     (displayRun.value.artifacts || []).length > 0
@@ -877,15 +764,6 @@ function humanizeStatus(status) {
   return mapping[status] || 'Ready'
 }
 
-function nodeVisualState(node) {
-  if (!node || !workflow.value) return 'pending'
-  return runtimeState.value.stateByNode[node.id] || 'pending'
-}
-
-function displayStageLabel(nodeId) {
-  return stageLabelFromState(runtimeState.value.stateByNode[nodeId] || 'pending')
-}
-
 function formatValue(value) {
   if (Array.isArray(value)) return value.join(', ')
   return value || ''
@@ -1027,16 +905,6 @@ async function fetchDisplayRunDetail(runId = '') {
   return detail
 }
 
-async function fetchRuntimeHealth() {
-  if (!workflowTool.value) return
-  const response = await fetch(`/api/pipeline/${projectId.value}/runtime-health/${workflowTool.value.id}`)
-  const payload = await response.json()
-  if (!response.ok) {
-    throw new Error(payload.error || 'Failed to load runtime health')
-  }
-  runtimeHealth.value = payload
-}
-
 async function fetchLogsForRun(run, { reset = false } = {}) {
   const jobId = run?.job_id
   if (!jobId) {
@@ -1118,20 +986,6 @@ async function refreshAll() {
     }
     await fetchCurrentTask()
     await fetchWorkflowRuns()
-    if (!runtimeHealth.value) {
-      try {
-        await fetchRuntimeHealth()
-      } catch (error) {
-        runtimeHealth.value = {
-          checks: [
-            {
-              name: 'runtime',
-              message: error instanceof Error ? error.message : String(error),
-            },
-          ],
-        }
-      }
-    }
     syncDisplayRun()
     await fetchDisplayRunDetail()
     await fetchLogsForRun(displayRun.value)
@@ -1184,24 +1038,6 @@ watch(actionError, (value) => {
     actionErrorDetails.value = ''
   }
 }, { flush: 'sync' })
-
-async function safeRefresh() {
-  actionError.value = ''
-  try {
-    await refreshAll()
-  } catch (error) {
-    showActionError(error)
-  }
-}
-
-async function safeFetchHealth() {
-  actionError.value = ''
-  try {
-    await fetchRuntimeHealth()
-  } catch (error) {
-    showActionError(error)
-  }
-}
 
 function workflowDataCandidates() {
   if (!workflow.value) return ['.']
@@ -1405,19 +1241,6 @@ function handleQuickUploadError(payload) {
   showActionError(error || new Error('One or more files could not be uploaded.'))
 }
 
-async function handleOneClickDryRun() {
-  actionError.value = ''
-  loadingState.value = true
-  try {
-    await prepareInputTable({ overwrite: true })
-    await runWorkflow(true)
-  } catch (error) {
-    showActionError(error)
-  } finally {
-    loadingState.value = false
-  }
-}
-
 async function handleOneClickRun() {
   actionError.value = ''
   loadingState.value = true
@@ -1425,7 +1248,6 @@ async function handleOneClickRun() {
     await prepareInputTable({ overwrite: true })
     await runWorkflow(false)
     activeTab.value = 'logs'
-    showWorkflowMap.value = true
   } catch (error) {
     showActionError(error)
   } finally {
@@ -1492,20 +1314,6 @@ async function rerunWorkflow(mode) {
     throw new Error(payload.error || `Failed to ${mode} workflow`)
   }
   await refreshAll()
-}
-
-async function createTemplate() {
-  if (!workflowTool.value) return
-  const response = await fetch(`/api/pipeline/${projectId.value}/workflow-templates/${workflowTool.value.id}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ overwrite: false }),
-  })
-  const payload = await response.json()
-  if (!response.ok) {
-    throw new Error(payload.error || 'Failed to create workflow template')
-  }
-  actionError.value = `Template created under ${payload.created_directories?.[0] || payload.created_files?.[0] || 'project workspace'}`
 }
 
 async function handleRun(forceDryRun) {
@@ -1585,15 +1393,6 @@ async function handleRetry() {
   }
 }
 
-async function handleTemplate() {
-  actionError.value = ''
-  try {
-    await createTemplate()
-  } catch (error) {
-    showActionError(error)
-  }
-}
-
 function openFilePicker(param) {
   currentPickerParam.value = param
   tempFileSelection.value = formValues.value[param.name]
@@ -1632,7 +1431,6 @@ watch(
     workflowTool.value = null
     displayRun.value = null
     resetLogState()
-    runtimeHealth.value = null
     activePresetId.value = ''
     showAdvancedParams.value = false
     manifestStatus.value = ''
@@ -1649,19 +1447,8 @@ watch(
       if (displayRun.value?.status === 'completed') activeTab.value = 'results'
       else if (['queued', 'starting', 'running'].includes(displayRun.value?.status)) activeTab.value = 'logs'
     }
-    showWorkflowMap.value = Boolean(activeWorkflowRun.value)
-    selectedNodeId.value = runtimeState.value.currentStageId || workflow.value.nodes[0]?.id || null
   },
   { immediate: true },
-)
-
-watch(
-  () => runtimeState.value.currentStageId,
-  (stageId) => {
-    if (stageId && !selectedNodeId.value) {
-      selectedNodeId.value = stageId
-    }
-  },
 )
 
 watch(
@@ -1986,7 +1773,6 @@ onUnmounted(() => {
 }
 
 .workflow-input-card,
-.workflow-graph-card,
 .workflow-activity-card {
   background: rgba(255, 255, 255, 0.88);
   border: 1px solid rgba(148, 163, 184, 0.16);
@@ -1997,10 +1783,6 @@ onUnmounted(() => {
 .workflow-input-card {
   margin: 14px 24px 0;
   overflow: hidden;
-}
-
-.workflow-graph-card {
-  margin: 14px 24px 0;
 }
 
 .panel-header {
@@ -2157,219 +1939,15 @@ onUnmounted(() => {
   border-bottom: none;
 }
 
-.workflow-map-toggle-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 12px 24px 0;
-}
-
-.workflow-map-toggle-row > span {
-  color: #94a3b8;
-  font-size: 0.76rem;
-}
-
-.workflow-map-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 34px;
-  padding: 0 11px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.78);
-  color: #475569;
-  font: inherit;
-  font-size: 0.78rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
 .compact-cell {
   max-width: 360px;
   color: #475569;
   overflow-wrap: anywhere;
 }
 
-.graph-side {
-  display: grid;
-  gap: 10px;
-  justify-items: end;
-}
-
-.graph-meta-bar {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-  max-width: 560px;
-}
-
-.graph-meta-pill {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 0 11px;
-  border-radius: 999px;
-  background: rgba(248, 250, 252, 0.94);
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  color: #334155;
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-.graph-meta-pill.subtle {
-  color: #64748b;
-}
-
-.graph-legend {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px 10px;
-  font-size: 0.74rem;
-  color: #64748b;
-}
-
-.legend-dot {
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  margin-right: 6px;
-  border-radius: 50%;
-  background: #cbd5e1;
-}
-
-.legend-dot.completed { background: #37a866; }
-.legend-dot.starting { background: #60a5fa; }
-.legend-dot.running { background: #2f6fed; }
-.legend-dot.queued { background: #ef8d27; }
-.legend-dot.pending { background: #cbd5e1; }
-.legend-dot.optional { background: #94a3b8; }
-
-.workflow-canvas-shell {
-  padding: 10px 14px 14px;
-}
-
-.graph-inspector {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 0 18px 18px;
-}
-
-.graph-inspector-main {
-  min-width: 0;
-}
-
-.graph-inspector-main p {
-  margin: 8px 0 0;
-  color: #64748b;
-  font-size: 0.9rem;
-  line-height: 1.5;
-}
-
-.graph-inspector-meta {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-  max-width: 45%;
-}
-
-.runtime-checks {
-  display: grid;
-  gap: 8px;
-  max-height: 180px;
-  overflow: auto;
-  margin: -4px 18px 18px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(148, 163, 184, 0.14);
-}
-
-.runtime-check {
-  display: grid;
-  grid-template-columns: 12px minmax(110px, 180px) 1fr;
-  align-items: start;
-  gap: 10px;
-  padding: 9px 10px;
-  border-radius: 12px;
-  background: rgba(248, 250, 252, 0.84);
-  color: #475569;
-  font-size: 0.78rem;
-}
-
-.runtime-check .status-dot {
-  margin-top: 4px;
-}
-
-.runtime-check strong {
-  color: #0f172a;
-}
-
-.runtime-check.ok .status-dot { background: #37a866; }
-.runtime-check.warn .status-dot { background: #ef8d27; }
-.runtime-check.error .status-dot { background: #dc2626; }
-.runtime-check.error {
-  background: rgba(220, 38, 38, 0.06);
-  color: #991b1b;
-}
-
 .mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
-
-.selected-stage-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.selected-stage-title.compact {
-  margin-bottom: 0;
-}
-
-.selected-stage-title h4 {
-  margin: 0;
-  font-size: 1rem;
-}
-
-.stage-inline-note {
-  margin: -4px 0 12px;
-  color: #92400e;
-  font-size: 0.84rem;
-  font-weight: 600;
-}
-
-.stage-state-badge,
-.inline-pill {
-  display: inline-flex;
-  align-items: center;
-  min-height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.12);
-  color: #475569;
-  font-size: 0.74rem;
-  font-weight: 700;
-}
-
-.inline-pill.alert {
-  background: rgba(220, 38, 38, 0.12);
-  color: #b91c1c;
-}
-
-.stage-state-badge.starting { background: rgba(96, 165, 250, 0.14); color: #1d4ed8; }
-.stage-state-badge.running { background: rgba(47, 111, 237, 0.12); color: #1d4ed8; }
-.stage-state-badge.completed { background: rgba(55, 168, 102, 0.14); color: #166534; }
-.stage-state-badge.queued { background: rgba(239, 141, 39, 0.12); color: #b45309; }
-.stage-state-badge.failed,
-.stage-state-badge.canceled { background: rgba(220, 38, 38, 0.12); color: #b91c1c; }
-.stage-state-badge.optional,
-.stage-state-badge.skipped { background: rgba(148, 163, 184, 0.16); color: #475569; }
-.stage-state-badge.interrupted { background: rgba(217, 119, 6, 0.14); color: #92400e; }
 
 .compact-form {
   display: grid;
@@ -2900,12 +2478,7 @@ onUnmounted(() => {
   }
 
   .workflow-input-card,
-  .workflow-graph-card {
-    margin-left: 16px;
-    margin-right: 16px;
-  }
-
-  .workflow-map-toggle-row {
+  .workflow-activity-card {
     margin-left: 16px;
     margin-right: 16px;
   }
@@ -2925,22 +2498,6 @@ onUnmounted(() => {
 
   .input-setup-row {
     grid-template-columns: 1fr;
-  }
-
-  .graph-side,
-  .graph-meta-bar,
-  .graph-legend {
-    justify-items: start;
-    justify-content: flex-start;
-  }
-
-  .graph-inspector {
-    flex-direction: column;
-  }
-
-  .graph-inspector-meta {
-    max-width: 100%;
-    justify-content: flex-start;
   }
 
   .run-dialog-backdrop {

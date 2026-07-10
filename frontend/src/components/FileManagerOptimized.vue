@@ -61,36 +61,6 @@
             </svg>
           </button>
         </div>
-        <div class="view-toggle" v-if="!isMobile">
-          <button 
-            @click="setViewMode('list')" 
-            :class="{ active: viewMode === 'list' }"
-            class="toggle-btn"
-            title="List View"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="8" y1="6" x2="21" y2="6"></line>
-              <line x1="8" y1="12" x2="21" y2="12"></line>
-              <line x1="8" y1="18" x2="21" y2="18"></line>
-              <line x1="3" y1="6" x2="3.01" y2="6"></line>
-              <line x1="3" y1="12" x2="3.01" y2="12"></line>
-              <line x1="3" y1="18" x2="3.01" y2="18"></line>
-            </svg>
-          </button>
-          <button 
-            @click="setViewMode('grid')" 
-            :class="{ active: viewMode === 'grid' }"
-            class="toggle-btn"
-            title="Grid View"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="7" height="7"></rect>
-              <rect x="14" y="3" width="7" height="7"></rect>
-              <rect x="14" y="14" width="7" height="7"></rect>
-              <rect x="3" y="14" width="7" height="7"></rect>
-            </svg>
-          </button>
-        </div>
         <!-- Mobile menu button -->
         <button v-if="isMobile" @click="showMobileMenu = !showMobileMenu" class="mobile-menu-btn" title="Menu">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -111,16 +81,6 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="17 11 12 6 7 11"></polyline>
             <polyline points="17 18 12 13 7 18"></polyline>
-          </svg>
-        </button>
-        <button @click="goBack" :disabled="!canGoBack" class="nav-btn" title="Back">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="15 18 9 12 15 6"></polyline>
-          </svg>
-        </button>
-        <button @click="goForward" :disabled="!canGoForward" class="nav-btn" title="Forward">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="9 18 15 12 9 6"></polyline>
           </svg>
         </button>
       </div>
@@ -150,13 +110,6 @@
             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
           </svg>
         </button>
-        <button v-if="viewMode === 'grid'" @click="toggleSelectAllAction" class="action-btn" :title="isAllSelected ? 'Clear selection' : 'Select all'">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            <polyline points="9 12 12 15 17 10"></polyline>
-          </svg>
-          <span>{{ isAllSelected ? 'Clear' : 'Select' }}</span>
-        </button>
         <button @click="showDownloadManager = true" class="action-btn download-btn" title="Download Manager">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -177,11 +130,6 @@
               <polyline points="17 18 12 13 7 18"></polyline>
             </svg>
           </button>
-          <button @click="goBack" :disabled="!canGoBack" class="nav-btn mobile" title="Back">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="15 18 9 12 15 6"></polyline>
-            </svg>
-          </button>
           <button @click="$refs.fileInput.click()" class="action-btn mobile primary" title="Upload">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -192,38 +140,6 @@
           <input type="file" ref="fileInput" @change="handleFileUpload" multiple hidden />
         </div>
         
-        <div class="mobile-actions-group">
-          <div class="view-toggle mobile">
-            <button 
-              @click="setViewMode('list')" 
-              :class="{ active: viewMode === 'list' }"
-              class="toggle-btn mobile"
-              title="List"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="8" y1="6" x2="21" y2="6"></line>
-                <line x1="8" y1="12" x2="21" y2="12"></line>
-                <line x1="8" y1="18" x2="21" y2="18"></line>
-                <line x1="3" y1="6" x2="3.01" y2="6"></line>
-                <line x1="3" y1="12" x2="3.01" y2="12"></line>
-                <line x1="3" y1="18" x2="3.01" y2="18"></line>
-              </svg>
-            </button>
-            <button 
-              @click="setViewMode('grid')" 
-              :class="{ active: viewMode === 'grid' }"
-              class="toggle-btn mobile"
-              title="Grid"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="7" height="7"></rect>
-                <rect x="14" y="3" width="7" height="7"></rect>
-                <rect x="14" y="14" width="7" height="7"></rect>
-                <rect x="3" y="14" width="7" height="7"></rect>
-              </svg>
-            </button>
-          </div>
-        </div>
       </template>
       
       <div class="selection-info" v-if="selectedItems.length > 0">
@@ -286,23 +202,6 @@
         </button>
       </div>
       
-      <div class="sort-group">
-        <div class="sort-label">Sort:</div>
-        <select v-model="sortBy" @change="sortItems" class="sort-select">
-          <option value="name">Name</option>
-          <option value="size">Size</option>
-          <option value="type">Type</option>
-          <option value="mtime">Modified</option>
-          <option value="ctime">Created</option>
-          <option value="atime">Accessed</option>
-        </select>
-        <button @click="toggleSortOrder" class="sort-btn" :title="sortAscending ? 'Descending' : 'Ascending'">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path v-if="sortAscending" d="M12 5v14m-5-5l5 5 5-5"></path>
-            <path v-else d="M12 19V5m-5 5l5-5 5 5"></path>
-          </svg>
-        </button>
-      </div>
     </div>
 
     <!-- Drag and Drop Upload Area -->
@@ -317,9 +216,9 @@
     />
 
     <!-- File Content Area -->
-    <div class="fm-content" :class="{ 'grid-view': viewMode === 'grid', 'list-view': viewMode === 'list' }" style="margin-top: 0;">
+    <div class="fm-content list-view" style="margin-top: 0;">
       <!-- Enhanced list header -->
-      <div v-if="viewMode === 'list'" class="list-header" :class="{ mobile: isMobile }">
+      <div class="list-header" :class="{ mobile: isMobile }">
         <div class="col-select">
           <input type="checkbox" @change="toggleSelectAll" :checked="isAllSelected" />
         </div>
@@ -334,12 +233,6 @@
         </div>
         <div v-if="!isMobile" class="col-time" @click="setSortBy('mtime')">
           Modified {{ sortBy === 'mtime' ? (sortAscending ? '↑' : '↓') : '' }}
-        </div>
-        <div v-if="!isMobile" class="col-time" @click="setSortBy('ctime')">
-          Created {{ sortBy === 'ctime' ? (sortAscending ? '↑' : '↓') : '' }}
-        </div>
-        <div v-if="!isMobile" class="col-permissions">
-          Permissions
         </div>
         <div v-if="isMobile" class="col-actions">
           ⋯
@@ -372,7 +265,7 @@
       <!-- Virtual Scrolling Container -->
       <div class="virtual-scroll-container" ref="scrollContainer">
         <!-- Enhanced list view -->
-        <div v-if="viewMode === 'list'" class="file-list" :class="{ mobile: isMobile }">
+        <div class="file-list" :class="{ mobile: isMobile }">
           <div 
             v-for="item in visibleItems" 
             :key="item.name" 
@@ -422,14 +315,6 @@
             </div>
             <div class="col-size" :class="{ 'mobile-hidden': isMobile }">{{ formatSize(item.size) }}</div>
             <div v-if="!isMobile" class="col-time">{{ formatDateTime(item.mtime) }}</div>
-            <div v-if="!isMobile" class="col-time">{{ formatDateTime(item.ctime) }}</div>
-            <div v-if="!isMobile" class="col-permissions">
-              <div class="permission-icons">
-                <span :class="{ active: item.permissions?.readable }" class="perm-icon read" title="Readable">R</span>
-                <span :class="{ active: item.permissions?.writable }" class="perm-icon write" title="Writable">W</span>
-                <span :class="{ active: item.permissions?.executable }" class="perm-icon exec" title="Executable">X</span>
-              </div>
-            </div>
             <div v-if="isMobile" class="col-actions">
               <button @click.stop="showItemContextMenu(item, $event)" class="mobile-menu-btn" title="Menu">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -442,61 +327,6 @@
           </div>
         </div>
 
-        <!-- Enhanced grid view -->
-        <div v-else class="file-grid" :class="{ mobile: isMobile }">
-          <div 
-            v-for="item in visibleItems" 
-            :key="item.name" 
-            class="grid-item" 
-            :class="{ 
-              selected: isSelected(item), 
-              'read-only': !item.permissions?.writable,
-              'cut-item': isCutItem(item),
-              mobile: isMobile
-            }"
-            @click="selectItem(item, $event)"
-            @dblclick="navigate(item)"
-            @contextmenu.stop="showItemContextMenu(item, $event)"
-            @touchstart="handleTouchStart(item, $event)"
-            @touchend="handleTouchEnd"
-            @touchmove="handleTouchMove"
-          >
-            <div class="grid-icon">
-              <img v-if="item.thumbnail" :src="item.thumbnail" class="thumbnail" />
-              <svg v-else-if="item.is_dir" class="folder-icon" :width="isMobile ? 40 : 32" :height="isMobile ? 40 : 32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-              </svg>
-              <div v-else class="icon" v-html="getFileIcon(item.name)"></div>
-            </div>
-            <div class="grid-name">{{ item.name }}</div>
-            <div class="grid-meta" :class="{ mobile: isMobile }">
-              <div class="meta-row">
-                <span v-if="!isMobile" class="type-badge" :class="getTypeBadgeClass(item.type)">
-                  {{ getTypeDisplayName(item.type) }}
-                </span>
-                <span class="size">{{ formatSize(item.size) }}</span>
-              </div>
-              <div class="meta-row" v-if="!isMobile">
-                <span class="time">{{ formatDateTimeShort(item.mtime) }}</span>
-                <div class="permission-icons small">
-                  <span :class="{ active: item.permissions?.readable }" class="perm-icon read">R</span>
-                  <span :class="{ active: item.permissions?.writable }" class="perm-icon write">W</span>
-                  <span :class="{ active: item.permissions?.executable }" class="perm-icon exec">X</span>
-                </div>
-              </div>
-              <div class="meta-row" v-else>
-                <span class="time">{{ formatDateTimeShort(item.mtime) }}</span>
-              </div>
-            </div>
-            <div class="grid-select">
-              <input 
-                type="checkbox" 
-                @click.stop="toggleSelectItem(item)" 
-                :checked="isSelected(item)" 
-              />
-            </div>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -753,14 +583,8 @@ const searchQuery = ref('')
 const isSearching = ref(false)
 const searchTimeout = ref(null)
 
-// View mode
-const viewMode = ref('list') // 'list' or 'grid'
 const sortBy = ref('name')
 const sortAscending = ref(true)
-
-// Navigation history
-const navigationHistory = ref(['/'])
-const historyIndex = ref(0)
 
 // Clipboard operations
 const clipboard = ref([])
@@ -902,9 +726,6 @@ const isAllSelected = computed(() => {
   return filteredItems.value.every(item => selectedNames.has(item.name))
 })
 
-const canGoBack = computed(() => historyIndex.value > 0)
-const canGoForward = computed(() => historyIndex.value < navigationHistory.value.length - 1)
-
 const reconcileSelection = () => {
   if (selectedItems.value.length === 0) return
 
@@ -979,13 +800,6 @@ const navigate = (item) => {
 }
 
 const navigateTo = (path) => {
-  // Update navigation history
-  if (historyIndex.value < navigationHistory.value.length - 1) {
-    navigationHistory.value = navigationHistory.value.slice(0, historyIndex.value + 1)
-  }
-  navigationHistory.value.push(path)
-  historyIndex.value = navigationHistory.value.length - 1
-  
   currentPath.value = path
   clearSelection()
   
@@ -1003,39 +817,8 @@ const goUp = () => {
   }
 }
 
-const goBack = () => {
-  if (canGoBack.value) {
-    historyIndex.value--
-    currentPath.value = navigationHistory.value[historyIndex.value]
-    clearSelection()
-    fetchItems()
-  }
-}
-
-const goForward = () => {
-  if (canGoForward.value) {
-    historyIndex.value++
-    currentPath.value = navigationHistory.value[historyIndex.value]
-    clearSelection()
-    fetchItems()
-  }
-}
-
 const refreshItems = () => {
   fetchItems()
-}
-
-const setViewMode = (mode) => {
-  viewMode.value = mode
-  localStorage.setItem('filemanager-view-mode', mode)
-}
-
-const sortItems = () => {
-  // Sorting is handled by the computed property
-}
-
-const toggleSortOrder = () => {
-  sortAscending.value = !sortAscending.value
 }
 
 const handleSearch = () => {
@@ -1803,7 +1586,6 @@ const setSortBy = (field) => {
     sortBy.value = field
     sortAscending.value = true
   }
-  sortItems()
 }
 
 const showFileDetails = () => {
@@ -1866,17 +1648,6 @@ onMounted(() => {
   
   // Detect mobile and touch capabilities
   detectMobile()
-  
-  // Load saved view mode
-  const savedViewMode = localStorage.getItem('filemanager-view-mode')
-  if (savedViewMode) {
-    viewMode.value = savedViewMode
-  }
-  
-  // Set default view mode for mobile
-  if (isMobile.value && !savedViewMode) {
-    viewMode.value = 'grid'
-  }
   
   // Add global event listeners
   document.addEventListener('click', hideContextMenu)
@@ -2052,37 +1823,6 @@ onUnmounted(() => {
   color: var(--gray-600);
 }
 
-.view-toggle {
-  display: flex;
-  gap: 0;
-  background: var(--surface-3);
-  border-radius: var(--radius-base);
-  padding: 2px;
-}
-
-.toggle-btn {
-  background: none;
-  border: none;
-  padding: 8px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  color: var(--gray-600);
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.toggle-btn:hover {
-  color: var(--gray-900);
-}
-
-.toggle-btn.active {
-  background: var(--surface-1);
-  color: var(--primary-600);
-  box-shadow: var(--shadow-xs);
-}
-
 /* Toolbar styles */
 .fm-toolbar {
   display: flex;
@@ -2234,62 +1974,6 @@ onUnmounted(() => {
   border-color: rgba(239, 68, 68, 0.45);
 }
 
-.sort-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--surface-2);
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-color-light);
-}
-
-.sort-label {
-  font-size: 13px;
-  color: var(--gray-600);
-  font-weight: 500;
-}
-
-.sort-select {
-  padding: 6px 10px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  background: var(--surface-1);
-  color: var(--gray-700);
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.sort-select:hover {
-  border-color: var(--border-color-dark);
-}
-
-.sort-select:focus {
-  outline: none;
-  border-color: var(--primary-500);
-  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.16);
-}
-
-.sort-btn {
-  background: var(--surface-1);
-  border: 1px solid var(--border-color);
-  padding: 6px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  color: var(--gray-600);
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.sort-btn:hover {
-  background: var(--surface-2);
-  border-color: var(--border-color-dark);
-}
-
 /* Content area */
 .fm-content {
   flex: 1;
@@ -2330,7 +2014,7 @@ onUnmounted(() => {
 /* List header */
 .list-header {
   display: grid;
-  grid-template-columns: 40px 2fr 80px 100px 140px 140px 100px;
+  grid-template-columns: 40px minmax(180px, 2fr) 100px 100px 140px;
   gap: 12px;
   padding: 14px 20px;
   background: var(--surface-2);
@@ -2366,7 +2050,7 @@ onUnmounted(() => {
 
 .file-row {
   display: grid;
-  grid-template-columns: 40px 2fr 80px 100px 140px 140px 100px;
+  grid-template-columns: 40px minmax(180px, 2fr) 100px 100px 140px;
   gap: 12px;
   padding: 10px 20px;
   align-items: center;
@@ -2512,115 +2196,6 @@ onUnmounted(() => {
   border: 1px solid #e5e7eb;
 }
 
-.permission-icons {
-  display: flex;
-  gap: 2px;
-}
-
-.permission-icons.small {
-  gap: 1px;
-}
-
-.perm-icon {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  line-height: 16px;
-  text-align: center;
-  font-size: 10px;
-  font-weight: 600;
-  border-radius: 2px;
-  background: var(--surface-2);
-  color: var(--gray-400);
-  transition: all 0.2s;
-}
-
-.permission-icons.small .perm-icon {
-  width: 12px;
-  height: 12px;
-  line-height: 12px;
-  font-size: 8px;
-}
-
-.perm-icon.active.read { background: #dbeafe; color: #1d4ed8; }
-.perm-icon.active.write { background: #d1fae5; color: #065f46; }
-.perm-icon.active.exec { background: #fef3c7; color: #92400e; }
-
-/* Grid view */
-.file-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 16px;
-  padding: 20px 20px 60px 20px;
-}
-
-.grid-item {
-  position: relative;
-  background: var(--surface-1);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-md);
-  padding: 16px 12px 12px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.15s;
-  overflow: hidden;
-}
-
-.grid-item:hover {
-  border-color: rgba(var(--accent-rgb), 0.3);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-2px);
-}
-
-.grid-item.selected {
-  border-color: rgba(var(--accent-rgb), 0.35);
-  background: rgba(var(--accent-rgb), 0.1);
-  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.16);
-}
-
-.grid-icon {
-  width: 48px;
-  height: 48px;
-  margin: 0 auto 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.grid-icon svg {
-  width: 32px;
-  height: 32px;
-}
-
-.grid-name {
-  font-size: 12px;
-  font-weight: 500;
-  margin-bottom: 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.grid-meta {
-  font-size: 10px;
-  color: var(--gray-600);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.meta-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 4px;
-}
-
-.grid-item.read-only {
-  opacity: 0.7;
-  border-style: dashed;
-}
-
 /* Visual effects for cut files */
 .file-row.cut-item {
   opacity: 0.5;
@@ -2628,21 +2203,9 @@ onUnmounted(() => {
   border-left: 3px solid var(--warning-500);
 }
 
-.grid-item.cut-item {
-  opacity: 0.5;
-  background: var(--warning-50);
-  border: 2px dashed var(--warning-500);
-}
-
 .time {
   font-size: 9px;
   color: var(--gray-400);
-}
-
-.grid-select {
-  position: absolute;
-  top: 6px;
-  right: 6px;
 }
 
 /* Empty state */
@@ -3170,12 +2733,6 @@ onUnmounted(() => {
   border-radius: var(--radius-sm);
 }
 
-.mobile-actions-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .nav-btn.mobile {
   padding: 10px;
   min-width: 44px; /* Meet touch standards */
@@ -3191,18 +2748,6 @@ onUnmounted(() => {
 
 .action-btn.mobile span {
   display: none; /* Hide text on mobile */
-}
-
-.view-toggle.mobile {
-  background: var(--surface-3);
-  border-radius: var(--radius-sm);
-  padding: 2px;
-}
-
-.toggle-btn.mobile {
-  padding: 8px;
-  min-width: 40px;
-  min-height: 40px;
 }
 
 /* Mobile list styles */
@@ -3242,44 +2787,6 @@ onUnmounted(() => {
   display: none !important;
 }
 
-/* 移动端网格样式 */
-.file-grid.mobile {
-  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
-  gap: 12px;
-  padding: 12px 16px 80px 16px;
-}
-
-.grid-item.mobile {
-  padding: 12px 8px 8px;
-  min-height: 120px;
-}
-
-.grid-item.mobile .grid-icon {
-  width: 40px;
-  height: 40px;
-  margin-bottom: 8px;
-}
-
-.grid-item.mobile .grid-name {
-  font-size: 11px;
-  line-height: 1.3;
-  margin-bottom: 6px;
-  word-break: break-all;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.grid-meta.mobile {
-  font-size: 10px;
-}
-
-.grid-meta.mobile .meta-row {
-  justify-content: center;
-  gap: 2px;
-}
-
 /* 移动端右键菜单 */
 .context-menu.mobile {
   position: fixed;
@@ -3302,10 +2809,8 @@ onUnmounted(() => {
 
 /* 触摸反馈 */
 .file-row:active,
-.grid-item:active,
 .action-btn:active,
-.nav-btn:active,
-.toggle-btn:active {
+.nav-btn:active {
   transform: scale(0.98);
   transition: transform 0.1s;
 }
@@ -3313,29 +2818,21 @@ onUnmounted(() => {
 /* 响应式设计 */
 @media (max-width: 1200px) {
   .list-header:not(.mobile) {
-    grid-template-columns: 40px 2fr 80px 100px 120px 60px;
+    grid-template-columns: 40px minmax(180px, 2fr) 90px 100px 120px;
   }
   
   .file-row:not(.mobile) {
-    grid-template-columns: 40px 2fr 80px 100px 120px 60px;
-  }
-  
-  .col-time:last-of-type {
-    display: none;
+    grid-template-columns: 40px minmax(180px, 2fr) 90px 100px 120px;
   }
 }
 
 @media (max-width: 900px) {
   .list-header:not(.mobile) {
-    grid-template-columns: 40px 2fr 80px 100px 60px;
+    grid-template-columns: 40px minmax(160px, 2fr) 80px 90px 110px;
   }
   
   .file-row:not(.mobile) {
-    grid-template-columns: 40px 2fr 80px 100px 60px;
-  }
-  
-  .col-time:nth-last-child(2) {
-    display: none;
+    grid-template-columns: 40px minmax(160px, 2fr) 80px 90px 110px;
   }
 }
 
@@ -3369,33 +2866,12 @@ onUnmounted(() => {
     display: none;
   }
   
-  .file-grid:not(.mobile) {
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-    gap: 12px;
-    padding: 12px 12px 40px 12px;
-  }
-  
   .file-list:not(.mobile) {
     padding: 4px 0 60px 0;
   }
 }
 
 @media (max-width: 480px) {
-  /* 小屏手机优化 */
-  .file-grid.mobile {
-    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-    gap: 8px;
-  }
-  
-  .grid-item.mobile {
-    min-height: 100px;
-    padding: 8px 4px 6px;
-  }
-  
-  .grid-item.mobile .grid-name {
-    font-size: 10px;
-  }
-  
   .mobile-menu {
     max-height: 80vh;
   }

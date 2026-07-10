@@ -11,12 +11,12 @@
 <script setup>
 import { computed } from 'vue'
 import {
-  Activity, AlignJustify, ArrowDown, ArrowUp, ChartBar, ChartLine, Check,
+  Activity, AlignJustify, ArrowDown, ArrowUp, Box, ChartBar, ChartLine, Check,
   ChevronDown, Circle, CircleCheck, CircleX, ClipboardList, ClipboardPaste,
   Copy, Cpu, Dna, Download, Eye, File, FileArchive, FileCode, FileMusic,
   FilePen, FileSpreadsheet, FileText, FileVideo, Folder, FolderOpen, FolderUp,
   Globe, HardDrive, LayoutDashboard, LayoutGrid, Lightbulb, List, MapPin,
-  MemoryStick, MessageCircle, Minimize2, Pencil, Plus, RotateCcw, Save,
+  MemoryStick, MessageCircle, Minimize2, MoreHorizontal, Pencil, Plus, RotateCcw, Save,
   Scissors, Search, Table, Target, Trash2, TriangleAlert, Users, WandSparkles,
   Wrench, WrapText, X, Zap, ZoomIn, ZoomOut,
 } from '@lucide/vue'
@@ -28,12 +28,12 @@ import {
  * 替代散落的 emoji 与 inline SVG,不改动任何业务逻辑。
  */
 const registry = {
-  Activity, AlignJustify, ArrowDown, ArrowUp, ChartBar, ChartLine, Check,
+  Activity, AlignJustify, ArrowDown, ArrowUp, Box, ChartBar, ChartLine, Check,
   ChevronDown, Circle, CircleCheck, CircleX, ClipboardList, ClipboardPaste,
   Copy, Cpu, Dna, Download, Eye, File, FileArchive, FileCode, FileMusic,
   FilePen, FileSpreadsheet, FileText, FileVideo, Folder, FolderOpen, FolderUp,
   Globe, HardDrive, LayoutDashboard, LayoutGrid, Lightbulb, List, MapPin,
-  MemoryStick, MessageCircle, Minimize2, Pencil, Plus, RotateCcw, Save,
+  MemoryStick, MessageCircle, Minimize2, MoreHorizontal, Pencil, Plus, RotateCcw, Save,
   Scissors, Search, Table, Target, Trash2, TriangleAlert, Users, WandSparkles,
   Wrench, WrapText, X, Zap, ZoomIn, ZoomOut,
 }

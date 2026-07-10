@@ -4,22 +4,11 @@
       <PageHeader
         eyebrow="Project"
         :title="project?.name || 'Loading project'"
-        :description="project?.description || 'A guided workspace for reproducible analysis.'"
+        :description="project?.description || ''"
       >
         <template #meta>
-          <span class="meta-pill">{{ preferredWorkflow.label }}</span>
-          <span>{{ project?.creator || 'Unknown owner' }}</span>
+          <span class="meta-pill">{{ project?.analysis_workflow ? preferredWorkflow.label : 'No default analysis' }}</span>
           <span>{{ accessRoleLabel }}</span>
-        </template>
-        <template #actions>
-          <router-link to="/projects" class="header-button secondary">
-            <Icon name="layout-grid" :size="16" />
-            Projects
-          </router-link>
-          <router-link :to="filesRoute" class="header-button">
-            <Icon name="folder" :size="16" />
-            Files
-          </router-link>
         </template>
       </PageHeader>
 
@@ -54,20 +43,15 @@
               <Icon :name="homeState.icon" :size="17" />
               {{ homeState.action }}
             </router-link>
-            <router-link :to="filesRoute" class="secondary-action">
-              <Icon name="folder-open" :size="17" />
-              Manage data
-            </router-link>
           </div>
         </section>
 
-        <section class="analysis-section">
+        <section v-if="!project.analysis_workflow" class="analysis-section">
           <div class="section-heading">
             <div>
               <div class="section-kicker">Guided workflows</div>
               <h2>Choose an analysis</h2>
             </div>
-            <span class="section-note">Inputs are detected and validated automatically.</span>
           </div>
 
           <div class="analysis-list">
@@ -125,10 +109,6 @@
           </div>
         </section>
 
-        <div class="workspace-footer">
-          <span>Every run records parameters, inputs, software and database provenance.</span>
-          <router-link v-if="isAdmin" to="/admin">System setup</router-link>
-        </div>
       </template>
     </div>
   </div>
@@ -140,7 +120,6 @@ import { useRoute } from 'vue-router'
 
 import Icon from '../components/ui/Icon.vue'
 import PageHeader from '../components/ui/PageHeader.vue'
-import { authState } from '../lib/auth.js'
 import {
   WORKFLOW_OPTIONS,
   getWorkflowOption,
@@ -158,11 +137,6 @@ const errorMessage = ref('')
 const workflowOptions = WORKFLOW_OPTIONS
 let refreshTimer = null
 
-const filesRoute = computed(() => ({
-  name: 'FileManager',
-  params: { id: projectId.value },
-}))
-const isAdmin = computed(() => authState.user?.role === 'admin')
 const accessRoleLabel = computed(() => {
   const role = project.value?.access_role
   return role === 'owner' ? 'Project owner' : role === 'admin' ? 'Administrator' : role === 'editor' ? 'Editor' : 'Viewer'
@@ -272,6 +246,19 @@ const homeState = computed(() => {
       action: 'Open results',
       icon: 'circle-check',
       route: runRoute(run),
+    }
+  }
+
+  if (!project.value?.analysis_workflow) {
+    return {
+      kind: 'new',
+      title: 'Choose your next analysis',
+      status: 'Ready',
+      description: 'Select a guided workflow below, or open Tools for an individual analysis step.',
+      details: [],
+      action: 'Browse tools',
+      icon: 'wrench',
+      route: { name: 'ToolLibrary', params: { id: projectId.value } },
     }
   }
 

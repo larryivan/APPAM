@@ -4,35 +4,21 @@
       <div class="tool-header-content">
         <div class="tool-info">
           <div class="tool-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
-              <path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
-              <path d="m2 2 7.586 7.586"></path>
-              <circle cx="11" cy="11" r="2"></circle>
-            </svg>
+            <Icon name="wrench" :size="22" />
           </div>
           <div class="tool-title">
             <h2>{{ tool.tool_name }}</h2>
             <div class="tool-meta">
-              <span class="meta-badge kind">{{ tool.kind === 'workflow' ? 'Workflow' : 'Tool' }}</span>
               <span v-if="tool.section_title" class="meta-badge section">{{ tool.section_title }}</span>
-              <span v-if="tool.available === false" class="meta-badge unavailable" :title="tool.availability_message">Unavailable</span>
             </div>
             <p :title="tool.description">{{ tool.description }}</p>
           </div>
         </div>
         <div class="tool-status">
-          <div class="status-indicator" :class="taskStatus">
+          <div class="status-indicator" :class="tool.available === false ? 'failed' : taskStatus" :title="tool.availability_message || ''">
             <span class="status-dot"></span>
             <span class="status-text">{{ getStatusText() }}</span>
           </div>
-          <button @click="refreshStatus" class="refresh-status-btn" :class="{ refreshing: isRefreshingStatus }" title="refresh status" :disabled="isRefreshingStatus">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="23 4 23 10 17 10"></polyline>
-              <polyline points="1 20 1 14 7 14"></polyline>
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-            </svg>
-          </button>
         </div>
       </div>
     </header>
@@ -48,38 +34,18 @@
                 <path d="M12 8v4"></path>
                 <path d="M12 16h.01"></path>
               </svg>
-              Parameters
+              Setup
             </h4>
-            <div class="form-header-actions">
-              <div class="param-count">{{ tool.parameters.length }}</div>
-              <button
-                v-if="parameterFillAvailable"
-                @click="openParameterSuggestions"
-                class="smart-fill-btn"
-                :class="{ loading: isParameterFilling }"
-                :disabled="isParameterFilling"
-                title="Generate AI parameter suggestions"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                  <path d="M12 7v6"></path>
-                  <path d="M9 10l3-3 3 3"></path>
-                </svg>
-                {{ isParameterFilling ? 'Thinking...' : 'Config by AI' }}
-              </button>
-
-            </div>
           </div>
 
           
           <div v-if="tool.parameters.length > 0" class="param-list">
-            <div v-for="param in tool.parameters" :key="param.name" class="param-row">
+            <div v-for="param in visibleParameters" :key="param.name" class="param-row">
               <div class="param-header">
                 <label :for="param.name" class="param-label">
-                  {{ param.name }}
+                  {{ toolParameterLabel(param) }}
                   <span v-if="param.required" class="required-indicator">*</span>
                 </label>
-                <span class="param-type">{{ getParamTypeDisplay(param) }}</span>
               </div>
               <p class="param-description">{{ param.description }}</p>
               
@@ -190,7 +156,7 @@
                     v-model="formValues[param.name]"
                     class="param-select"
                   >
-                    <option value="" disabled>Choose{{ param.name }}</option>
+                    <option value="" disabled>Select an option</option>
                     <option 
                       v-for="option in param.options" 
                       :key="option" 
@@ -217,7 +183,7 @@
                   :id="param.name"
                   v-model="formValues[param.name]"
                   class="param-input"
-                  :placeholder="param.default ?? ('Input ' + param.name)"
+                  :placeholder="param.default ?? toolParameterLabel(param)"
                 />
                 <div class="input-icon">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -228,6 +194,14 @@
               </div>
             </div>
           </div>
+          <button
+            v-if="optionalParameterCount"
+            type="button"
+            class="optional-parameters-toggle"
+            @click="showOptionalParameters = !showOptionalParameters"
+          >
+            {{ showOptionalParameters ? 'Hide optional parameters' : `Optional parameters (${optionalParameterCount})` }}
+          </button>
           <div v-if="tool.notes?.length" class="tool-notes">
             <h5>Execution Notes</h5>
             <ul>
@@ -265,19 +239,12 @@
         </button>
       </div>
 
-      <!-- 实时日志区域 -->
-      <div class="logs-section">
+      <details v-if="allLogs.length || isTaskActive" class="logs-section" :open="isTaskActive">
+        <summary class="logs-summary">
+          <span>Run details</span>
+          <span>{{ getStatusText() }}</span>
+        </summary>
         <div class="logs-header">
-          <div class="logs-title">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-              <line x1="16" y1="13" x2="8" y2="13"></line>
-              <line x1="16" y1="17" x2="8" y2="17"></line>
-              <polyline points="10 9 9 9 8 9"></polyline>
-            </svg>
-            <h4>Real-time Logs</h4>
-          </div>
           <div class="logs-actions">
             <button @click="clearLogs" class="clear-logs-btn" title="Clear Logs">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -317,7 +284,7 @@
             <span class="log-content">{{ log.data }}</span>
           </div>
         </div>
-      </div>
+      </details>
     </div>
   </div>
   
@@ -329,7 +296,7 @@
       <path d="m2 2 7.586 7.586"></path>
       <circle cx="11" cy="11" r="2"></circle>
     </svg>
-    <p>Select a tool from the sidebar to start using</p>
+    <p>Loading tool...</p>
   </div>
   
   <!-- File Picker Component -->
@@ -343,73 +310,14 @@
     @close="closeFilePicker"
   />
 
-  <div v-if="showSuggestionModal" class="parameter-suggestion-overlay" @click="closeSuggestionModal">
-    <div class="parameter-suggestion-card" @click.stop>
-      <header class="suggestion-header">
-        <div>
-          <h4>AI Parameter Suggestions</h4>
-          <p v-if="suggestionPayload?.summary">{{ suggestionPayload.summary }}</p>
-        </div>
-        <button class="suggestion-close" @click="closeSuggestionModal" title="Close">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </header>
-
-      <div v-if="suggestionPayload?.warnings?.length" class="suggestion-section warnings">
-        <strong>Notes</strong>
-        <ul>
-          <li v-for="warning in suggestionPayload.warnings" :key="warning">{{ warning }}</li>
-        </ul>
-      </div>
-
-      <div v-if="suggestionPayload?.missing_info?.length" class="suggestion-section missing-info">
-        <strong>Missing Info</strong>
-        <ul>
-          <li v-for="missing in suggestionPayload.missing_info" :key="missing">{{ missing }}</li>
-        </ul>
-      </div>
-
-      <div class="suggestion-list">
-        <div v-if="suggestionEntries.length === 0" class="suggestion-empty">
-          No suggestions were returned for this tool.
-        </div>
-
-        <label v-for="entry in suggestionEntries" :key="entry.name" class="suggestion-item">
-          <input
-            type="checkbox"
-            v-model="suggestionSelections[entry.name]"
-          />
-          <div class="suggestion-details">
-            <div class="suggestion-title">
-              <span class="param-name">{{ entry.name }}</span>
-              <span class="param-type">{{ entry.type }}</span>
-            </div>
-            <div class="suggestion-values">
-              <span>Current: <em>{{ entry.current }}</em></span>
-              <span>Suggested: <em>{{ entry.suggested }}</em></span>
-            </div>
-            <p v-if="entry.reasoning" class="suggestion-reasoning">{{ entry.reasoning }}</p>
-          </div>
-        </label>
-      </div>
-
-      <footer class="suggestion-actions">
-        <button class="secondary-btn" @click="closeSuggestionModal">Cancel</button>
-        <button class="primary-btn" @click="applyParameterSuggestions" :disabled="suggestionEntries.length === 0">
-          Apply Selected
-        </button>
-      </footer>
-    </div>
-  </div>
 </template>
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import FilePicker from './FilePicker.vue';
+import Icon from './ui/Icon.vue';
+import { primaryToolParameters, toolParameterLabel } from '../lib/toolUi.js';
 
 const route = useRoute();
 const tool = ref(null);
@@ -419,14 +327,13 @@ const taskStatus = ref('not_found');
 const logsContainer = ref(null);
 const showVerboseLogs = ref(false); // 控制是否显示详细日志
 const toolLibrary = ref({});
+const showOptionalParameters = ref(false);
 
-// 参数填充相关状态
-const isParameterFilling = ref(false);
-const parameterFillAvailable = ref(false);
+const primaryParameters = computed(() => primaryToolParameters(tool.value || {}));
 
-const showSuggestionModal = ref(false);
-const suggestionPayload = ref(null);
-const suggestionSelections = ref({});
+const optionalParameterCount = computed(() => Math.max(0, (tool.value?.parameters?.length || 0) - primaryParameters.value.length));
+const visibleParameters = computed(() => showOptionalParameters.value ? (tool.value?.parameters || []) : primaryParameters.value);
+const isTaskActive = computed(() => ['queued', 'starting', 'running'].includes(taskStatus.value));
 
 // 计算属性 - 过滤后的日志
 const filteredLogs = computed(() => {
@@ -461,9 +368,6 @@ const filteredLogs = computed(() => {
 const showFilePicker = ref(false);
 const currentPickerParam = ref(null);
 const tempFileSelection = ref(null);
-
-// 状态管理
-const isRefreshingStatus = ref(false);
 
 // 连接管理
 let logPollTimer = null;
@@ -533,23 +437,17 @@ const fetchToolLibrary = async () => {
   }
 };
 
-const resetSuggestionState = () => {
-  showSuggestionModal.value = false;
-  suggestionPayload.value = null;
-  suggestionSelections.value = {};
-};
-
 const updateTool = () => {
   const toolName = decodeURIComponent(String(route.params.tool || '')).toLowerCase();
   if (!toolName) {
     tool.value = null;
-    resetSuggestionState();
     return;
   }
   const foundTool = toolLibrary.value[toolName.toLowerCase()];
   if (foundTool) {
     tool.value = foundTool;
     formValues.value = {};
+    showOptionalParameters.value = false;
     tool.value.parameters.forEach(p => {
       if (p.type === 'file' || p.type === 'directory') {
         formValues.value[p.name] = p.multiple ? [] : '';
@@ -572,10 +470,8 @@ const updateTool = () => {
     
     // 重新检查状态
     checkTaskStatus();
-    resetSuggestionState();
   } else {
     tool.value = null;
-    resetSuggestionState();
   }
 };
 
@@ -658,11 +554,7 @@ const runDisabled = computed(() => (
 ));
 
 const runButtonLabel = computed(() => {
-  if (!tool.value) {
-    return 'Run';
-  }
-  const action = tool.value.run_label || (tool.value.kind === 'workflow' ? 'Run Workflow' : 'Run Tool');
-  return `${action}: ${tool.value.tool_name}`;
+  return tool.value ? `Run ${tool.value.tool_name}` : 'Run';
 });
 
 let statusInterval = null;
@@ -716,6 +608,7 @@ const getLogPrefix = (log) => {
 };
 
 const getStatusText = () => {
+  if (tool.value?.available === false) return 'Unavailable';
   const statusMap = {
     'queued': 'Queued',
     'starting': 'Starting',
@@ -729,26 +622,6 @@ const getStatusText = () => {
     'stopped': 'Stopped'
   };
   return statusMap[taskStatus.value] || 'Unknown';
-};
-
-const getParamTypeDisplay = (param) => {
-  if (param.path_role === 'output') {
-    return 'Output path';
-  }
-  if (param.options && param.options.length > 0) {
-    return '选择项';
-  }
-  
-  const typeMap = {
-    'file': 'File',
-    'directory': 'Directory',
-    'integer': 'Integer',
-    'float': 'Float',
-    'string': 'Text',
-    'boolean': 'Boolean',
-    'flag': 'Switch'
-  };
-  return typeMap[param.type] || param.type;
 };
 
 const clearLogs = () => {
@@ -792,234 +665,7 @@ const shouldFilterLog = (logData) => {
   return false;
 };
 
-const refreshStatus = async () => {
-  isRefreshingStatus.value = true;
-  try {
-    await checkTaskStatus();
-  } finally {
-    // 显示加载状态至少300ms，让用户看到反馈
-    setTimeout(() => {
-      isRefreshingStatus.value = false;
-    }, 300);
-  }
-};
-
-const normalizeSuggestion = (suggestion) => {
-  if (suggestion && typeof suggestion === 'object' && !Array.isArray(suggestion) && 'value' in suggestion) {
-    return {
-      value: suggestion.value,
-      reasoning: suggestion.reasoning || ''
-    };
-  }
-  return {
-    value: suggestion,
-    reasoning: ''
-  };
-};
-
-const formatValue = (value) => {
-  if (value === null || value === undefined || value === '') {
-    return '—';
-  }
-  if (Array.isArray(value)) {
-    return value.length ? value.join(', ') : '—';
-  }
-  if (typeof value === 'object') {
-    try {
-      return JSON.stringify(value);
-    } catch (error) {
-      return String(value);
-    }
-  }
-  return String(value);
-};
-
-const suggestionEntries = computed(() => {
-  if (!suggestionPayload.value || !tool.value) return [];
-  const suggestions = suggestionPayload.value.suggestions || {};
-  return tool.value.parameters
-    .map(param => {
-      if (!suggestions.hasOwnProperty(param.name)) return null;
-      const normalized = normalizeSuggestion(suggestions[param.name]);
-      return {
-        name: param.name,
-        type: param.type,
-        current: formatValue(formValues.value[param.name]),
-        suggested: formatValue(normalized.value),
-        reasoning: normalized.reasoning
-      };
-    })
-    .filter(Boolean);
-});
-
-const openParameterSuggestions = async () => {
-  if (!tool.value || !parameterFillAvailable.value) return;
-  
-  isParameterFilling.value = true;
-  
-  try {
-    const response = await fetch('/api/parameter-fill/suggest', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        tool_name: tool.value.tool_name,
-        project_id: route.params.id
-      })
-    });
-    
-    if (!response.ok) {
-      let errorMessage = `HTTP error! status: ${response.status}`;
-      try {
-        const errorPayload = await response.json();
-        if (errorPayload && errorPayload.error) {
-          errorMessage = errorPayload.error;
-        }
-      } catch (error) {
-        // ignore JSON parsing errors for non-JSON responses
-      }
-      throw new Error(errorMessage);
-    }
-    
-    const result = await response.json();
-    
-    if (result.success) {
-      suggestionPayload.value = {
-        suggestions: result.suggestions || {},
-        summary: result.summary || '',
-        warnings: result.warnings || [],
-        missing_info: result.missing_info || []
-      };
-      suggestionSelections.value = Object.keys(suggestionPayload.value.suggestions).reduce((acc, key) => {
-        acc[key] = true;
-        return acc;
-      }, {});
-      showSuggestionModal.value = true;
-    } else {
-      throw new Error(result.error || '参数填充失败');
-    }
-    
-  } catch (error) {
-    console.error('Parameter fill error:', error);
-    showParameterFillError(error.message);
-  } finally {
-    isParameterFilling.value = false;
-  }
-};
-
-const closeSuggestionModal = () => {
-  resetSuggestionState();
-};
-
-const applyParameterSuggestions = () => {
-  if (!suggestionPayload.value) return;
-  let appliedCount = 0;
-  Object.entries(suggestionPayload.value.suggestions || {}).forEach(([paramName, suggestion]) => {
-    if (!suggestionSelections.value[paramName]) return;
-    if (Object.prototype.hasOwnProperty.call(formValues.value, paramName)) {
-      const normalized = normalizeSuggestion(suggestion);
-      formValues.value[paramName] = normalized.value;
-      appliedCount += 1;
-    }
-  });
-
-  if (appliedCount === 0) {
-    showParameterFillError('No suggestions were selected.');
-    return;
-  }
-
-  const summary = suggestionPayload.value.summary || `Applied ${appliedCount} suggestion(s).`;
-  showParameterFillSuccess(summary, suggestionPayload.value.warnings || []);
-  resetSuggestionState();
-};
-
-const showParameterFillSuccess = (summary = '', warnings = []) => {
-  const successNotification = document.createElement('div');
-  successNotification.className = 'parameter-fill-success';
-  successNotification.innerHTML = `
-    <div class="success-content">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M20 6L9 17l-5-5"></path>
-      </svg>
-      <div class="message">
-        <span>Parameter filling successful!</span>
-      </div>
-    </div>
-  `;
-
-  const message = successNotification.querySelector('.message');
-  if (summary) {
-    const summaryElement = document.createElement('small');
-    summaryElement.textContent = String(summary);
-    message.appendChild(summaryElement);
-  }
-  if (Array.isArray(warnings) && warnings.length > 0) {
-    const warningList = document.createElement('div');
-    warningList.className = 'warnings';
-    const heading = document.createElement('small');
-    heading.textContent = 'Notes:';
-    warningList.appendChild(heading);
-    warnings.forEach((warning) => {
-      const warningElement = document.createElement('small');
-      warningElement.textContent = `• ${String(warning)}`;
-      warningList.appendChild(warningElement);
-    });
-    message.appendChild(warningList);
-  }
-
-  document.body.appendChild(successNotification);
-  
-  // Auto-remove after 3 seconds
-  setTimeout(() => {
-    if (successNotification.parentNode) {
-      successNotification.parentNode.removeChild(successNotification);
-    }
-  }, 3000);
-};
-
-const showParameterFillError = (errorMessage) => {
-  const errorNotification = document.createElement('div');
-  errorNotification.className = 'parameter-fill-error';
-  errorNotification.innerHTML = `
-    <div class="error-content">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"></circle>
-        <line x1="15" y1="9" x2="9" y2="15"></line>
-        <line x1="9" y1="9" x2="15" y2="15"></line>
-      </svg>
-      <div class="message">
-        <span>参数填充失败</span>
-      </div>
-    </div>
-  `;
-
-  const detail = document.createElement('small');
-  detail.textContent = String(errorMessage || 'Parameter suggestion service is unavailable.');
-  errorNotification.querySelector('.message').appendChild(detail);
-
-  document.body.appendChild(errorNotification);
-  
-  // 5秒后自动移除
-  setTimeout(() => {
-    if (errorNotification.parentNode) {
-      errorNotification.parentNode.removeChild(errorNotification);
-    }
-  }, 5000);
-};
-
-const checkParameterFillAvailability = async () => {
-  try {
-    const response = await fetch('/api/parameter-fill/health');
-    const payload = await response.json();
-    parameterFillAvailable.value = response.ok && payload.available === true;
-  } catch (error) {
-    parameterFillAvailable.value = false;
-  }
-};
-
 onMounted(() => {
-  checkParameterFillAvailability();
   fetchToolLibrary().then(() => {
     updateTool();
     checkTaskStatus();
@@ -1342,7 +988,8 @@ html, body {
 .tool-body {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(380px, 1.04fr) minmax(460px, 0.96fr);
+  grid-template-columns: minmax(0, 760px);
+  justify-content: center;
   gap: clamp(14px, 1.6vw, 24px);
   padding: clamp(14px, 1.8vw, 24px);
   min-height: 0;
@@ -1363,14 +1010,14 @@ html, body {
 }
 
 .logs-section {
-  min-height: clamp(340px, 46vh, 560px);
-  max-height: calc(100vh - 168px);
+  min-height: 0;
+  max-height: none;
 }
 
 /* 参数表单区域 */
 .form-card {
   background: var(--surface-1);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-sm);
   border: var(--border-width) solid var(--border-color-light);
   box-shadow: var(--shadow-xs);
   display: flex;
@@ -1389,13 +1036,6 @@ html, body {
   gap: 10px;
 }
 
-.form-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-shrink: 0;
-}
-
 .form-header h4 {
   margin: 0;
   font-size: var(--text-base);
@@ -1411,16 +1051,6 @@ html, body {
 .form-header h4 svg {
   color: var(--primary-600);
   flex-shrink: 0;
-}
-
-.param-count {
-  font-size: 11px;
-  color: var(--gray-600);
-  background: var(--surface-3);
-  padding: 3px 6px;
-  border-radius: 10px;
-  font-weight: 500;
-  white-space: nowrap;
 }
 
 .param-list {
@@ -1479,17 +1109,6 @@ html, body {
 .required-indicator {
   color: var(--error-500);
   font-weight: 700;
-}
-
-.param-type {
-  font-size: 11px;
-  color: var(--gray-500);
-  background: var(--surface-2);
-  padding: 2px 6px;
-  border-radius: 6px;
-  font-weight: 500;
-  white-space: nowrap;
-  flex-shrink: 0;
 }
 
 .param-description {
@@ -1562,6 +1181,25 @@ html, body {
   margin: 0;
   font-size: var(--text-sm);
   font-weight: var(--font-medium);
+}
+
+.optional-parameters-toggle {
+  align-self: flex-start;
+  margin: 0 var(--spacing-4) var(--spacing-4);
+  padding: 7px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--gray-600);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+}
+
+.optional-parameters-toggle:hover {
+  background: var(--surface-2);
+  color: var(--gray-900);
 }
 
 /* 运行按钮 */
@@ -1725,15 +1363,40 @@ html, body {
 /* 日志区域 */
 .logs-section {
   background: var(--surface-1);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-sm);
   border: var(--border-width) solid var(--border-color-light);
   box-shadow: var(--shadow-xs);
   overflow: hidden;
 }
 
+.logs-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-3);
+  min-height: 46px;
+  padding: 0 var(--spacing-4);
+  color: var(--gray-700);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  list-style: none;
+}
+
+.logs-summary::-webkit-details-marker { display: none; }
+
+.logs-summary span:last-child {
+  color: var(--gray-500);
+  font-size: var(--text-xs);
+}
+
+.logs-section[open] .logs-summary {
+  border-bottom: 1px solid var(--border-color-light);
+}
+
 .logs-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   padding: 14px 18px;
   background: var(--surface-2);
@@ -2006,353 +1669,6 @@ html, body {
   font-weight: 500;
 }
 
-/* 智能填充按钮 */
-.smart-fill-btn {
-  background: var(--gradient-primary);
-  color: white;
-  border: none;
-  padding: 6px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.75rem;
-  font-weight: 500;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 80px;
-  justify-content: center;
-  white-space: nowrap;
-}
-
-.smart-fill-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.3);
-}
-
-.smart-fill-btn.active {
-  background: linear-gradient(135deg, var(--success-500) 0%, var(--success-600) 100%);
-  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.3);
-}
-
-.smart-fill-btn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.smart-fill-btn .spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-radius: 50%;
-  border-top-color: white;
-  animation: spin 1s ease-in-out infinite;
-}
-
-/* 参数填充成功提示 */
-.parameter-fill-success {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  background: linear-gradient(135deg, var(--success-500) 0%, var(--success-600) 100%);
-  color: white;
-  padding: 12px 16px;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
-  z-index: 10000;
-  animation: slideInRight 0.3s ease-out;
-  max-width: 320px;
-}
-
-.success-content {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.success-content .message {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.success-content .message span {
-  font-weight: 600;
-  font-size: 0.8rem;
-}
-
-.success-content .message small {
-  font-size: 0.7rem;
-  opacity: 0.9;
-  line-height: 1.3;
-}
-
-.success-content .warnings {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.success-content .warnings small {
-  display: block;
-  margin-bottom: 2px;
-}
-
-/* 参数填充错误提示 */
-.parameter-fill-error {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  background: linear-gradient(135deg, var(--error-500) 0%, var(--error-600) 100%);
-  color: white;
-  padding: 12px 16px;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
-  z-index: 10000;
-  animation: slideInRight 0.3s ease-out;
-  max-width: 320px;
-}
-
-.error-content {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.error-content .message {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.error-content .message span {
-  font-weight: 600;
-  font-size: 0.8rem;
-}
-
-.error-content .message small {
-  font-size: 0.7rem;
-  opacity: 0.9;
-  line-height: 1.3;
-}
-
-@keyframes slideInRight {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-/* 参数建议弹窗 */
-.parameter-suggestion-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.55);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10000;
-}
-
-.parameter-suggestion-card {
-  width: min(720px, 92vw);
-  max-height: 80vh;
-  background: var(--surface-1);
-  border-radius: 12px;
-  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.suggestion-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-color-light);
-  background: var(--surface-2);
-}
-
-.suggestion-header h4 {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.suggestion-header p {
-  margin: 6px 0 0;
-  color: var(--gray-600);
-  font-size: 0.85rem;
-}
-
-.suggestion-close {
-  border: none;
-  background: var(--surface-1);
-  color: var(--gray-500);
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.suggestion-close:hover {
-  background: var(--surface-2);
-  color: var(--gray-800);
-}
-
-.suggestion-section {
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--border-color-light);
-}
-
-.suggestion-section strong {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 0.8rem;
-  color: var(--gray-700);
-}
-
-.suggestion-section ul {
-  margin: 0;
-  padding-left: 18px;
-  color: var(--gray-600);
-  font-size: 0.8rem;
-  line-height: 1.4;
-}
-
-.suggestion-list {
-  padding: 16px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;
-}
-
-.suggestion-empty {
-  padding: 12px;
-  border-radius: 10px;
-  background: var(--surface-2);
-  color: var(--gray-600);
-  font-size: 0.85rem;
-  text-align: center;
-}
-
-.suggestion-item {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  padding: 12px;
-  border-radius: 10px;
-  border: 1px solid var(--border-color-light);
-  background: var(--surface-0);
-}
-
-.suggestion-item input[type="checkbox"] {
-  margin-top: 4px;
-}
-
-.suggestion-details {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-}
-
-.suggestion-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.param-name {
-  font-weight: 600;
-  color: var(--gray-900);
-}
-
-.param-type {
-  font-size: 0.7rem;
-  color: var(--gray-500);
-  background: var(--surface-2);
-  padding: 2px 6px;
-  border-radius: 999px;
-}
-
-.suggestion-values {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 0.78rem;
-  color: var(--gray-700);
-}
-
-.suggestion-values em {
-  font-style: normal;
-  color: var(--gray-900);
-  font-weight: 500;
-}
-
-.suggestion-reasoning {
-  margin: 0;
-  font-size: 0.78rem;
-  color: var(--gray-600);
-}
-
-.suggestion-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  padding: 14px 20px 18px;
-  border-top: 1px solid var(--border-color-light);
-  background: var(--surface-1);
-}
-
-.primary-btn,
-.secondary-btn {
-  border-radius: 8px;
-  font-size: 0.8rem;
-  padding: 8px 14px;
-  cursor: pointer;
-  border: 1px solid transparent;
-  transition: all 0.2s ease;
-}
-
-.primary-btn {
-  background: var(--primary-600);
-  color: white;
-  border-color: var(--primary-600);
-}
-
-.primary-btn:hover:not(:disabled) {
-  background: var(--primary-700);
-  border-color: var(--primary-700);
-}
-
-.primary-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.secondary-btn {
-  background: var(--surface-2);
-  color: var(--gray-700);
-  border-color: var(--border-color-light);
-}
-
-.secondary-btn:hover {
-  background: var(--surface-3, #eef2f7);
-}
-
 /* Flag开关样式 */
 .flag-input-container {
   display: flex;
@@ -2473,7 +1789,8 @@ html, body {
 /* 平板端 (768px - 1024px) */
 @media (max-width: 1024px) {
   .tool-body {
-    grid-template-columns: 320px 1fr;
+    grid-template-columns: minmax(0, 760px);
+    justify-content: center;
     gap: 16px;
     padding: 16px;
   }
@@ -2577,19 +1894,8 @@ html, body {
     gap: 8px;
   }
   
-  .form-header-actions {
-    justify-content: space-between;
-    gap: 8px;
-  }
-  
   .form-header h4 {
     font-size: 14px;
-  }
-  
-  .smart-fill-btn {
-    padding: 5px 8px;
-    font-size: 0.7rem;
-    min-width: 70px;
   }
   
   .param-list {
@@ -2609,11 +1915,6 @@ html, body {
   
   .param-label {
     font-size: 12px;
-  }
-  
-  .param-type {
-    align-self: flex-start;
-    font-size: 10px;
   }
   
   .param-description {
@@ -2726,29 +2027,6 @@ html, body {
     font-size: 14px;
   }
   
-  .parameter-fill-success,
-  .parameter-fill-error {
-    top: 8px;
-    right: 8px;
-    left: 8px;
-    max-width: none;
-    padding: 10px 12px;
-  }
-  
-  .success-content,
-  .error-content {
-    gap: 8px;
-  }
-  
-  .success-content .message span,
-  .error-content .message span {
-    font-size: 0.75rem;
-  }
-  
-  .success-content .message small,
-  .error-content .message small {
-    font-size: 0.65rem;
-  }
 }
 
 /* 小屏移动端 (最大480px) */

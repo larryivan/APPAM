@@ -1,1394 +1,253 @@
 <template>
-  <div class="workspace-layout" :class="{ 'workflow-focus': isWorkflowRoute }">
-    <!-- 左侧工具栏 -->
-    <nav class="workspace-sidebar" :class="{ collapsed: sidebarCollapsed, mobile: isMobile, animating: sidebarAnimating }">
-      <!-- 顶部控制栏 -->
-      <div class="sidebar-controls">
-        <router-link to="/projects" class="logo-link" title="Back to Project List" v-if="!sidebarCollapsed">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-            <polyline points="9 22 9 12 15 12 15 22"></polyline>
-          </svg>
-          <span class="logo-text">APPAM</span>
+  <div class="workspace-layout">
+    <aside class="workspace-nav" aria-label="Project navigation">
+      <header class="project-context">
+        <router-link to="/projects" class="back-link" title="All projects" aria-label="All projects">
+          <Icon name="layout-grid" :size="18" />
         </router-link>
-        <button @click="toggleSidebar" class="sidebar-toggle-btn" :title="sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline :points="sidebarCollapsed ? '9 18 15 12 9 6' : '15 18 9 12 15 6'"></polyline>
-          </svg>
-        </button>
-      </div>
-      
-      <div class="sidebar-content" v-if="!sidebarCollapsed">
-        <!-- 工作区板块 -->
-        <div class="nav-section">
-          <div class="section-header" @click="toggleSection('workspace')">
-            <div class="section-icon">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                <rect x="8" y="8" width="8" height="8"></rect>
-              </svg>
-            </div>
-            <span class="section-title">Workspace</span>
-            <svg class="section-arrow" :class="{ rotated: !expandedSections.workspace }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </div>
-          <div class="section-content" v-show="expandedSections.workspace">
-            <router-link :to="`/workspace/${$route.params.id}/overview`" class="nav-link">
-              <div class="link-icon">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="3"></circle>
-                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09A1.65 1.65 0 0 0 15.4 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09A1.65 1.65 0 0 0 19.4 15z"></path>
-                </svg>
-              </div>
-              <span class="link-text">Project Overview</span>
-            </router-link>
-            <router-link :to="`/workspace/${$route.params.id}/filemanager`" class="nav-link">
-              <div class="link-icon">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                </svg>
-              </div>
-              <span class="link-text">File Manager</span>
-            </router-link>
-            <button v-if="openCodeEnabled" class="nav-link nav-button" @click="openOpenCodeWindow">
-              <div class="link-icon">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                </svg>
-              </div>
-              <span class="link-text">OpenCode</span>
-            </button>
-          </div>
+        <div class="project-copy">
+          <span>Project</span>
+          <strong :title="project?.name || ''">{{ project?.name || 'Loading...' }}</strong>
         </div>
-        
-        <div
-          v-for="section in visibleToolSections"
-          :key="section.id"
-          class="nav-section"
-        >
-          <div class="section-header" @click="toggleSection(section.id)">
-            <div class="section-icon">
-              <svg v-if="section.icon === 'reads'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                <polyline points="14 2 14 8 20 8"></polyline>
-                <line x1="12" y1="18" x2="12" y2="12"></line>
-                <line x1="9" y1="15" x2="15" y2="15"></line>
-              </svg>
-              <svg v-else-if="section.icon === 'taxonomy'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-              </svg>
-              <svg v-else-if="section.icon === 'assembly'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="7" height="7"></rect>
-                <rect x="14" y="3" width="7" height="7"></rect>
-                <rect x="14" y="14" width="7" height="7"></rect>
-                <rect x="3" y="14" width="7" height="7"></rect>
-              </svg>
-              <svg v-else-if="section.icon === 'binning'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-                <line x1="12" y1="22.08" x2="12" y2="12"></line>
-              </svg>
-              <svg v-else-if="section.icon === 'annotation'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"></circle>
-                <path d="M8 12h8"></path>
-                <path d="M12 8v8"></path>
-              </svg>
-              <svg v-else-if="section.icon === 'proteomics'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M6 3h12"></path>
-                <path d="M9 3v6l-4 7a3 3 0 0 0 2.62 4.5h8.76A3 3 0 0 0 19 16l-4-7V3"></path>
-                <path d="M8 14h8"></path>
-              </svg>
-              <svg v-else-if="section.icon === 'workflow'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="4" width="6" height="6" rx="1"></rect>
-                <rect x="15" y="4" width="6" height="6" rx="1"></rect>
-                <rect x="9" y="14" width="6" height="6" rx="1"></rect>
-                <path d="M9 7h6"></path>
-                <path d="M12 10v4"></path>
-              </svg>
-              <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 12h18"></path>
-                <path d="M12 3v18"></path>
-              </svg>
-            </div>
-            <span class="section-title">{{ section.title }}</span>
-            <svg class="section-arrow" :class="{ rotated: !expandedSections[section.id] }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </div>
-          <div class="section-content" v-show="expandedSections[section.id]">
-            <router-link
-              v-for="tool in section.tools"
-              :key="tool.id"
-              :to="getToolLink(tool)"
-              class="nav-link"
-            >
-              <div class="link-icon">
-                <svg v-if="tool.kind === 'workflow'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                </svg>
-                <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="3"></circle>
-                  <path d="M12 1v6m0 6v6m11-11h-6m-6 0H1"></path>
-                </svg>
-              </div>
-              <span class="link-text">{{ tool.tool_name }}</span>
-              <span v-if="tool.kind === 'workflow'" class="link-badge">WF</span>
-            </router-link>
-          </div>
-        </div>
+      </header>
 
-        <div v-if="advancedToolSections.length" class="nav-section">
-          <div class="section-header" @click="toggleSection('advanced-tools')">
-            <div class="section-icon">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="3"></circle>
-                <path d="M12 1v6m0 6v6m11-11h-6m-6 0H1"></path>
-              </svg>
-            </div>
-            <span class="section-title">Advanced Tools</span>
-            <svg class="section-arrow" :class="{ rotated: !expandedSections['advanced-tools'] }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </div>
-          <div class="section-content" v-show="expandedSections['advanced-tools']">
-            <template v-for="section in advancedToolSections" :key="section.id">
-              <router-link
-                v-for="tool in section.tools"
-                :key="tool.id"
-                :to="getToolLink(tool)"
-                class="nav-link"
-              >
-                <div class="link-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="3"></circle>
-                    <path d="M12 1v6m0 6v6m11-11h-6m-6 0H1"></path>
-                  </svg>
-                </div>
-                <span class="link-text">{{ tool.tool_name }}</span>
-              </router-link>
-            </template>
-          </div>
-        </div>
-      </div>
-      
-      <!-- 折叠状态的快捷图标 -->
-      <div class="sidebar-shortcuts" v-if="sidebarCollapsed && !isMobile">
-        <router-link :to="`/workspace/${$route.params.id}/overview`" class="shortcut-link" title="Project Overview">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09A1.65 1.65 0 0 0 15.4 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09A1.65 1.65 0 0 0 19.4 15z"></path>
-          </svg>
+      <nav class="project-links">
+        <router-link :to="overviewRoute" class="project-link" :class="{ active: route.name === 'Overview' }">
+          <Icon name="layout-dashboard" :size="18" />
+          <span>Overview</span>
         </router-link>
-        <router-link :to="`/workspace/${$route.params.id}/filemanager`" class="shortcut-link" title="File Manager">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-          </svg>
+        <router-link :to="analysisRoute" class="project-link" :class="{ active: route.name === 'WorkflowView' }">
+          <Icon name="activity" :size="18" />
+          <span>Analysis</span>
         </router-link>
-        <button v-if="openCodeEnabled" class="shortcut-link" title="OpenCode" @click="openOpenCodeWindow">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-          </svg>
-        </button>
-        <div class="shortcut-divider"></div>
-        <button
-          v-for="section in visibleToolSections"
-          :key="section.id"
-          class="shortcut-link"
-          :title="section.title"
-          @click="quickToggle(section.id)"
-        >
-          <svg v-if="section.icon === 'reads'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-            <polyline points="14 2 14 8 20 8"></polyline>
-          </svg>
-          <svg v-else-if="section.icon === 'taxonomy'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-          </svg>
-          <svg v-else-if="section.icon === 'assembly'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="7" height="7"></rect>
-            <rect x="14" y="3" width="7" height="7"></rect>
-            <rect x="14" y="14" width="7" height="7"></rect>
-            <rect x="3" y="14" width="7" height="7"></rect>
-          </svg>
-          <svg v-else-if="section.icon === 'binning'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-          </svg>
-          <svg v-else-if="section.icon === 'proteomics'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M6 3h12"></path>
-            <path d="M9 3v6l-4 7a3 3 0 0 0 2.62 4.5h8.76A3 3 0 0 0 19 16l-4-7V3"></path>
-          </svg>
-          <svg v-else-if="section.icon === 'workflow'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="4" width="6" height="6" rx="1"></rect>
-            <rect x="15" y="4" width="6" height="6" rx="1"></rect>
-            <rect x="9" y="14" width="6" height="6" rx="1"></rect>
-            <path d="M9 7h6"></path>
-            <path d="M12 10v4"></path>
-          </svg>
-          <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 12h18"></path>
-            <path d="M12 3v18"></path>
-          </svg>
-        </button>
-      </div>
-      
+        <router-link :to="filesRoute" class="project-link" :class="{ active: route.name === 'FileManager' }">
+          <Icon name="folder" :size="18" />
+          <span>Files</span>
+        </router-link>
+        <router-link :to="toolsRoute" class="project-link" :class="{ active: toolsRouteActive }">
+          <Icon name="wrench" :size="18" />
+          <span>Tools</span>
+        </router-link>
+      </nav>
 
-    </nav>
+      <footer v-if="project" class="project-nav-footer">
+        <span>Default analysis</span>
+        <strong>{{ workflowName }}</strong>
+      </footer>
+    </aside>
 
-    <!-- 主内容区 -->
-    <main class="main-content" style = "margin-top: 0" @click="handleMainContentClick">
-      <!-- 移动端菜单按钮 -->
-      <button 
-        v-if="isMobile && sidebarCollapsed" 
-        @click="handleMenuButtonClick" 
-        class="mobile-sidebar-trigger" 
-        :class="{ 'with-notification': hasNotifications }"
-      >
-        <div class="trigger-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <line x1="3" y1="6" x2="21" y2="6"></line>
-          <line x1="3" y1="12" x2="21" y2="12"></line>
-          <line x1="3" y1="18" x2="21" y2="18"></line>
-        </svg>
-        </div>
-        <div class="trigger-hint">Tools</div>
-        <div v-if="hasNotifications" class="notification-dot"></div>
-      </button>
-      
-      <div class="content-wrapper" :class="{ 'workflow-content-wrapper': isWorkflowRoute }">
-        <router-view />
-      </div>
+    <main class="workspace-content">
+      <router-view />
     </main>
-    
-    <!-- 移动端遮罩层 -->
-    <div v-if="!sidebarCollapsed && isMobile" class="mobile-overlay" @click="closeSidebar" @touchstart.passive="closeSidebar"></div>
-
-    <!-- OpenCode floating button -->
-    <div v-if="openCodeEnabled && !isMobile" class="opencode-trigger">
-      <button class="opencode-button" :class="{ active: isOpenCodeVisible }" @click="openOpenCodeWindow" title="OpenCode">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="8 6 2 12 8 18"></polyline>
-          <polyline points="16 6 22 12 16 18"></polyline>
-          <line x1="10" y1="4" x2="14" y2="20"></line>
-        </svg>
-      </button>
-    </div>
-
-    <!-- OpenCode console -->
-    <FloatingOpenCodeTerminal v-if="openCodeEnabled && !isMobile" ref="openCodeRef" />
-
-    <!-- 浮动系统监视器 -->
-    <FloatingSystemMonitor v-if="isAdmin && !isMobile" />
-
-    <!-- 浮动终端 -->
-    <FloatingTerminal v-if="isAdmin && !isMobile" />
-
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import FloatingTerminal from '@/components/FloatingTerminal.vue'
-import FloatingOpenCodeTerminal from '@/components/FloatingOpenCodeTerminal.vue'
-import FloatingSystemMonitor from '@/components/FloatingSystemMonitor.vue'
-import { authState } from '@/lib/auth'
+
+import Icon from '@/components/ui/Icon.vue'
+import { getWorkflowOption } from '@/lib/workflowUi.js'
 
 const route = useRoute()
 const router = useRouter()
+const project = ref(null)
 
-// 状态管理
-const sidebarCollapsed = ref(false)
-const isMobile = ref(false)
-const hasNotifications = ref(false)
-const sidebarAnimating = ref(false)
-const openCodeRef = ref(null)
-const isOpenCodeVisible = computed(() => Boolean(openCodeRef.value?.isOpen?.value))
-const toolSections = ref([])
-const isWorkflowRoute = computed(() => route.name === 'WorkflowView')
-const isAdmin = computed(() => authState.user?.role === 'admin')
-const opencodeAvailable = ref(false)
-const openCodeEnabled = computed(() => isAdmin.value && opencodeAvailable.value)
-const visibleToolSections = computed(() => toolSections.value.filter((section) => section.id === 'workflow-automation'))
-const advancedToolSections = computed(() => toolSections.value.filter((section) => section.id !== 'workflow-automation'))
+const projectId = computed(() => String(route.params.id || ''))
+const defaultWorkflowId = computed(() => project.value?.analysis_workflow || 'appam-smk')
+const workflowName = computed(() => getWorkflowOption(defaultWorkflowId.value)?.shortLabel || 'Not selected')
 
-// 侧边栏展开状态
-const expandedSections = ref({
-  workspace: true,
-})
+const overviewRoute = computed(() => ({ name: 'Overview', params: { id: projectId.value } }))
+const analysisRoute = computed(() => ({
+  name: 'WorkflowView',
+  params: { id: projectId.value, workflowId: defaultWorkflowId.value },
+}))
+const filesRoute = computed(() => ({ name: 'FileManager', params: { id: projectId.value } }))
+const toolsRoute = computed(() => ({ name: 'ToolLibrary', params: { id: projectId.value } }))
+const toolsRouteActive = computed(() => ['ToolLibrary', 'PipelineTool'].includes(String(route.name || '')))
 
-const getToolLink = (tool) => {
-  if (tool.kind === 'workflow') {
-    const workflowId = tool.execution?.workflow_id || tool.id
-    return `/workspace/${route.params.id}/workflow/${workflowId}`
-  }
-  return `/workspace/${route.params.id}/tool/${tool.id}`
-}
-
-const mergeExpandedSections = (savedState = {}) => {
-  const nextState = {
-    workspace: savedState.workspace ?? true,
-    'advanced-tools': savedState['advanced-tools'] ?? false,
-  }
-  toolSections.value.forEach((section) => {
-    nextState[section.id] = savedState[section.id] ?? true
-  })
-  expandedSections.value = nextState
-}
-
-const loadToolSections = async () => {
+async function loadProject() {
+  if (!projectId.value) return
   try {
-    const response = await fetch('/api/tools')
-    const payload = await response.json()
-    if (!response.ok || !payload.success) {
-      throw new Error(payload.error || 'Failed to load tools')
-    }
-    toolSections.value = payload.sections || []
-    let savedState = {}
-    const savedRaw = localStorage.getItem('sidebarExpandedSections')
-    if (savedRaw) {
-      try {
-        savedState = JSON.parse(savedRaw)
-      } catch (error) {
-        console.error('Failed to parse saved sidebar state:', error)
-      }
-    }
-    mergeExpandedSections(savedState)
-  } catch (error) {
-    console.error('Failed to load tool sections:', error)
-  }
-}
-
-const openOpenCodeWindow = () => {
-  openCodeRef.value?.openWindow?.()
-  if (isMobile.value) {
-    closeSidebar()
-  }
-}
-
-const checkOpenCodeAvailability = async () => {
-  if (!isAdmin.value) return
-  try {
-    const response = await fetch('/api/parameter-fill/health')
-    const payload = await response.json()
-    opencodeAvailable.value = response.ok && payload.available === true
-  } catch (error) {
-    opencodeAvailable.value = false
-  }
-}
-
-const toggleSidebar = () => {
-  sidebarAnimating.value = true
-  sidebarCollapsed.value = !sidebarCollapsed.value
-  
-  // 动画完成后重置状态
-  setTimeout(() => {
-    sidebarAnimating.value = false
-  }, 300)
-}
-
-// 处理菜单按钮点击
-const handleMenuButtonClick = (event) => {
-  event.preventDefault()
-  event.stopPropagation()
-  toggleSidebar()
-}
-
-const closeSidebar = () => {
-  if (isMobile.value) {
-    sidebarAnimating.value = true
-    sidebarCollapsed.value = true
-    setTimeout(() => {
-      sidebarAnimating.value = false
-    }, 300)
-  }
-}
-
-const handleMainContentClick = () => {
-  if (isMobile.value && !sidebarCollapsed.value) {
-    sidebarCollapsed.value = true
-  }
-}
-
-const toggleSection = (section) => {
-  expandedSections.value[section] = !expandedSections.value[section]
-}
-
-const quickToggle = (section) => {
-  sidebarCollapsed.value = false
-  expandedSections.value[section] = true
-}
-
-
-
-// 触摸手势支持
-let touchStartX = 0
-let touchStartY = 0
-let isTouching = false
-
-const handleTouchStart = (e) => {
-  if (!isMobile.value) return
-  touchStartX = e.touches[0].clientX
-  touchStartY = e.touches[0].clientY
-  isTouching = true
-}
-
-const handleTouchMove = (e) => {
-  if (!isMobile.value || !isTouching) return
-  
-  const touchCurrentX = e.touches[0].clientX
-  const touchCurrentY = e.touches[0].clientY
-  const deltaX = touchCurrentX - touchStartX
-  const deltaY = touchCurrentY - touchStartY
-  
-  // 水平滑动距离大于垂直滑动距离，且大于阈值
-  if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) {
-    // 从左边缘向右滑动，打开侧边栏
-    if (touchStartX < 30 && deltaX > 0 && sidebarCollapsed.value) {
-      e.preventDefault()
-      toggleSidebar()
-      isTouching = false
-    }
-    // 在侧边栏内向左滑动，关闭侧边栏
-    else if (!sidebarCollapsed.value && deltaX < -50) {
-      e.preventDefault()
-      closeSidebar()
-      isTouching = false
-    }
-  }
-}
-
-const handleTouchEnd = () => {
-  isTouching = false
-}
-
-// 移动端检测函数
-const detectMobile = () => {
-  const userAgent = navigator.userAgent.toLowerCase()
-  const mobileKeywords = ['mobile', 'iphone', 'android', 'blackberry', 'nokia', 'opera mini', 'windows mobile', 'windows phone', 'iemobile']
-  const isMobileDevice = mobileKeywords.some(keyword => userAgent.includes(keyword))
-  const isSmallScreen = window.innerWidth <= 768
-  return isMobileDevice || isSmallScreen
-}
-
-// 窗口尺寸变化时自适应
-const handleResize = () => {
-  isMobile.value = detectMobile()
-
-  if (isMobile.value) {
-    sidebarCollapsed.value = true
-    hasNotifications.value = false
-  } else {
-    sidebarCollapsed.value = false
-    hasNotifications.value = false
-  }
-}
-
-onMounted(async () => {
-  handleResize()
-  await Promise.all([loadToolSections(), checkOpenCodeAvailability()])
-  window.addEventListener('resize', handleResize)
-  
-  // 添加触摸事件监听器
-  if ('ontouchstart' in window) {
-    document.addEventListener('touchstart', handleTouchStart, { passive: true })
-    document.addEventListener('touchmove', handleTouchMove, { passive: false })
-    document.addEventListener('touchend', handleTouchEnd, { passive: true })
-  }
-  
-  // 检查项目是否存在
-  await checkProjectExists()
-})
-
-// 检查项目是否存在
-const checkProjectExists = async () => {
-  const projectId = route.params.id
-  if (!projectId) return
-  
-  try {
-    const response = await fetch(`/api/projects/${projectId}`)
-    
+    const response = await fetch(`/api/projects/${projectId.value}`)
     if (response.status === 404) {
-      // 项目不存在，跳转到项目列表
-      router.push('/projects')
+      await router.replace('/projects')
+      return
     }
+    if (!response.ok) throw new Error('Project could not be loaded')
+    project.value = await response.json()
   } catch (error) {
-    console.error('Error checking project:', error)
+    console.error('Failed to load project navigation:', error)
   }
 }
 
-watch(expandedSections, (value) => {
-  localStorage.setItem('sidebarExpandedSections', JSON.stringify(value))
-}, { deep: true })
-
-watch(
-  () => route.name,
-  () => {
-    if (isMobile.value) {
-      sidebarCollapsed.value = true
-    }
-  },
-)
-
-onUnmounted(() => {
-  window.removeEventListener('resize', handleResize)
-  
-  // 清理触摸事件监听器
-  if ('ontouchstart' in window) {
-    document.removeEventListener('touchstart', handleTouchStart)
-    document.removeEventListener('touchmove', handleTouchMove)
-    document.removeEventListener('touchend', handleTouchEnd)
-  }
-  
-  // 保存展开状态
-  localStorage.setItem('sidebarExpandedSections', JSON.stringify(expandedSections.value))
-})
+watch(projectId, loadProject, { immediate: true })
 </script>
 
 <style scoped>
 .workspace-layout {
-  display: flex;
+  display: grid;
+  grid-template-columns: 216px minmax(0, 1fr);
+  width: 100%;
   height: 100%;
-  width: 100%;
-  background: var(--surface-0, #f6f7fb);
-  overflow: hidden;
-  --sidebar-width: 280px;
-  --sidebar-width-collapsed: 64px;
-}
-
-.workspace-layout.workflow-focus {
-  --sidebar-width-collapsed: 72px;
-  background: #eff3f8;
-}
-
-/* 现代化侧边栏 */
-.workspace-sidebar {
-  width: var(--sidebar-width);
-  background: var(--surface-1);
-  border-right: 1px solid var(--border-color);
-  transition: width 0.3s ease, transform 0.3s ease;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  box-shadow: var(--shadow-xs);
-}
-
-.workspace-sidebar.collapsed {
-  width: var(--sidebar-width-collapsed);
-}
-
-.workspace-layout.workflow-focus .workspace-sidebar {
-  background: rgba(255, 255, 255, 0.84);
-  backdrop-filter: blur(10px);
-}
-
-/* 顶部控制栏 */
-.sidebar-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--spacing-3) var(--spacing-4);
-  border-bottom: var(--border-width) solid var(--border-color-light);
-  background: var(--surface-2);
-  min-height: 56px;
-  flex-shrink: 0;
-}
-
-.workspace-sidebar.collapsed .sidebar-controls {
-  justify-content: center;
-  padding: var(--spacing-4) var(--spacing-2);
-}
-
-.logo-link {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  text-decoration: none;
-  color: var(--gray-800);
-  font-weight: var(--font-semibold);
-  transition: all var(--transition-base);
-  font-size: var(--text-base);
-}
-
-.logo-link:hover {
-  color: var(--primary-600);
-  transform: translateX(2px);
-}
-
-.logo-text {
-  font-weight: var(--font-bold);
-  letter-spacing: -0.02em;
-}
-
-.sidebar-toggle-btn {
-  width: 32px;
-  height: 32px;
-  background: var(--surface-1);
-  border: var(--border-width) solid var(--border-color);
-  border-radius: var(--radius-base);
-  color: var(--gray-500);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all var(--transition-base);
-}
-
-.sidebar-toggle-btn:hover {
-  background: var(--surface-2);
-  color: var(--gray-800);
-  border-color: var(--border-color-dark);
-  transform: scale(1.05);
-}
-
-/* 内容区域 */
-.sidebar-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--spacing-2) var(--spacing-3);
-}
-
-.nav-section {
-  margin-bottom: var(--spacing-2);
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-3);
-  padding: var(--spacing-3) var(--spacing-4);
-  cursor: pointer;
-  border-radius: var(--radius-md);
-  transition: all var(--transition-base);
-  user-select: none;
-  background: var(--surface-2);
-  margin-bottom: var(--spacing-1);
-}
-
-.section-header:hover {
-  background: var(--surface-3);
-  transform: translateX(2px);
-}
-
-.section-icon {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--gray-500);
-}
-
-.section-title {
-  flex: 1;
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  color: var(--gray-800);
-}
-
-.section-arrow {
-  color: var(--gray-400);
-  transition: transform var(--transition-base);
-}
-
-.section-arrow.rotated {
-  transform: rotate(-90deg);
-}
-
-.section-content {
-  margin-left: var(--spacing-3);
-  padding-left: var(--spacing-5);
-  border-left: var(--border-width-2) solid var(--border-color);
-  margin-bottom: var(--spacing-2);
-}
-
-.nav-link {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-3);
-  padding: var(--spacing-3) var(--spacing-4);
-  margin: var(--spacing-1) 0;
-  color: var(--gray-600);
-  text-decoration: none;
-  border-radius: var(--radius-base);
-  transition: all var(--transition-base);
-  font-size: var(--text-sm);
-  border: 1px solid transparent;
-}
-
-.nav-button {
-  background: transparent;
-  border: 1px solid transparent;
-  width: 100%;
-  text-align: left;
-  cursor: pointer;
-  font-family: inherit;
-  font-weight: inherit;
-  appearance: none;
-}
-
-.nav-link:hover {
-  background: var(--surface-3);
-  color: var(--gray-800);
-  transform: translateX(4px);
-}
-
-.nav-link.router-link-active {
-  background: rgba(var(--accent-rgb), 0.14);
-  color: var(--primary-700);
-  box-shadow: none;
-  border-color: rgba(var(--accent-rgb), 0.2);
-}
-
-.nav-link.router-link-active .link-icon {
-  color: var(--primary-700);
-}
-
-.link-icon {
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--gray-400);
-}
-
-.link-text {
-  flex: 1;
-  font-weight: var(--font-medium);
-}
-
-.link-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 34px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(var(--accent-rgb), 0.12);
-  color: var(--primary-700);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-/* 折叠状态的快捷方式 */
-.sidebar-shortcuts {
-  padding: 16px 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.shortcut-link {
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  color: #64748b;
-  text-decoration: none;
-  transition: all 0.2s;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-}
-
-.shortcut-link:hover {
-  background: var(--surface-2);
-  color: var(--gray-800);
-}
-
-.shortcut-link.router-link-active {
-  background: rgba(var(--accent-rgb), 0.18);
-  color: var(--primary-700);
-}
-
-.shortcut-divider {
-  width: 24px;
-  height: 1px;
-  background: var(--border-color-light);
-  margin: 4px 0;
-}
-
-/* 侧边栏底部 */
-.sidebar-footer {
-  padding: var(--spacing-3);
-  border-top: var(--border-width) solid var(--border-color);
-  background: var(--surface-2);
-}
-
-.ai-sidebar-btn {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-2);
-  padding: var(--spacing-3);
-  background: var(--gradient-primary);
-  color: white;
-  border: none;
-  border-radius: var(--radius-base);
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  cursor: pointer;
-  transition: all var(--transition-base);
-}
-
-.ai-sidebar-btn:hover {
-  box-shadow: var(--shadow-sm);
-}
-
-.workspace-sidebar.collapsed .ai-sidebar-btn span {
-  display: none;
-}
-
-/* 主内容区 */
-.main-content {
-  flex: 1;
+  min-height: 0;
   background: var(--surface-0);
   overflow: hidden;
-  position: relative;
 }
 
-.content-wrapper {
-  height: 100%;
-  overflow-y: auto;
-  background: var(--surface-1);
-  /* 优化滚动性能 */
-  scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch;
-  transform: translateZ(0);
-  will-change: scroll-position;
-  /* 自定义滚动条样式 */
-  scrollbar-width: thin;
-  scrollbar-color: var(--gray-400) var(--surface-2);
-}
-
-.content-wrapper.workflow-content-wrapper {
-  background: #f4f7fb;
-}
-
-.content-wrapper::-webkit-scrollbar {
-  width: 8px;
-}
-
-.content-wrapper::-webkit-scrollbar-track {
-  background: var(--surface-2);
-  border-radius: var(--radius-md);
-}
-
-.content-wrapper::-webkit-scrollbar-thumb {
-  background: var(--gray-400);
-  border-radius: var(--radius-md);
-  transition: background var(--transition-base);
-}
-
-.content-wrapper::-webkit-scrollbar-thumb:hover {
-  background: var(--gray-500);
-}
-
-/* 自定义滚动条 */
-.sidebar-content::-webkit-scrollbar {
-  width: 6px;
-}
-
-.sidebar-content::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.sidebar-content::-webkit-scrollbar-thumb {
-  background: var(--gray-300);
-  border-radius: 3px;
-}
-
-.sidebar-content::-webkit-scrollbar-thumb:hover {
-  background: var(--gray-400);
-}
-
-/* 移动端遮罩层 */
-.mobile-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(2px);
-  z-index: 150;
-}
-
-/* OpenCode floating button */
-.opencode-trigger {
-  position: fixed;
-  bottom: 24px;
-  right: 88px;
-  z-index: 1000;
-}
-
-.opencode-button {
-  background: var(--surface-1);
-  border: var(--border-width) solid rgba(var(--accent-rgb), 0.25);
-  border-radius: 50%;
-  width: 48px;
-  height: 48px;
-  color: var(--primary-600);
-  cursor: pointer;
-  box-shadow: var(--shadow-sm);
-  transition: all var(--transition-base);
+.workspace-nav {
   display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.opencode-button:hover {
-  box-shadow: var(--shadow-sm);
-  background: var(--surface-2);
-}
-
-.opencode-button.active {
-  background: var(--primary-600);
-  color: white;
-  border-color: rgba(var(--accent-rgb), 0.4);
-  box-shadow: 0 10px 20px rgba(var(--accent-rgb), 0.25);
-}
-
-.opencode-button.active:hover {
-  background: var(--primary-700);
-}
-
-/* 精致的移动端侧边栏触发按钮 */
-.mobile-sidebar-trigger {
-  position: fixed;
-  bottom: 20px;
-  left: 20px;
-  width: 56px;
-  height: 56px;
-  background: var(--gradient-primary);
-  border: none;
-  border-radius: 16px;
-  box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.3), 0 2px 8px rgba(0, 0, 0, 0.1);
-  color: white;
-  cursor: pointer;
-  display: flex;
+  min-width: 0;
   flex-direction: column;
+  border-right: 1px solid var(--border-color-light);
+  background: var(--surface-1);
+}
+
+.project-context {
+  display: flex;
+  min-width: 0;
   align-items: center;
-  justify-content: center;
-  z-index: 1100;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  backdrop-filter: blur(10px);
+  gap: var(--spacing-3);
+  min-height: 64px;
+  padding: var(--spacing-3) var(--spacing-4);
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.back-link {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--gray-600);
+  text-decoration: none;
+}
+
+.back-link:hover {
+  border-color: var(--border-color-dark);
+  background: var(--surface-2);
+  color: var(--gray-900);
+}
+
+.project-copy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.project-copy span,
+.project-nav-footer span {
+  color: var(--gray-500);
+  font-size: var(--text-xs);
+}
+
+.project-copy strong {
+  overflow: hidden;
+  color: var(--gray-900);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-links {
+  display: grid;
+  gap: 4px;
+  padding: var(--spacing-4) var(--spacing-3);
+}
+
+.project-link {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  min-height: 42px;
+  padding: 0 var(--spacing-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--gray-600);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  text-decoration: none;
+}
+
+.project-link:hover {
+  background: var(--surface-2);
+  color: var(--gray-900);
+}
+
+.project-link.active {
+  border-color: rgba(var(--accent-rgb), 0.2);
+  background: var(--primary-50);
+  color: var(--primary-700);
+}
+
+.project-nav-footer {
+  display: grid;
+  gap: 2px;
+  margin-top: auto;
+  padding: var(--spacing-4);
+  border-top: 1px solid var(--border-color-light);
+}
+
+.project-nav-footer strong {
+  color: var(--gray-700);
+  font-size: var(--text-sm);
+}
+
+.workspace-content {
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
 }
 
-.mobile-sidebar-trigger::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
-  transition: opacity 0.3s;
-  opacity: 0;
-}
-
-.mobile-sidebar-trigger:hover::before {
-  opacity: 1;
-}
-
-.mobile-sidebar-trigger:hover {
-  transform: translateY(-2px) scale(1.05);
-  box-shadow: 0 8px 24px rgba(var(--accent-rgb), 0.4), 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.mobile-sidebar-trigger:active {
-  transform: translateY(-1px) scale(1.02);
-  transition-duration: 0.1s;
-}
-
-.trigger-icon {
-  margin-bottom: 2px;
-  transition: transform 0.3s;
-}
-
-.mobile-sidebar-trigger:hover .trigger-icon {
-  transform: rotate(-5deg) scale(1.1);
-}
-
-.trigger-hint {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  opacity: 0.9;
-  text-transform: uppercase;
-}
-
-.notification-dot {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 12px;
-  height: 12px;
-  background: var(--error-500);
-  border-radius: 50%;
-  border: 2px solid white;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0% {
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.7);
-  }
-  70% {
-    transform: scale(1);
-    box-shadow: 0 0 0 8px rgba(255, 107, 107, 0);
-  }
-  100% {
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(255, 107, 107, 0);
-  }
-}
-
-.mobile-sidebar-trigger.with-notification {
-  animation: glow 3s ease-in-out infinite alternate;
-}
-
-@keyframes glow {
-  from {
-    box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.3), 0 2px 8px rgba(0, 0, 0, 0.1);
-  }
-  to {
-    box-shadow: 0 6px 20px rgba(var(--accent-rgb), 0.5), 0 4px 12px rgba(0, 0, 0, 0.15);
-  }
-}
-
-/* 响应式设计 */
-@media (max-width: 1200px) {
-  .workspace-sidebar {
-    width: 260px;
-  }
-}
-
-@media (max-width: 1024px) {
-  .workspace-sidebar {
-    width: 240px;
-  }
-  
+@media (max-width: 760px) {
   .workspace-layout {
-    overflow-x: hidden;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .workspace-nav {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-color-light);
+  }
+
+  .project-context {
+    min-height: 48px;
+    padding: 7px var(--spacing-3);
+  }
+
+  .back-link {
+    width: 32px;
+    height: 32px;
+    flex-basis: 32px;
+  }
+
+  .project-links {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 2px;
+    padding: 4px var(--spacing-2) var(--spacing-2);
+  }
+
+  .project-link {
+    justify-content: center;
+    gap: 6px;
+    min-height: 38px;
+    padding: 0 4px;
+    font-size: var(--text-xs);
+  }
+
+  .project-nav-footer {
+    display: none;
   }
 }
 
-@media (max-width: 768px) {
-  .workspace-layout {
-    position: relative;
-    overflow: hidden;
-  }
-  
-  .workspace-sidebar {
-    position: fixed;
-    left: 0;
-    top: 0;
-    height: 100vh;
-    width: 320px;
-    z-index: 200;
-    transform: translateX(-100%);
-    transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    background: var(--surface-1);
-    box-shadow: none;
-    border-top-right-radius: 20px;
-    border-bottom-right-radius: 20px;
-    overflow: hidden;
-  }
-  
-  .workspace-sidebar.mobile {
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-  }
-  
-  .workspace-sidebar:not(.collapsed) {
-    transform: translateX(0);
-    box-shadow: 8px 0 40px rgba(0, 0, 0, 0.12), 4px 0 20px rgba(0, 0, 0, 0.08);
-  }
-  
-  .workspace-sidebar.animating {
-    will-change: transform;
-  }
-  
-  /* 移动端侧边栏头部优化 */
-  .workspace-sidebar.mobile .sidebar-controls {
-    background: var(--gradient-primary);
-    color: white;
-    border-bottom: none;
-    padding: 20px 20px 16px;
-    border-radius: 20px 20px 0 0;
-  }
-  
-  .workspace-sidebar.mobile .logo-link {
-    color: white;
-    font-size: 18px;
-    font-weight: 700;
-  }
-  
-  .workspace-sidebar.mobile .logo-text {
-    color: #ffffff;
-  }
-  
-  .workspace-sidebar.mobile .sidebar-toggle-btn {
-    background: rgba(255, 255, 255, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    color: white;
-  }
-  
-  .workspace-sidebar.mobile .sidebar-toggle-btn:hover {
-    background: rgba(255, 255, 255, 0.3);
-    border-color: rgba(255, 255, 255, 0.4);
-    color: white;
-  }
-  
-  /* 移动端导航链接优化 */
-  .workspace-sidebar.mobile .nav-link {
-    margin: 6px 12px;
-    border-radius: 12px;
-    font-size: 15px;
-    padding: 12px 16px;
-    backdrop-filter: blur(10px);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  
-  .workspace-sidebar.mobile .nav-link:hover {
-    background: rgba(var(--accent-rgb), 0.08);
-    transform: translateX(8px) scale(1.02);
-    box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.15);
-  }
-  
-  .workspace-sidebar.mobile .nav-link.router-link-active {
-    background: rgba(var(--accent-rgb), 0.16);
-    box-shadow: 0 6px 20px rgba(var(--accent-rgb), 0.3);
-    transform: translateX(6px);
-  }
-  
-  .workspace-sidebar.mobile .section-header {
-    margin: 8px 12px 4px;
-    border-radius: 12px;
-    background: rgba(var(--accent-rgb), 0.05);
-    border: 1px solid rgba(var(--accent-rgb), 0.12);
-  }
-  
-  .workspace-sidebar.mobile .section-header:hover {
-    background: rgba(var(--accent-rgb), 0.12);
-    border-color: rgba(var(--accent-rgb), 0.2);
-  }
-  
-  /* 移动端AI助手按钮 */
-  .workspace-sidebar.mobile .ai-sidebar-btn {
-    background: var(--gradient-primary);
-    border-radius: 16px;
-    padding: 16px;
-    font-size: 16px;
-    box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.3);
-    margin: 12px;
-  }
-  
-  .main-content {
-    width: 100vw;
-    margin-left: 0;
-    min-height: 100vh;
-    position: relative;
-    padding-top: 48px;
-    box-sizing: border-box;
-  }
-  
-  .content-wrapper {
-    border-radius: 0;
-    padding: 0;
-    height: calc(100vh - 48px);
-    overflow-y: auto;
-  }
-
-  .mobile-sidebar-trigger {
-    position: absolute;
-    top: 6px;
-    bottom: auto;
-    left: 12px;
-    width: 72px;
-    height: 36px;
-    flex-direction: row;
-    gap: 5px;
-    border-radius: 8px;
-    box-shadow: var(--shadow-sm);
-  }
-
-  .mobile-sidebar-trigger .trigger-icon {
-    margin-bottom: 0;
-  }
-
-  .mobile-sidebar-trigger .trigger-hint {
-    font-size: 10px;
-    letter-spacing: 0;
-  }
-  
-  /* 增强遮罩层 */
-  .mobile-overlay {
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(4px);
-    animation: fadeIn 0.3s ease-out;
-  }
-
-  .opencode-trigger {
-    bottom: max(20px, env(safe-area-inset-bottom));
-    right: max(48px, calc(48px + env(safe-area-inset-right)));
-  }
-  
-  .opencode-button {
-    width: 44px;
-    height: 44px;
-  }
-  
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
-}
-
-@media (max-width: 480px) {
-  .workspace-sidebar {
-    width: calc(100vw - 20px);
-    max-width: 340px;
-    border-radius: 0 20px 20px 0;
-  }
-  
-  .mobile-sidebar-trigger {
-    top: 6px;
-    bottom: auto;
-    left: 12px;
-    width: 72px;
-    height: 36px;
-    border-radius: 8px;
-  }
-  
-  .trigger-hint {
-    font-size: 9px;
-  }
-
-  .opencode-trigger {
-    right: max(20px, calc(20px + env(safe-area-inset-right)));
-  }
-  
-  .opencode-button {
-    width: 48px;
-    height: 48px;
-  }
-  
-  .workspace-sidebar.mobile .sidebar-controls {
-    padding: 16px;
-  }
-  
-  .workspace-sidebar.mobile .logo-link {
-    font-size: 16px;
-  }
-  
-  .sidebar-content {
-    padding: 8px;
-  }
-  
-  .workspace-sidebar.mobile .section-header {
-    margin: 6px 8px 2px;
-    padding: 10px 12px;
-    font-size: 14px;
-  }
-  
-  .workspace-sidebar.mobile .nav-link {
-    margin: 4px 8px;
-    padding: 10px 12px;
-    font-size: 14px;
-  }
-  
-  .workspace-sidebar.mobile .ai-sidebar-btn {
-    margin: 8px;
-    padding: 14px;
-    font-size: 15px;
-  }
-  
-  /* 超小屏优化 */
-  .link-text {
-    font-size: 14px;
-  }
-  
-  .section-title {
-    font-size: 12px;
-  }
-}
-
-/* 横屏模式优化 */
-@media (max-height: 600px) and (orientation: landscape) {
-  .workspace-sidebar.mobile .sidebar-controls {
-    padding: 12px 16px 8px;
-  }
-  
-  .workspace-sidebar.mobile .logo-link {
-    font-size: 15px;
-  }
-  
-  .workspace-sidebar.mobile .section-header {
-    padding: 8px 12px;
-  }
-  
-  .workspace-sidebar.mobile .nav-link {
-    padding: 8px 12px;
-    font-size: 13px;
-  }
-  
-  .mobile-sidebar-trigger {
-    width: 48px;
-    height: 48px;
-    bottom: 12px;
-    left: 12px;
-  }
-  
-  .trigger-hint {
-    font-size: 8px;
-  }
-}
-
-
-
-/* 触摸设备优化 */
-@media (hover: none) and (pointer: coarse) {
-  .workspace-sidebar.mobile .nav-link:hover {
-    transform: translateX(4px);
-  }
-  
-  .workspace-sidebar.mobile .section-header:hover {
-    transform: translateX(2px);
-  }
-  
-  .mobile-sidebar-trigger:hover {
-    transform: none;
-  }
-  
-  .mobile-sidebar-trigger:active {
-    transform: scale(0.95);
-  }
-
-  .opencode-button:hover {
-    transform: none;
-    box-shadow: var(--shadow-sm);
-    background: var(--surface-1);
-  }
-  
-  .opencode-button:active {
-    transform: scale(0.96);
-    transition-duration: 0.1s;
+@media (max-width: 430px) {
+  .project-link {
+    display: grid;
+    place-items: center;
+    gap: 1px;
+    min-height: 48px;
   }
 }
 </style>

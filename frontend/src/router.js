@@ -1,7 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { authState, loadCurrentUser } from './lib/auth'
 
-const Index = () => import('./views/Index.vue')
 const AuthView = () => import('./views/AuthView.vue')
 const Documentation = () => import('./views/Documentation.vue')
 const ProjectList = () => import('./views/ProjectList.vue')
@@ -12,14 +11,14 @@ const WorkerStatusView = () => import('./views/WorkerStatusView.vue')
 const Workspace = () => import('./views/Workspace.vue')
 const Overview = () => import('./views/Overview.vue')
 const WorkflowView = () => import('./views/WorkflowView.vue')
+const ToolLibraryView = () => import('./views/ToolLibraryView.vue')
 const PipelineTool = () => import('./components/PipelineTool.vue')
 const FileManagerOptimized = () => import('./components/FileManagerOptimized.vue')
 
 const routes = [
   {
     path: '/',
-    name: 'Index',
-    component: Index
+    redirect: '/projects'
   },
   {
     path: '/login',
@@ -80,6 +79,11 @@ const routes = [
         path: 'filemanager',
         name: 'FileManager',
         component: FileManagerOptimized
+      },
+      {
+        path: 'tools',
+        name: 'ToolLibrary',
+        component: ToolLibraryView
       },
       {
         path: 'workflow/:workflowId',

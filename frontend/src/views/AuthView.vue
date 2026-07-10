@@ -4,7 +4,7 @@
       <section class="auth-screen__copy">
         <span class="auth-screen__label">APPAM Access</span>
         <h1>Sign in to continue.</h1>
-        <p>Authentication controls project access, terminal sessions, file operations, and workflow execution.</p>
+        <p>Authentication protects projects, files, and analysis runs.</p>
       </section>
 
       <section class="auth-screen__card">
