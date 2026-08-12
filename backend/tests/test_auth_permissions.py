@@ -262,10 +262,13 @@ class AuthPermissionApiTests(unittest.TestCase):
 
     def test_production_registration_policy_and_admin_user_creation(self):
         with mock.patch.dict(os.environ, {'APPAM_ALLOW_REGISTRATION': 'false'}, clear=False):
+            policy = self.client.get('/api/auth/me')
             blocked = self.client.post(
                 '/api/auth/register',
                 json={'username': 'blockeduser', 'password': 'password123'},
             )
+        self.assertEqual(policy.status_code, 200)
+        self.assertFalse(policy.get_json()['registration_allowed'])
         self.assertEqual(blocked.status_code, 403)
 
         admin = self.register(self.client, 'provisionadmin')

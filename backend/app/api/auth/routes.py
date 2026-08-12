@@ -21,6 +21,11 @@ from app.services.auth_service import (
 
 
 auth_bp = Blueprint('auth', __name__)
+TRUE_VALUES = {'1', 'true', 'yes', 'on'}
+
+
+def _registration_allowed() -> bool:
+    return os.getenv('APPAM_ALLOW_REGISTRATION', 'false').strip().lower() in TRUE_VALUES
 
 
 def _request_ip() -> str | None:
@@ -36,13 +41,14 @@ def get_current_user_endpoint():
     user = current_user()
     return jsonify({
         'authenticated': bool(user),
-        'user': user
+        'user': user,
+        'registration_allowed': _registration_allowed(),
     })
 
 
 @auth_bp.route('/auth/register', methods=['POST'])
 def register():
-    if os.getenv('APPAM_ALLOW_REGISTRATION', 'false').strip().lower() not in {'1', 'true', 'yes', 'on'}:
+    if not _registration_allowed():
         return jsonify({'error': 'Self-registration is disabled. Ask an administrator to create an account.'}), 403
     data = request.get_json() or {}
     username = data.get('username', '')

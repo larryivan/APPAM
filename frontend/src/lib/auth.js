@@ -2,6 +2,7 @@ import { reactive, readonly } from 'vue'
 
 const state = reactive({
   user: null,
+  registrationAllowed: false,
   initialized: false,
   loading: false,
 })
@@ -65,11 +66,13 @@ export const loadCurrentUser = async (force = false) => {
     .then(parseUserPayload)
     .then((payload) => {
       state.user = payload.authenticated ? payload.user : null
+      state.registrationAllowed = Boolean(payload.registration_allowed)
       state.initialized = true
       return state.user
     })
     .catch(() => {
       clearCurrentUser()
+      state.registrationAllowed = false
       return null
     })
     .finally(() => {

@@ -8,7 +8,7 @@
       </section>
 
       <section class="auth-screen__card">
-        <div class="auth-screen__tabs">
+        <div v-if="registrationAllowed" class="auth-screen__tabs">
           <button :class="{ active: mode === 'login' }" type="button" @click="mode = 'login'">Login</button>
           <button :class="{ active: mode === 'register' }" type="button" @click="mode = 'register'">Register</button>
         </div>
@@ -50,12 +50,13 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { login, register } from '../lib/auth'
+import { authState, login, register } from '../lib/auth'
 
 const route = useRoute()
 const router = useRouter()
 
-const mode = ref(route.query.mode === 'register' ? 'register' : 'login')
+const registrationAllowed = computed(() => authState.registrationAllowed)
+const mode = ref(route.query.mode === 'register' && registrationAllowed.value ? 'register' : 'login')
 const submitting = ref(false)
 const errorMessage = ref('')
 const confirmPassword = ref('')
@@ -108,9 +109,9 @@ const submit = async () => {
 }
 
 watch(
-  () => route.query.mode,
-  (value) => {
-    mode.value = value === 'register' ? 'register' : 'login'
+  [() => route.query.mode, registrationAllowed],
+  ([value, allowed]) => {
+    mode.value = value === 'register' && allowed ? 'register' : 'login'
   }
 )
 </script>

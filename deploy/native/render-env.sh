@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# shellcheck source=deploy/native/common.sh
+source "${SCRIPT_DIR}/common.sh"
 OUTPUT="${SCRIPT_DIR}/appam.env"
 DB_ROOT="${HOME}/db"
 PROJECTS_ROOT="${HOME}/appam-data/projects"
@@ -38,7 +40,7 @@ if ! ENV_RUNNER_BIN="$(command -v "${ENV_RUNNER}")"; then
   printf 'Environment runner not found: %s\n' "${ENV_RUNNER}" >&2
   exit 1
 fi
-CONDA_BASE="$("${ENV_RUNNER_BIN}" info --base)"
+CONDA_BASE="$(resolve_environment_base "${ENV_RUNNER_BIN}")"
 ENV_ROOT="${CONDA_BASE}/envs"
 SECRET="$(openssl rand -hex 32)"
 mkdir -p "$(dirname "${OUTPUT}")" "${PROJECTS_ROOT}" "${HOME}/appam-data"
