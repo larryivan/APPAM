@@ -120,6 +120,17 @@ if [[ "${WITH_PALEO}" == true ]]; then
     'git+https://github.com/gtluu/pyTDFSDK.git@4808da81d3e37f82da96f392dbb446c3733edacb' \
     'git+https://github.com/gtluu/pyBaf2Sql.git@06bb37fa3168b113c73b22d1d85fb4203bb83fb9' \
     'git+https://github.com/gtluu/timsconvert.git@c8bbfd98251e07e24522220fd4309e37eea4d7a9'
+
+  PALEO_PREFIX="$("${RUNNER}" run -n paleoproteomics python -c 'import sys; print(sys.prefix)')"
+  PYSIDE_QT_LIB="$("${RUNNER}" run -n paleoproteomics python -c 'from pathlib import Path; import PySide6; print(Path(PySide6.__file__).resolve().parent / "Qt" / "lib")')"
+  cat >"${HOME}/.local/bin/appam-timsconvert" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+export LD_LIBRARY_PATH="${PYSIDE_QT_LIB}:${PALEO_PREFIX}/lib\${LD_LIBRARY_PATH:+:\${LD_LIBRARY_PATH}}"
+exec "${PALEO_PREFIX}/bin/timsconvert" "\$@"
+EOF
+  chmod 0755 "${HOME}/.local/bin/appam-timsconvert"
+  ln -sfn appam-timsconvert "${HOME}/.local/bin/timsconvert"
 fi
 
 printf '\nEnvironment installation finished.\n'

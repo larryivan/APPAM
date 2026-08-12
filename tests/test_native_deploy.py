@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -10,6 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 COMMON_SCRIPT = REPO_ROOT / 'deploy' / 'native' / 'common.sh'
 RENDER_SCRIPT = REPO_ROOT / 'deploy' / 'native' / 'render-env.sh'
 INSTALL_SCRIPT = REPO_ROOT / 'deploy' / 'native' / 'install-environments.sh'
+TOOL_WRAPPER = REPO_ROOT / 'docker' / 'tools' / 'tool-wrapper.sh'
 
 
 class NativeDeploymentTests(unittest.TestCase):
@@ -99,6 +101,11 @@ class NativeDeploymentTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             rendered = output.read_text(encoding='utf-8')
             self.assertIn(f'APPAM_SMK_GTDBTK_DB={release_root}', rendered)
+            self.assertIn(
+                f'APPAM_PALEO_DOTNET_BIN={root / "conda" / "envs" / "paleoproteomics" / "lib" / "dotnet" / "dotnet"}',
+                rendered,
+            )
+            self.assertIn(f'APPAM_PALEO_TIMSCONVERT_BIN={root / ".local" / "bin" / "appam-timsconvert"}', rendered)
 
     def test_checkm_contract_uses_compatible_runtime(self):
         spec = (REPO_ROOT / 'docker' / 'tools' / 'environments' / 'checkm.yml').read_text(encoding='utf-8')
@@ -117,6 +124,49 @@ class NativeDeploymentTests(unittest.TestCase):
         self.assertIn('PIPES=${METAWRAP_ROOT}/bin/metawrap-modules', installer)
         self.assertIn('chmod 0755 "${METAWRAP_ROOT}/bin/config-metawrap"', installer)
         self.assertIn('${HOME}/.local/bin/config-metawrap', installer)
+
+    def test_native_installer_isolates_timsconvert_qt_runtime(self):
+        installer = INSTALL_SCRIPT.read_text(encoding='utf-8')
+
+        self.assertIn('PYSIDE_QT_LIB=', installer)
+        self.assertIn('appam-timsconvert', installer)
+        self.assertIn('export LD_LIBRARY_PATH=', installer)
+        self.assertIn('ln -sfn appam-timsconvert', installer)
+
+    def test_pmdtools_aliases_target_the_environment_binary(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            wrapper = root / 'appam-tool'
+            runner = root / 'runner'
+            capture = root / 'capture.txt'
+            shutil.copy2(TOOL_WRAPPER, wrapper)
+            wrapper.chmod(0o755)
+            runner.write_text(
+                '#!/usr/bin/env bash\n'
+                'printf "%s\\n" "$@" > "$APPAM_CAPTURE"\n',
+                encoding='utf-8',
+            )
+            runner.chmod(0o755)
+
+            for alias_name in ('pmdtools', 'pmdtools.py'):
+                alias = root / alias_name
+                alias.symlink_to(wrapper.name)
+                result = subprocess.run(
+                    [str(alias), '--help'],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    env={
+                        **os.environ,
+                        'APPAM_CAPTURE': str(capture),
+                        'APPAM_ENV_RUNNER': str(runner),
+                    },
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(
+                    capture.read_text(encoding='utf-8').splitlines(),
+                    ['run', '-n', 'ancient_dna', 'pmdtools', '--help'],
+                )
 
 
 if __name__ == '__main__':

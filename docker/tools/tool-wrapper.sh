@@ -68,7 +68,7 @@ esac
 
 case "$cmd" in
   adapterremoval) target="AdapterRemoval" ;;
-  pmdtools) target="pmdtools.py" ;;
+  pmdtools|pmdtools.py) target="pmdtools" ;;
   spades) target="spades.py" ;;
   quast) target="quast.py" ;;
   checkm2) target="checkm2" ;;
