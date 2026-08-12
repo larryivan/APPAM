@@ -333,6 +333,24 @@ class CommandExecutionContractTests(unittest.TestCase):
         )
         self.assertTrue(any('requires at least 2' in error for error in errors))
 
+    def test_kraken_runtime_requires_all_database_indexes(self):
+        runtime_paths = {
+            'APPAM_KRAKENUNIQ_KDB': '/db/kraken/database.kdb',
+            'APPAM_KRAKENUNIQ_IDX': '/db/kraken/database.idx',
+            'APPAM_KRAKENUNIQ_TAXDB': '/db/kraken/taxDB',
+        }
+        with mock.patch.dict(os.environ, runtime_paths, clear=False):
+            get_tool_library.cache_clear()
+            tool = get_tool_definition('krakenuniq')
+            requirements = tool['execution']['required_paths']
+        get_tool_library.cache_clear()
+
+        self.assertEqual(
+            {item['path'] for item in requirements},
+            set(runtime_paths.values()),
+        )
+        self.assertTrue(all(item['kind'] == 'file' for item in requirements))
+
     def test_retry_runtime_verification_ignores_paths_but_rejects_package_drift(self):
         manifest_path = self.project_dir / 'source-manifest.json'
         manifest_path.write_text(json.dumps({

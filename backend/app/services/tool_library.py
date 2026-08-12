@@ -166,6 +166,13 @@ ADMIN_ONLY_WORKFLOW_PARAMETERS = {
 }
 
 TOOL_RUNTIME_REQUIREMENTS = {
+    'KrakenUniq': {
+        'required_paths': [
+            ('APPAM_KRAKENUNIQ_KDB', '/databases/krakenuniq_refseq_bav/database.kdb', 'file', 'KrakenUniq database.kdb'),
+            ('APPAM_KRAKENUNIQ_IDX', '/databases/krakenuniq_refseq_bav/database.idx', 'file', 'KrakenUniq database.idx'),
+            ('APPAM_KRAKENUNIQ_TAXDB', '/databases/krakenuniq_refseq_bav/taxDB', 'file', 'KrakenUniq taxDB'),
+        ],
+    },
     'GTDB-Tk': {
         'environment': {
             'GTDBTK_DATA_PATH': ('APPAM_SMK_GTDBTK_DB', '/databases/gtdbtk_r226'),
