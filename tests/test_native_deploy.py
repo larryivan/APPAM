@@ -9,6 +9,7 @@ import unittest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 COMMON_SCRIPT = REPO_ROOT / 'deploy' / 'native' / 'common.sh'
 RENDER_SCRIPT = REPO_ROOT / 'deploy' / 'native' / 'render-env.sh'
+INSTALL_SCRIPT = REPO_ROOT / 'deploy' / 'native' / 'install-environments.sh'
 
 
 class NativeDeploymentTests(unittest.TestCase):
@@ -108,6 +109,14 @@ class NativeDeploymentTests(unittest.TestCase):
         self.assertNotIn('setRootPath', rules)
         self.assertIn("-name 'uniref100.KO.1.dmnd'", rules)
         self.assertIn('--database_path "$db_file"', rules)
+
+    def test_native_installer_exposes_metawrap_configuration(self):
+        installer = INSTALL_SCRIPT.read_text(encoding='utf-8')
+
+        self.assertIn('SOFT=${METAWRAP_ROOT}/bin/metawrap-scripts', installer)
+        self.assertIn('PIPES=${METAWRAP_ROOT}/bin/metawrap-modules', installer)
+        self.assertIn('chmod 0755 "${METAWRAP_ROOT}/bin/config-metawrap"', installer)
+        self.assertIn('${HOME}/.local/bin/config-metawrap', installer)
 
 
 if __name__ == '__main__':
