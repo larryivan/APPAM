@@ -1,4 +1,5 @@
 import os
+import hashlib
 import json
 import shutil
 import sys
@@ -6,6 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
+
+import yaml
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -23,7 +26,110 @@ from app.services.pipeline_execution import (  # noqa: E402
 )
 from app.services.job_runner import run_pipeline_job  # noqa: E402
 from app.services.database_manifest import validate_database_manifest  # noqa: E402
+from app.services.publication_audit import audit_run_manifest, audit_run_path  # noqa: E402
 from app.services.tool_library import get_tool_definition, get_tool_library  # noqa: E402
+
+
+DIGEST = 'a' * 64
+
+# Environments an all-defaults APPAM-SMK run consumes: the always-on ones plus
+# the tools of the modules enabled by default.
+DEFAULT_SMK_TOOLS = (
+    'preprocessing_env',
+    'mapping_env',
+    'assembly_env',
+    'metawrap_env',
+    'pydamage_env',
+    'checkm2_env',
+    'gunc_env',
+    'gtdbtk_env',
+    'prokka_env',
+)
+
+DEFAULT_SMK_MODULES = {
+    'enable_bin_refinement': False,
+    'enable_checkm1': False,
+    'enable_checkm2': True,
+    'enable_gunc': True,
+    'enable_gtdbtk': True,
+    'enable_prokka': True,
+    'enable_eggnog': False,
+    'enable_abricate': False,
+    'enable_rgi': False,
+    'enable_antismash': False,
+}
+
+
+def complete_evidence_manifest() -> dict:
+    """A run manifest that records everything an archived run must carry."""
+    effective_config = {'params': {'min_contig_len': 500}}
+    resources = {
+        'checkm2_db': {'version': '1.1.0 / 2026-01-20'},
+        'gunc_db': {'version': '2.1 / 2025-09-01'},
+    }
+    canonical_database = {
+        'schema_version': 1,
+        'template': False,
+        'resources': resources,
+    }
+    return {
+        'run_id': 'run-1',
+        'workflow_id': 'appam-smk',
+        'mode': 'run',
+        'dry_run': False,
+        'preflight_id': 'preflight-1',
+        'workflow_revision': {'commit': 'b' * 40, 'dirty': False},
+        'effective_config': effective_config,
+        'effective_config_sha256': hashlib.sha256(
+            yaml.safe_dump(effective_config, sort_keys=False).encode('utf-8')
+        ).hexdigest(),
+        'paths': {'resolved_sample_manifest': '/projects/p1/config/samples.resolved.tsv'},
+        'resolved_input_table': {
+            'role': 'appam_smk_sample_manifest',
+            'path': '/projects/p1/config/samples.resolved.tsv',
+            'sha256': DIGEST,
+            'size_bytes': 120,
+            'row_count': 1,
+        },
+        'input_validation': {'ok': True},
+        'inputs': [
+            {'path': '/projects/p1/raw/s1_R1.fastq.gz', 'exists': True, 'type': 'file', 'sha256': DIGEST},
+            {'path': '/projects/p1/raw/s1_R2.fastq.gz', 'exists': True, 'type': 'file', 'sha256': DIGEST},
+        ],
+        'runtime_metadata': {
+            'container': {'image': 'local', 'image_digest': ''},
+            'modules': dict(DEFAULT_SMK_MODULES),
+            'tools': {name: {'packages_sha256': DIGEST} for name in DEFAULT_SMK_TOOLS},
+            'database_manifest': {
+                'found': True,
+                'sha256': DIGEST,
+                'canonical_sha256': hashlib.sha256(json.dumps(
+                    canonical_database,
+                    sort_keys=True,
+                    separators=(',', ':'),
+                ).encode('utf-8')).hexdigest(),
+                'schema_version': 1,
+                'template': False,
+                'required_resources': ['checkm2_db', 'gunc_db'],
+                'resources': resources,
+                'validation_errors': [],
+            },
+        },
+        'source_input_verification': {'checked': False},
+        'source_runtime_verification': {'checked': False},
+        'command': ['snakemake', '--snakefile', 'workflow/Snakefile'],
+    }
+
+
+def complete_paleoproteomics_manifest() -> dict:
+    manifest = complete_evidence_manifest()
+    manifest['workflow_id'] = 'appam-paleoproteomics'
+    manifest['resolved_input_table']['role'] = 'paleoproteomics_sample_table'
+    manifest['runtime_metadata'] = {
+        'runtime_env': {'type': 'conda_environment', 'packages_sha256': DIGEST},
+        'maxquant_cmd_dll': {'exists': True, 'sha256': DIGEST},
+    }
+    return manifest
 
 
 class CommandExecutionContractTests(unittest.TestCase):
@@ -274,6 +380,224 @@ class CommandExecutionContractTests(unittest.TestCase):
         self.assertEqual(errors, ['checkm2_db requires an exact non-placeholder version'])
         manifest['resources']['checkm2_db']['version'] = 'CheckM2 database 1.1.0 / 2026-01-20'
         self.assertEqual(validate_database_manifest(manifest, ['checkm2_db', 'gunc_db']), [])
+        for placeholder in ('TBD', 'planned', 'n/a', 'replace with installed release'):
+            with self.subTest(placeholder=placeholder):
+                manifest['resources']['checkm2_db']['version'] = placeholder
+                self.assertIn(
+                    'checkm2_db requires an exact non-placeholder version',
+                    validate_database_manifest(manifest, ['checkm2_db']),
+                )
+
+    def test_publication_manifest_rejects_the_unmodified_example(self):
+        example = json.loads((REPO_ROOT / 'docker' / 'database-manifest.example.json').read_text(encoding='utf-8'))
+        example['found'] = True
+        errors = validate_database_manifest(example, ['gunc_db', 'gtdbtk_db'])
+        self.assertIn(
+            'manifest is still the unmodified example; remove "template": true after recording real releases',
+            errors,
+        )
+        example.pop('template')
+        self.assertEqual(validate_database_manifest(example, ['gunc_db', 'gtdbtk_db']), [])
+
+    def test_publication_audit_accepts_a_complete_evidence_record(self):
+        report = audit_run_manifest(complete_evidence_manifest())
+        self.assertTrue(report['ok'], report['blockers'])
+        self.assertEqual(report['blockers'], [])
+        self.assertEqual(report['warnings'], [])
+        self.assertEqual(report['schema_version'], 2)
+        self.assertEqual(
+            [check['id'] for check in report['checks']][:4],
+            ['run_mode', 'software_revision', 'effective_config', 'resolved_inputs'],
+        )
+
+    def test_publication_audit_blocks_incomplete_evidence(self):
+        cases = {
+            'run_mode': {'dry_run': True},
+            'software_revision': {'workflow_revision': {'commit': 'c' * 40, 'dirty': True}},
+            'effective_config': {'effective_config_sha256': 'not-a-digest'},
+            'resolved_inputs': {'resolved_input_table': None},
+            'input_identity': {
+                'inputs': [{'path': '/projects/p1/raw/s1_R1.fastq.gz', 'exists': True, 'type': 'file'}]
+            },
+            'runtime_identity': {'runtime_metadata': {}},
+            'command_recorded': {'command': []},
+        }
+        for expected_blocker, override in cases.items():
+            with self.subTest(blocker=expected_blocker):
+                manifest = {**complete_evidence_manifest(), **override}
+                report = audit_run_manifest(manifest)
+                self.assertFalse(report['ok'])
+                self.assertIn(expected_blocker, report['blockers'])
+
+    def test_publication_audit_recomputes_archived_config_and_database_digests(self):
+        manifest = complete_evidence_manifest()
+        self.assertTrue(audit_run_manifest(manifest)['ok'])
+
+        manifest['effective_config']['params']['min_contig_len'] = 1000
+        report = audit_run_manifest(manifest)
+        self.assertIn('effective_config', report['blockers'])
+        self.assertIn(
+            'no longer matches',
+            next(check['detail'] for check in report['checks'] if check['id'] == 'effective_config'),
+        )
+
+        manifest = complete_evidence_manifest()
+        manifest['runtime_metadata']['database_manifest']['resources']['gunc_db']['version'] = 'tampered'
+        report = audit_run_manifest(manifest)
+        self.assertIn('database_manifest', report['blockers'])
+        self.assertIn(
+            'canonical SHA-256',
+            next(check['detail'] for check in report['checks'] if check['id'] == 'database_manifest'),
+        )
+
+    def test_publication_audit_rejects_a_path_only_resolved_input_record(self):
+        manifest = complete_evidence_manifest()
+        manifest.pop('resolved_input_table')
+        report = audit_run_manifest(manifest)
+        self.assertIn('resolved_inputs', report['blockers'])
+        detail = next(check['detail'] for check in report['checks'] if check['id'] == 'resolved_inputs')
+        self.assertIn('A path is not archived evidence', detail)
+
+        manifest['resolved_input_table'] = {'path': '/projects/p1/config/samples.resolved.tsv'}
+        self.assertIn('resolved_inputs', audit_run_manifest(manifest)['blockers'])
+
+    def test_publication_audit_verifies_resolved_input_bytes_on_disk(self):
+        table = self.project_dir / 'samples.resolved.tsv'
+        table.write_text('sample_id\tforward_reads\treverse_reads\nS1\t/a_R1.fq\t/a_R2.fq\n', encoding='utf-8')
+        manifest = complete_evidence_manifest()
+        manifest['resolved_input_table'] = {
+            'role': 'appam_smk_sample_manifest',
+            'path': str(table),
+            'sha256': hashlib.sha256(table.read_bytes()).hexdigest(),
+            'size_bytes': table.stat().st_size,
+            'row_count': 1,
+        }
+        self.assertTrue(audit_run_manifest(manifest, verify_files=True)['ok'])
+
+        table.write_text('sample_id\tforward_reads\treverse_reads\nS1\t/tampered_R1.fq\t/a_R2.fq\n', encoding='utf-8')
+        tampered = audit_run_manifest(manifest, verify_files=True)
+        self.assertIn('resolved_inputs', tampered['blockers'])
+        self.assertIn(
+            'no longer matches its recorded SHA-256',
+            next(check['detail'] for check in tampered['checks'] if check['id'] == 'resolved_inputs'),
+        )
+        # Without the file present the audit must block rather than crash.
+        table.unlink()
+        missing = audit_run_manifest(manifest, verify_files=True)
+        self.assertIn('resolved_inputs', missing['blockers'])
+        # The same manifest still passes the digest-only audit used by pure consumers.
+        self.assertTrue(audit_run_manifest(manifest)['ok'])
+
+    def test_publication_audit_blocks_incomplete_database_snapshot_and_drift_overrides(self):
+        manifest = complete_evidence_manifest()
+        manifest['runtime_metadata']['database_manifest'] = {
+            'found': True,
+            'validation_errors': ['gtdbtk_db requires an exact non-placeholder version'],
+        }
+        self.assertIn('database_manifest', audit_run_manifest(manifest)['blockers'])
+
+        # A manifest predating run-time snapshots records no parsed content.
+        manifest = complete_evidence_manifest()
+        manifest['runtime_metadata']['database_manifest'] = {
+            'found': True,
+            'sha256': DIGEST,
+            'validation_errors': [],
+        }
+        report = audit_run_manifest(manifest)
+        self.assertIn('database_manifest', report['blockers'])
+
+        # Parsed resources but no canonical digest is still not tied to the run.
+        manifest['runtime_metadata']['database_manifest']['resources'] = {'gunc_db': {'version': '2.1'}}
+        self.assertIn('database_manifest', audit_run_manifest(manifest)['blockers'])
+
+    def test_publication_audit_requires_container_digest_when_a_container_is_claimed(self):
+        manifest = complete_evidence_manifest()
+        manifest['runtime_metadata']['container'] = {'image': 'appam/tools:2026.1', 'image_digest': ''}
+        report = audit_run_manifest(manifest)
+        self.assertIn('runtime_identity', report['blockers'])
+        self.assertIn(
+            'without a valid immutable sha256 digest',
+            next(check['detail'] for check in report['checks'] if check['id'] == 'runtime_identity'),
+        )
+
+        manifest['runtime_metadata']['container']['image_digest'] = 'latest'
+        self.assertIn('runtime_identity', audit_run_manifest(manifest)['blockers'])
+
+        manifest['runtime_metadata']['container']['image_digest'] = f'sha256:{DIGEST}'
+        # A pinned container carries the runtime identity; per-env packages are then not required.
+        manifest['runtime_metadata']['tools'] = {}
+        self.assertTrue(audit_run_manifest(manifest)['ok'])
+
+    def test_publication_audit_requires_package_identity_for_enabled_local_tools(self):
+        manifest = complete_evidence_manifest()
+        manifest['runtime_metadata']['tools'].pop('gtdbtk_env')
+        report = audit_run_manifest(manifest)
+        self.assertIn('runtime_identity', report['blockers'])
+        self.assertIn(
+            'gtdbtk_env',
+            next(check['detail'] for check in report['checks'] if check['id'] == 'runtime_identity'),
+        )
+
+        # A disabled module must not gate the audit.
+        manifest['runtime_metadata']['modules']['enable_gtdbtk'] = False
+        self.assertTrue(audit_run_manifest(manifest)['ok'])
+
+        # An enabled optional module must.
+        manifest['runtime_metadata']['modules']['enable_antismash'] = True
+        self.assertIn('runtime_identity', audit_run_manifest(manifest)['blockers'])
+
+    def test_publication_audit_requires_environment_and_maxquant_identity_for_paleoproteomics(self):
+        manifest = complete_paleoproteomics_manifest()
+        report = audit_run_manifest(manifest)
+        self.assertTrue(report['ok'], report['blockers'])
+        self.assertEqual(report['summary']['skipped'], 1)
+
+        manifest['runtime_metadata']['maxquant_cmd_dll'] = {'exists': True}
+        self.assertIn('runtime_identity', audit_run_manifest(manifest)['blockers'])
+
+        manifest = complete_paleoproteomics_manifest()
+        manifest['runtime_metadata']['runtime_env'] = {'type': 'environment_path', 'exists': True}
+        self.assertIn('runtime_identity', audit_run_manifest(manifest)['blockers'])
+
+    def test_publication_audit_warns_rather_than_passes_for_an_unknown_workflow(self):
+        manifest = complete_evidence_manifest()
+        manifest['workflow_id'] = 'future-workflow'
+        report = audit_run_manifest(manifest)
+        self.assertIn('runtime_identity', report['warnings'])
+        self.assertNotIn('runtime_identity', report['blockers'])
+
+        manifest = complete_evidence_manifest()
+        manifest['mode'] = 'retry'
+        manifest['source_runtime_verification'] = {'checked': True, 'matched': False, 'override_used': True}
+        self.assertIn('provenance_continuity', audit_run_manifest(manifest)['blockers'])
+
+    def test_publication_audit_reads_and_verifies_a_run_directory(self):
+        run_dir = self.project_dir / 'workflow_runs' / 'appam-smk' / 'run-1'
+        (run_dir / 'metadata').mkdir(parents=True)
+        (run_dir / 'config').mkdir(parents=True)
+        table = run_dir / 'config' / 'samples.resolved.tsv'
+        table.write_text('sample_id\tforward_reads\treverse_reads\nS1\t/a_R1.fq\t/a_R2.fq\n', encoding='utf-8')
+
+        manifest = complete_evidence_manifest()
+        manifest['resolved_input_table'] = {
+            'role': 'appam_smk_sample_manifest',
+            'path': str(table),
+            'sha256': hashlib.sha256(table.read_bytes()).hexdigest(),
+            'size_bytes': table.stat().st_size,
+            'row_count': 1,
+        }
+        manifest_path = run_dir / 'metadata' / 'manifest.run-1.json'
+        manifest_path.write_text(json.dumps(manifest), encoding='utf-8')
+
+        report = audit_run_path(run_dir)
+        self.assertTrue(report['ok'], report['blockers'])
+        self.assertTrue(report['manifest_path'].endswith('manifest.run-1.json'))
+
+        table.write_text('sample_id\tforward_reads\treverse_reads\n', encoding='utf-8')
+        self.assertIn('resolved_inputs', audit_run_path(run_dir)['blockers'])
+
+        with self.assertRaisesRegex(ValueError, 'not found'):
+            audit_run_path(self.project_dir / 'missing-run')
 
 
 if __name__ == '__main__':

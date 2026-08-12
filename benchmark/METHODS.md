@@ -9,7 +9,7 @@
 
 ## Locked design
 
-Before running the held-out test partition, copy the three `benchmark/design/*.template.tsv` files to non-template names and freeze:
+Before running the held-out test partition, write the three `benchmark/design/*.tsv` files from their templates and freeze the content below. A table counts as frozen only when every row declares `status=frozen`, identifiers are unique, and no field is left as a placeholder; a field that does not apply must say `not-applicable`. The analysis enforces this: with `require_design: true` it refuses to run against an unfrozen design, it rejects any observation naming a dataset, scenario, or method that was not pre-registered, and it records each table's SHA-256 in `summary.json`.
 
 - dataset accessions, licenses, checksums, and biological context;
 - simulation software, version, command, seed, and truth tables;
@@ -29,7 +29,7 @@ Do not tune PyDamage thresholds, MAG quality thresholds, or method-specific para
 
 ## Acceptance gates
 
-- All CI, dry-run, and schema checks pass from a clean checkout.
+- All CI, dry-run, and schema checks pass from a clean checkout, and the analysis runs with `require_design: true`.
 - At least two independent empirical preservation contexts and appropriate blanks are included.
 - Runtime comparisons have at least three independent cold-cache repetitions.
 - Accuracy comparisons report uncertainty across independent datasets/replicates, not reads as pseudoreplicates.

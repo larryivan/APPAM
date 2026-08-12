@@ -271,6 +271,50 @@ def _runtime_digest(value) -> str:
     return sha256_bytes(payload)
 
 
+def _resolved_input_record(path: Path | None, role: str) -> dict | None:
+    """Deterministic identity of the resolved input table archived for this run."""
+    if path is None or not Path(path).is_file():
+        return None
+    path = Path(path)
+    payload = path.read_bytes()
+    lines = [line for line in payload.decode('utf-8', errors='replace').splitlines() if line.strip()]
+    return {
+        'role': role,
+        'path': str(path),
+        'sha256': sha256_bytes(payload),
+        'size_bytes': len(payload),
+        'row_count': max(0, len(lines) - 1),
+    }
+
+
+def _database_manifest_snapshot(database_manifest: dict, errors: list[str], required_resources: list[str]) -> dict:
+    """Freeze the parsed database manifest as it was when this run was prepared.
+
+    A run bundle must never be re-assembled from the current manifest on disk, so
+    the exact parsed content is stored here together with a path-independent
+    canonical digest.
+    """
+    found = bool(database_manifest.get('found'))
+    source_path = Path(str(database_manifest.get('path') or '')).expanduser()
+    canonical = {
+        'schema_version': database_manifest.get('schema_version'),
+        'template': bool(database_manifest.get('template')),
+        'resources': database_manifest.get('resources') or {},
+    }
+    return {
+        'found': found,
+        # 'path' is excluded from retry drift comparison by _runtime_value_with_source_shape.
+        'path': str(source_path) if found else None,
+        'sha256': fingerprint_path(source_path, 'sha256').get('sha256') if found else None,
+        'canonical_sha256': _runtime_digest(canonical),
+        'schema_version': canonical['schema_version'],
+        'template': canonical['template'],
+        'required_resources': sorted(required_resources),
+        'resources': canonical['resources'],
+        'validation_errors': list(errors),
+    }
+
+
 def _verify_source_runtime(project_id: str, source_run: dict | None, current_runtime: dict) -> dict:
     if not source_run:
         return {'checked': False, 'matched': None, 'reason': 'not a resumed or retried run'}
@@ -378,6 +422,7 @@ def _build_manifest_payload(project_id: str, tool_info: dict, params: dict, cont
         'effective_config': context.get('config_data'),
         'effective_config_sha256': context.get('config_sha256'),
         'inputs': context.get('input_provenance'),
+        'resolved_input_table': context.get('resolved_input_record'),
         'source_input_verification': context.get('source_input_verification'),
         'source_runtime_verification': context.get('source_runtime_verification'),
         'input_validation': context.get('input_validation'),
@@ -863,15 +908,11 @@ def _appam_smk_context(project_id: str, job_id: str, params: dict, run_id: str, 
         'message': manifest_message,
     })
     runtime_metadata = collect_appam_smk_runtime_metadata(runtime_settings)
-    manifest_path = Path(str(database_manifest.get('path') or '')).expanduser()
-    runtime_metadata['database_manifest'] = {
-        'found': manifest_found,
-        'path': str(manifest_path) if manifest_path else None,
-        'sha256': fingerprint_path(manifest_path, 'sha256').get('sha256') if manifest_found else None,
-        'schema_version': database_manifest.get('schema_version'),
-        'resources': database_manifest.get('resources') or {},
-        'validation_errors': manifest_errors,
-    }
+    runtime_metadata['database_manifest'] = _database_manifest_snapshot(
+        database_manifest,
+        manifest_errors,
+        required_manifest_resources,
+    )
     input_validation = validate_appam_smk_manifest(
         project_id,
         _project_relative_value(project_id, sample_manifest),
@@ -1025,6 +1066,8 @@ def _appam_smk_context(project_id: str, job_id: str, params: dict, run_id: str, 
             write_resolved_appam_smk_manifest(project_id, input_validation, resolved_sample_manifest)
             generated_config.write_text(yaml.safe_dump(config_data, sort_keys=False), encoding='utf-8')
 
+    resolved_input_record = _resolved_input_record(resolved_sample_manifest, 'appam_smk_sample_manifest')
+
     argv = [
         snakemake_bin,
         '--snakefile',
@@ -1068,6 +1111,7 @@ def _appam_smk_context(project_id: str, job_id: str, params: dict, run_id: str, 
         'cores': cores,
         'sample_manifest': sample_manifest,
         'resolved_sample_manifest': resolved_sample_manifest,
+        'resolved_input_record': resolved_input_record,
         'source_config_path': source_config_path,
         'raw_data_dir': raw_data_dir,
         'metawrap_env': str(metawrap_env),
@@ -1277,6 +1321,8 @@ def _paleoproteomics_context(project_id: str, job_id: str, params: dict, run_id:
             write_resolved_paleoproteomics_table(project_id, input_validation, resolved_sample_table)
             generated_config.write_text(yaml.safe_dump(config_data, sort_keys=False), encoding='utf-8')
 
+    resolved_input_record = _resolved_input_record(resolved_sample_table, 'paleoproteomics_sample_table')
+
     snakemake_bin = get_snakemake_bin()
     cores = int(config_data.get('threads', params.get('cores', 4)))
     argv = [
@@ -1319,6 +1365,7 @@ def _paleoproteomics_context(project_id: str, job_id: str, params: dict, run_id:
         'snakefile': snakefile,
         'sample_table': sample_table,
         'resolved_sample_table': resolved_sample_table,
+        'resolved_input_record': resolved_input_record,
         'source_config_path': source_config_path,
         'fasta_path': fasta_path,
         'runtime_env': runtime_env,

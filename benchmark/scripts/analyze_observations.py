@@ -9,7 +9,7 @@ import statistics
 from collections import defaultdict
 from pathlib import Path
 
-from validate_observations import validate
+from validate_observations import design_record, load_design, sha256_file, validate
 
 
 def percentile(values: list[float], quantile: float) -> float:
@@ -102,6 +102,8 @@ def parse_args():
     parser.add_argument('--summary', type=Path, required=True)
     parser.add_argument('--paired', type=Path, required=True)
     parser.add_argument('--json', dest='json_path', type=Path, required=True)
+    parser.add_argument('--design-dir', type=Path, default=None)
+    parser.add_argument('--require-design', action='store_true')
     return parser.parse_args()
 
 
@@ -109,7 +111,10 @@ def main() -> None:
     args = parse_args()
     if args.iterations < 100:
         raise ValueError('bootstrap iterations must be at least 100')
-    rows = validate(args.observations)
+    design = load_design(args.design_dir)
+    if args.require_design and not design['frozen']:
+        raise ValueError(f'benchmark design is not pre-registered: {design["reason"]}')
+    rows = validate(args.observations, design=design)
     methods = {row['method'] for row in rows}
     if args.baseline not in methods:
         raise ValueError(f'baseline method is absent: {args.baseline}')
@@ -124,6 +129,12 @@ def main() -> None:
         'baseline': args.baseline,
         'bootstrap_iterations': args.iterations,
         'seed': args.seed,
+        'observations': {
+            'path': str(args.observations),
+            'sha256': sha256_file(args.observations),
+            'row_count': len(rows),
+        },
+        'design': design_record(design),
         'summaries': summaries,
         'paired_differences': differences,
     }, indent=2), encoding='utf-8')

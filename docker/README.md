@@ -57,7 +57,7 @@ gtdbtk_r226/
 krakenuniq_refseq_bav/
 ```
 
-`checkm/` is optional unless CheckM1 or MetaWRAP refinement is enabled; KrakenUniq is optional when that advanced tool is unused. Copy `docker/database-manifest.example.json` to `appam-db-manifest.json` under the database root and record exact versions/download dates.
+`checkm/` is optional unless CheckM1 or MetaWRAP refinement is enabled; KrakenUniq is optional when that advanced tool is unused. Copy `docker/database-manifest.example.json` to `appam-db-manifest.json` under the database root, record exact versions/download dates, and delete the `"template": true` field. Publication checks reject the unmodified example.
 
 RGI command-line runs always require CARD reference data. Keep `APPAM_SMK_RGI_DB_MODE=global` only when CARD has been loaded into the RGI environment; for a directory prepared with `rgi load --local`, set mode `local`, configure `APPAM_SMK_RGI_DB`, and record the CARD release.
 

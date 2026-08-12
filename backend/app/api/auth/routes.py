@@ -232,6 +232,12 @@ def admin_patch_user(user_id):
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 400
 
+    privilege_changed = data.get('role') is not None or data.get('status') is not None
+    if privilege_changed and (user['role'] != 'admin' or user['status'] != 'active'):
+        from app.api.terminal.routes import close_sessions_for_user
+
+        close_sessions_for_user(user_id)
+
     if current_user() and current_user()['id'] == user_id:
         login_user(user)
 

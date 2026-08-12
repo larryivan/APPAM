@@ -13,8 +13,15 @@ PLACEHOLDER_VERSION_MARKERS = (
     'record-',
     'container-configured',
     'downloaded-with',
+    'draft',
+    'fixme',
     'unknown',
     'latest',
+    'n/a',
+    'planned',
+    'replace',
+    'tbd',
+    'todo',
     'global-or-local',
     'online-or-local',
 )
@@ -82,6 +89,8 @@ def validate_database_manifest(manifest: dict, required_resources: list[str]) ->
         return ['database manifest was not found'] if required_resources else []
     if manifest.get('schema_version') != 1:
         errors.append('schema_version must be 1')
+    if manifest.get('template'):
+        errors.append('manifest is still the unmodified example; remove "template": true after recording real releases')
     resources = manifest.get('resources')
     if not isinstance(resources, dict):
         return [*errors, 'resources must be an object']

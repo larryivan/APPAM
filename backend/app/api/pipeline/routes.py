@@ -4,10 +4,10 @@ import zipfile
 from io import BytesIO
 from pathlib import Path
 
+import yaml
 from flask import Blueprint, Response, g, jsonify, request
 
 from app.auth import can, current_user, get_project_for_user
-from app.services.database_manifest import load_database_manifest
 from app.services.pipeline_execution import (
     build_job_request,
     build_job_request_from_workflow_run,
@@ -425,39 +425,39 @@ def workflow_run_provenance_bundle(project_id, run_id):
     if not provenance or provenance['run'].get('project_id') != project_id:
         return jsonify({'error': 'Workflow run not found'}), 404
 
+    manifest = provenance.get('manifest') or {}
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr('provenance.json', jsonify_safe_json(provenance))
-        archive.writestr('database-manifest.json', jsonify_safe_json(load_database_manifest()))
+        archive.writestr('publication-audit.json', jsonify_safe_json(provenance.get('publication_audit') or {}))
+        # The database manifest as it was when this run was prepared. The current
+        # file on disk is deliberately not consulted: it may have changed since.
+        database_snapshot = (manifest.get('runtime_metadata') or {}).get('database_manifest')
+        if database_snapshot:
+            archive.writestr('run/database-manifest.json', jsonify_safe_json(database_snapshot))
+        archive.writestr('run/manifest.json', jsonify_safe_json(manifest))
+        effective_config = manifest.get('effective_config')
+        if isinstance(effective_config, dict) and effective_config:
+            archive.writestr('run/config.yaml', yaml.safe_dump(effective_config, sort_keys=False))
         metrics = provenance.get('metrics') or []
         if metrics:
             archive.writestr('metrics.tsv', workflow_metrics_tsv(metrics))
         run = provenance.get('run') or {}
-        for label, value in (
-            ('config.yaml', run.get('config_path')),
-            ('manifest.json', run.get('manifest_path')),
-            ('run.log', run.get('log_path')),
-        ):
+        for label, value in (('run.log', run.get('log_path')),):
             if not value:
                 continue
             path = Path(value)
             if path.is_file():
                 archive.write(path, f'run/{label}')
-        manifest = provenance.get('manifest') or {}
         manifest_paths = manifest.get('paths') or {}
-        effective_config = manifest.get('effective_config') or {}
+        resolved_record = manifest.get('resolved_input_table') or {}
         resolved_input = (
-            manifest_paths.get('resolved_sample_manifest')
+            resolved_record.get('path')
+            or manifest_paths.get('resolved_sample_manifest')
             or manifest_paths.get('resolved_sample_table')
-            or effective_config.get('samples_file')
-            or effective_config.get('sample_table')
         )
-        for label, value in (('samples.resolved.tsv', resolved_input),):
-            if not value:
-                continue
-            path = Path(value)
-            if path.is_file():
-                archive.write(path, f'inputs/{label}')
+        if resolved_input and Path(resolved_input).is_file():
+            archive.write(Path(resolved_input), 'inputs/samples.resolved.tsv')
     buffer.seek(0)
     filename = f'{run_id}-provenance.zip'
     return Response(

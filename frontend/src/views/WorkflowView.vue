@@ -360,7 +360,7 @@ import FilePicker from '@/components/FilePicker.vue'
 import FilePreviewModal from '@/components/FilePreviewModal.vue'
 import DragDropUpload from '@/components/DragDropUpload.vue'
 import Icon from '@/components/ui/Icon.vue'
-import { parameterLabel } from '@/lib/workflowUi.js'
+import { describeWorkflowError, parameterLabel } from '@/lib/workflowUi.js'
 import {
   getWorkflowDefinition,
   initWorkflowFormValues,
@@ -995,41 +995,10 @@ async function refreshAll() {
 }
 
 function showActionError(error) {
-  const raw = error instanceof Error ? error.message : String(error)
-  actionErrorHint.value = ''
-  actionErrorDetails.value = ''
-
-  if (raw.startsWith('Missing APPAM-SMK runtime resources:') || raw.startsWith('Missing paleoproteomics runtime resources:')) {
-    actionError.value = 'This analysis is not available yet.'
-    actionErrorHint.value = 'The server setup is incomplete. Ask an administrator to finish System Setup.'
-    actionErrorDetails.value = raw
-    return
-  }
-  if (raw.includes('No complete FASTQ pairs')) {
-    actionError.value = 'No complete FASTQ pairs were found.'
-    actionErrorHint.value = 'Upload matching R1 and R2 files, then rescan the input folder.'
-    actionErrorDetails.value = raw
-    return
-  }
-  if (raw.includes('No RAW/.d files')) {
-    actionError.value = 'No mass spectrometry inputs were found.'
-    actionErrorHint.value = 'Upload Thermo RAW files or add a Bruker .d dataset, then rescan.'
-    actionErrorDetails.value = raw
-    return
-  }
-  if (raw.toLowerCase().includes('queue limit')) {
-    actionError.value = 'The analysis queue is currently full.'
-    actionErrorHint.value = 'Try again after one of the queued jobs has started or finished.'
-    actionErrorDetails.value = raw
-    return
-  }
-  if (raw.length > 240) {
-    actionError.value = 'The analysis could not be started.'
-    actionErrorHint.value = 'Review the technical details or ask an administrator for help.'
-    actionErrorDetails.value = raw
-    return
-  }
-  actionError.value = raw
+  const described = describeWorkflowError(error)
+  actionError.value = described.message
+  actionErrorHint.value = described.hint
+  actionErrorDetails.value = described.details
 }
 
 watch(actionError, (value) => {

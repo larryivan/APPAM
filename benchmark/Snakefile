@@ -1,6 +1,10 @@
 configfile: "benchmark/config/config.yaml"
 
 
+DESIGN_DIR = config.get("design_dir", "benchmark/design")
+REQUIRE_DESIGN = "--require-design" if config.get("require_design", False) else ""
+
+
 rule all:
     input:
         "benchmark/results/validated.ok",
@@ -16,10 +20,14 @@ rule validate_observations:
         lambda wildcards: config["observations"]
     output:
         touch("benchmark/results/validated.ok")
+    params:
+        design_dir=DESIGN_DIR,
+        require_design=REQUIRE_DESIGN
     log:
         "benchmark/results/logs/validate-observations.log"
     shell:
-        "python3 benchmark/scripts/validate_observations.py {input:q} > {log:q} 2>&1"
+        "python3 benchmark/scripts/validate_observations.py {input:q} "
+        "--design-dir {params.design_dir:q} {params.require_design} > {log:q} 2>&1"
 
 
 rule analyze_observations:
@@ -35,11 +43,14 @@ rule analyze_observations:
     params:
         baseline=lambda wildcards: config["baseline"],
         iterations=lambda wildcards: int(config.get("bootstrap_iterations", 2000)),
-        seed=lambda wildcards: int(config.get("seed", 20260710))
+        seed=lambda wildcards: int(config.get("seed", 20260710)),
+        design_dir=DESIGN_DIR,
+        require_design=REQUIRE_DESIGN
     log:
         "benchmark/results/logs/analyze-observations.log"
     shell:
         "python3 benchmark/scripts/analyze_observations.py {input.observations:q} "
         "--baseline {params.baseline:q} --iterations {params.iterations} --seed {params.seed} "
+        "--design-dir {params.design_dir:q} {params.require_design} "
         "--summary {output.summary:q} --paired {output.paired:q} --json {output.json:q} "
         "> {log:q} 2>&1"

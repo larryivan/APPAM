@@ -64,3 +64,60 @@ export function runStatusLabel(status) {
     canceled: 'Canceled',
   }[status] || 'Not started'
 }
+
+// Server messages are precise but technical. Each rule keeps the banner short and
+// actionable; the original text stays available under "Technical details".
+const WORKFLOW_ERROR_RULES = Object.freeze([
+  {
+    match: (raw) => raw.startsWith('Missing APPAM-SMK runtime resources:')
+      || raw.startsWith('Missing paleoproteomics runtime resources:'),
+    message: 'This analysis is not available yet.',
+    hint: 'The server setup is incomplete. Ask an administrator to finish System Setup.',
+  },
+  {
+    match: (raw) => raw.includes('No complete FASTQ pairs'),
+    message: 'No complete FASTQ pairs were found.',
+    hint: 'Upload matching R1 and R2 files, then rescan the input folder.',
+  },
+  {
+    match: (raw) => raw.includes('No RAW/.d files'),
+    message: 'No mass spectrometry inputs were found.',
+    hint: 'Upload Thermo RAW files or add a Bruker .d dataset, then rescan.',
+  },
+  {
+    match: (raw) => raw.includes('Frozen workflow inputs changed'),
+    message: 'The input files changed since that run.',
+    hint: 'Retry and resume reuse the original inputs. Start a new analysis instead.',
+  },
+  {
+    match: (raw) => raw.includes('runtime or database resources changed'),
+    message: 'The server software or databases changed since that run.',
+    hint: 'Retry and resume reuse the original runtime. Start a new analysis instead.',
+  },
+  {
+    match: (raw) => raw.includes('Publication database manifest is incomplete'),
+    message: 'The database version record is incomplete.',
+    hint: 'Ask an administrator to complete the database manifest, or run without the publication preset.',
+  },
+  {
+    match: (raw) => raw.toLowerCase().includes('queue limit'),
+    message: 'The analysis queue is currently full.',
+    hint: 'Try again after one of the queued jobs has started or finished.',
+  },
+])
+
+export function describeWorkflowError(error) {
+  const raw = error instanceof Error ? error.message : String(error ?? '')
+  const rule = WORKFLOW_ERROR_RULES.find((candidate) => candidate.match(raw))
+  if (rule) {
+    return { message: rule.message, hint: rule.hint, details: raw }
+  }
+  if (raw.length > 240) {
+    return {
+      message: 'The analysis could not be started.',
+      hint: 'Review the technical details or ask an administrator for help.',
+      details: raw,
+    }
+  }
+  return { message: raw, hint: '', details: '' }
+}

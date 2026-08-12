@@ -1,7 +1,8 @@
 {
   "schema_version": 1,
+  "template": true,
   "created_at": "2026-06-26",
-  "notes": "Copy this file to APPAM_DB_MANIFEST or /databases/appam-db-manifest.json and fill exact versions after downloading databases.",
+  "notes": "Copy this file to APPAM_DB_MANIFEST or /databases/appam-db-manifest.json, replace every version with the exact release you downloaded, then delete the \"template\" field. Publication checks reject a manifest that still declares itself a template, because the example versions below are illustrative rather than verified.",
   "resources": {
     "checkm1_db": {
       "version": "2015-01-16",

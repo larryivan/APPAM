@@ -48,7 +48,7 @@ docker compose exec tools micromamba run -n backend \
   python /opt/appam/backend/manage.py doctor
 ```
 
-The command reports core runtime readiness separately from publication readiness. A missing optional paleoproteomics runtime does not block metagenomics, while an incomplete database manifest keeps the publication status incomplete.
+The command reports core runtime readiness separately from publication readiness. A missing optional paleoproteomics runtime does not block metagenomics, while an incomplete database manifest keeps the publication status incomplete. `doctor` exits non-zero on a core blocker; add `--require-publication` to also fail on a publication blocker, and `--json` to archive the report. The JSON report carries `schema_version`, the checkout commit, and the blocker identifiers, so an archived copy stays auditable.
 
 For native Mamba deployment, use the scripts under `deploy/native/`; Docker is not required by either workflow.
 
@@ -81,9 +81,19 @@ sample1	raw_ms/sample1.RAW	projectA	1
 Every Web run writes a complete effective configuration, resolved input table, workflow Git revision, runtime environment fingerprints, and optional SHA-256 input hashes. Use the `Publication run` preset to enable full input hashes.
 For metagenomics, that preset also requires a versioned database manifest and keeps specialized annotation modules disabled until the study explicitly selects them.
 
+Each run also snapshots the parsed database manifest it used, and records the SHA-256 of the resolved sample table it wrote. Provenance bundles are built from those archived records rather than from current server state.
+
+Every run is audited for archival completeness against a fixed schema. The verdict ships inside the downloadable provenance bundle as `publication-audit.json` and can be recomputed from the checkout:
+
+```bash
+python backend/manage.py audit-run PROJECT_DIR/workflow_runs/appam-smk/RUN_ID --json
+```
+
+Run from disk, the audit re-hashes the archived resolved sample table, so a table edited after the run becomes a blocker. It reports evidence completeness only — exact software, configuration, input, runtime, and database identity. It never assesses data quality or whether a result supports a claim.
+
 ## Databases
 
-Expected database directories are CheckM2, GUNC, eggNOG, GTDB-Tk, and KrakenUniq when read-level taxonomy is used. CheckM1 is required only when MetaWRAP bin refinement or the standalone CheckM1 report is enabled. Record versions and download dates in `appam-db-manifest.json`; begin with `docker/database-manifest.example.json`.
+Expected database directories are CheckM2, GUNC, eggNOG, GTDB-Tk, and KrakenUniq when read-level taxonomy is used. CheckM1 is required only when MetaWRAP bin refinement or the standalone CheckM1 report is enabled. Record versions and download dates in `appam-db-manifest.json`; begin with `docker/database-manifest.example.json`. The example declares `"template": true` and its versions are illustrative, so publication checks reject it until that field is deleted and every version is replaced with the release actually installed.
 
 ## Validation
 

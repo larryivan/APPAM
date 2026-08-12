@@ -11,7 +11,7 @@ from collections import deque
 from flask import Blueprint, request, session as flask_session
 from flask_socketio import emit, join_room, leave_room
 from app import socketio
-from app.auth import can, get_project_for_user, session_user
+from app.auth import can, get_project_for_user, session_user, user_is_admin
 from app.paths import OPENCODE_ASSETS_ROOT, get_project_dir
 import logging
 
@@ -332,6 +332,60 @@ def _build_opencode_env():
     return {"OPENCODE_CONFIG_CONTENT": json.dumps(config)}
 
 
+PRIVILEGE_REVOKED_MESSAGE = 'Terminal access requires admin privileges'
+
+
+def _session_owner_still_privileged(session, user):
+    """Terminal privileges are re-checked per event, not only at connect time."""
+    return bool(
+        session
+        and user
+        and session.owner_user_id == user['id']
+        and user_is_admin(user)
+    )
+
+
+def _close_session(session_key, session, *, reason=None):
+    """Close a terminal, drop every client mapping, and tell the room once."""
+    already_gone = session.closed and terminal_sessions.get(session_key) is not session
+    room = session.room
+    session.close()
+    if terminal_sessions.get(session_key) is session:
+        terminal_sessions.pop(session_key, None)
+    for client_id, mapped_key in list(client_sessions.items()):
+        if mapped_key == session_key or client_id in session.clients:
+            client_sessions.pop(client_id, None)
+    session.clients.clear()
+    if reason and not already_gone:
+        socketio.emit('terminal_error', {'error': reason}, room=room)
+        socketio.emit('terminal_exit', {'session_key': session_key, 'preset': session.preset}, room=room)
+
+
+def _revoke_if_unprivileged(session_key, session, user):
+    """Close a terminal whose owner is no longer an administrator.
+
+    The room is notified once by _close_session, so the caller must not emit a
+    second error for the same event.
+    """
+    if not session or not user or session.owner_user_id != user['id'] or user_is_admin(user):
+        return False
+    _close_session(session_key, session, reason=PRIVILEGE_REVOKED_MESSAGE)
+    return True
+
+
+def close_sessions_for_user(user_id, reason=PRIVILEGE_REVOKED_MESSAGE):
+    """Terminate every terminal owned by a user who lost admin access."""
+    closed = 0
+    for session_key, session in list(terminal_sessions.items()):
+        if session.owner_user_id != user_id:
+            continue
+        _close_session(session_key, session, reason=reason)
+        closed += 1
+    if closed:
+        logger.info(f'Closed {closed} terminal session(s) for user {user_id}')
+    return closed
+
+
 def _detach_client(session_id, session_key=None):
     resolved_key = session_key or client_sessions.get(session_id) or session_id
     client_sessions.pop(session_id, None)
@@ -457,11 +511,13 @@ def handle_terminal_input(data):
     session = terminal_sessions.get(session_key)
     user = session_user()
     
-    if session and user and session.owner_user_id == user['id'] and session_id in session.clients:
+    if _revoke_if_unprivileged(session_key, session, user):
+        return
+
+    if _session_owner_still_privileged(session, user) and session_id in session.clients:
         command = data.get('input', '')
         if not session.write(command):
-            session.close()
-            terminal_sessions.pop(session_key, None)
+            _close_session(session_key, session)
             emit('terminal_error', {'error': 'Terminal session ended'})
     else:
         emit('terminal_error', {'error': 'Terminal session not found'})
@@ -478,7 +534,10 @@ def handle_terminal_resize(data):
     session = terminal_sessions.get(session_key)
     user = session_user()
     
-    if session and user and session.owner_user_id == user['id'] and session_id in session.clients and not session.closed:
+    if _revoke_if_unprivileged(session_key, session, user):
+        return
+
+    if _session_owner_still_privileged(session, user) and session_id in session.clients and not session.closed:
         rows = data.get('rows', 24)
         cols = data.get('cols', 80)
         session.resize(rows, cols)

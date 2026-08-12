@@ -11,6 +11,7 @@ from typing import Dict, List, Optional
 from ..database import get_db_connection
 from ..paths import get_project_dir
 from .execution_insights import classify_failure
+from .publication_audit import audit_run_manifest
 
 
 def _now_str() -> str:
@@ -1070,13 +1071,15 @@ def build_workflow_run_provenance(run_id: str) -> Optional[Dict]:
     if not run:
         return None
     preflight = get_workflow_preflight(run.get('preflight_id')) if run.get('preflight_id') else None
+    manifest = load_workflow_manifest(run_id)
     return {
         'run': {k: v for k, v in run.items() if k not in {'events', 'stage_states', 'artifacts', 'metrics'}},
         'stage_states': run.get('stage_states', []),
         'artifacts': run.get('artifacts', []),
         'metrics': run.get('metrics', []),
         'events': run.get('events', []),
-        'manifest': load_workflow_manifest(run_id),
+        'manifest': manifest,
+        'publication_audit': audit_run_manifest(manifest, verify_files=True),
         'preflight': preflight,
         'exported_at': _now_str(),
     }

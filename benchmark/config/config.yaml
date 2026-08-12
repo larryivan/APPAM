@@ -2,3 +2,7 @@ observations: benchmark/data/observations.example.tsv
 baseline: appam-all-contigs
 bootstrap_iterations: 2000
 seed: 20260710
+design_dir: benchmark/design
+# Set to true for publication analyses: the run then fails unless
+# benchmark/design/{datasets,scenarios,methods}.tsv have been frozen.
+require_design: false

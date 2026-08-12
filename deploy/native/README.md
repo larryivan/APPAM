@@ -57,7 +57,7 @@ curl -fsS http://127.0.0.1:25079/api/health
 ./deploy/native/manage.sh doctor
 ```
 
-The `doctor` command and the Web Admin Center use the same checks. Fix core blockers before accepting jobs, then complete the database version manifest before creating publication runs.
+The `doctor` command and the Web Admin Center use the same host-environment checks. Fix core blockers before accepting jobs, then complete the database version manifest before creating publication runs. `./deploy/native/manage.sh doctor --require-publication --json` writes the archivable report and exits non-zero while a host publication blocker remains, including an uncommitted checkout.
 
 For persistence, adapt `appam-backend.service.example` to the actual checkout path and install it as a system or user service. Adapt `nginx-appam.conf.example`, enable it in nginx, and place TLS in front of port `25078` for non-local access.
 
@@ -73,7 +73,7 @@ The generated environment expects:
 ~/db/krakenuniq_refseq_bav
 ```
 
-`~/db/checkm` is optional and only needed for CheckM1 or MetaWRAP refinement. KrakenUniq is optional when its advanced read-taxonomy tool is not used. Create `~/db/appam-db-manifest.json` from `docker/database-manifest.example.json` and replace placeholders with exact releases and download dates.
+`~/db/checkm` is optional and only needed for CheckM1 or MetaWRAP refinement. KrakenUniq is optional when its advanced read-taxonomy tool is not used. Create `~/db/appam-db-manifest.json` from `docker/database-manifest.example.json`, replace placeholders with exact releases and download dates, and delete the `"template": true` field once the versions are real.
 
 RGI command-line analysis requires CARD reference data even without `--local`. Use `global` mode only after loading CARD into the RGI environment; use `local` mode with `APPAM_SMK_RGI_DB` pointing to a directory prepared by `rgi load --local`.
 

@@ -1,3 +1,4 @@
+import hashlib
 import json
 from io import BytesIO
 import os
@@ -758,6 +759,32 @@ class AuthPermissionApiTests(unittest.TestCase):
             ['platform', 'metagenomics', 'paleoproteomics', 'publication'],
         )
 
+    def test_readiness_report_is_self_describing_and_lists_blocker_ids(self):
+        self.register(self.client, 'archiveadmin', display_name='Archive Admin')
+        report = self.client.get('/api/system/readiness').get_json()['data']
+        self.assertEqual(report['schema_version'], 1)
+        self.assertEqual(report['scope'], 'host_environment')
+        environment = report['environment']
+        self.assertTrue(environment['generated_at'].endswith('Z'))
+        for field in ('repository', 'commit', 'dirty', 'python_version', 'platform', 'machine'):
+            self.assertIn(field, environment)
+        # Host-personal locations carry no reproducibility information.
+        self.assertNotIn('status', environment)
+        self.assertNotIn('python_executable', environment)
+
+        checks_by_id = {
+            check['id']: check
+            for group in report['groups']
+            for check in group['checks']
+        }
+        self.assertIn('software_checkout', checks_by_id)
+        for check_id in report['core_blockers'] + report['publication_blockers']:
+            self.assertEqual(checks_by_id[check_id]['status'], 'error')
+        self.assertEqual(len(report['core_blockers']), report['summary']['core_blockers'])
+        self.assertEqual(len(report['publication_blockers']), report['summary']['publication_blockers'])
+        self.assertEqual(report['ready'], not report['core_blockers'])
+        self.assertEqual(report['publication_ready'], not report['publication_blockers'])
+
     def test_job_log_tail_and_result_artifact_project_paths(self):
         from app.services.job_store import create_job
 
@@ -826,6 +853,112 @@ class AuthPermissionApiTests(unittest.TestCase):
         summary_run = summary_response.get_json()['workflow_runs'][0]
         self.assertNotIn('artifacts', summary_run)
         self.assertNotIn('metrics', summary_run)
+
+    def _open_terminal_session(self, session_key, project_id, owner_id, client_id):
+        from app.api.terminal.routes import TerminalSession, client_sessions, terminal_sessions
+
+        session = TerminalSession(
+            session_key,
+            str(self.projects_dir / project_id),
+            owner_user_id=owner_id,
+            project_id=project_id,
+        )
+        session.add_client(client_id)
+        terminal_sessions[session_key] = session
+        client_sessions[client_id] = session_key
+        return session
+
+    def test_terminal_sessions_end_when_admin_privileges_are_revoked(self):
+        from flask import request, session as flask_session
+        from app.api.terminal import routes as terminal_routes
+
+        admin = self.register(self.client, 'terminalkeeper')
+        self.logout(self.client)
+        operator_client = self.app.test_client()
+        operator = self.register(operator_client, 'terminaloperator')
+        self.logout(operator_client)
+
+        self.login(self.client, admin['username'])
+        promotion = self.client.patch(f"/api/admin/users/{operator['id']}", json={'role': 'admin'})
+        self.assertEqual(promotion.status_code, 200, promotion.get_data(as_text=True))
+
+        self.login(operator_client, operator['username'])
+        project = self.create_project(operator_client, name='Terminal Guard')
+
+        def replay(handler, payload):
+            """Replay one terminal socket event as the operator.
+
+            Returns (direct emits to this client, broadcasts to the session room).
+            """
+            with self.app.test_request_context('/socket.io/'):
+                flask_session['user_id'] = operator['id']
+                request.sid = 'terminal-client'
+                with mock.patch.object(terminal_routes, 'emit') as direct:
+                    with mock.patch.object(terminal_routes.socketio, 'emit') as room:
+                        handler(payload)
+                return (
+                    [call.args for call in direct.call_args_list],
+                    [(call.args, call.kwargs.get('room')) for call in room.call_args_list],
+                )
+
+        def send_input():
+            return replay(terminal_routes.handle_terminal_input, {'session_key': 'guard-session', 'input': 'whoami\n'})
+
+        try:
+            session = self._open_terminal_session(
+                'guard-session', project['id'], operator['id'], 'terminal-client'
+            )
+            with mock.patch.object(session, 'write', return_value=True) as write:
+                self.assertEqual(send_input(), ([], []))
+            write.assert_called_once_with('whoami\n')
+
+            demotion = self.client.patch(f"/api/admin/users/{operator['id']}", json={'role': 'user'})
+            self.assertEqual(demotion.status_code, 200, demotion.get_data(as_text=True))
+            self.assertNotIn('guard-session', terminal_routes.terminal_sessions)
+            self.assertNotIn('terminal-client', terminal_routes.client_sessions)
+            self.assertTrue(session.closed)
+
+            # Even if a session outlives the revocation, every socket event
+            # re-checks privileges instead of trusting the connect-time decision.
+            for handler, payload in (
+                (terminal_routes.handle_terminal_input, {'session_key': 'guard-session', 'input': 'whoami\n'}),
+                (terminal_routes.handle_terminal_resize, {'session_key': 'guard-session', 'rows': 40, 'cols': 100}),
+            ):
+                with self.subTest(handler=handler.__name__):
+                    survivor = self._open_terminal_session(
+                        'guard-session', project['id'], operator['id'], 'terminal-client'
+                    )
+                    with mock.patch.object(survivor, 'write', return_value=True) as write:
+                        with mock.patch.object(survivor, 'resize') as resize:
+                            direct, broadcasts = replay(handler, payload)
+                    write.assert_not_called()
+                    resize.assert_not_called()
+
+                    # The room is told exactly once, so the panel reports the reason
+                    # and stops waiting instead of freezing.
+                    self.assertEqual(direct, [])
+                    self.assertEqual(
+                        broadcasts,
+                        [
+                            (
+                                ('terminal_error', {'error': 'Terminal access requires admin privileges'}),
+                                'terminal:guard-session',
+                            ),
+                            (
+                                ('terminal_exit', {'session_key': 'guard-session', 'preset': 'shell'}),
+                                'terminal:guard-session',
+                            ),
+                        ],
+                    )
+                    self.assertNotIn('guard-session', terminal_routes.terminal_sessions)
+                    self.assertNotIn('terminal-client', terminal_routes.client_sessions)
+                    self.assertTrue(survivor.closed)
+
+            # A second event for an already-revoked session must not re-notify.
+            self.assertEqual(send_input(), ([('terminal_error', {'error': 'Terminal session not found'})], []))
+        finally:
+            terminal_routes.terminal_sessions.pop('guard-session', None)
+            terminal_routes.client_sessions.pop('terminal-client', None)
 
     def test_system_diagnostics_require_admin(self):
         self.register(self.client, 'diagnosticsadmin')
@@ -1000,13 +1133,65 @@ class AuthPermissionApiTests(unittest.TestCase):
                 resolved_manifest,
             )
 
+            resolved_record = provenance_manifest['resolved_input_table']
+            self.assertEqual(Path(resolved_record['path']), resolved_manifest)
+            self.assertEqual(resolved_record['role'], 'appam_smk_sample_manifest')
+            self.assertEqual(resolved_record['row_count'], 1)
+            self.assertEqual(
+                resolved_record['sha256'],
+                hashlib.sha256(resolved_manifest.read_bytes()).hexdigest(),
+            )
+
+            database_snapshot = provenance_manifest['runtime_metadata']['database_manifest']
+            self.assertEqual(len(database_snapshot['canonical_sha256']), 64)
+            self.assertIn('resources', database_snapshot)
+            self.assertIn('required_resources', database_snapshot)
+
             bundle_response = self.client.get(
                 f"/api/pipeline/{project['id']}/workflow-runs/{smk_payload['workflow_run_id']}/provenance-bundle"
             )
             self.assertEqual(bundle_response.status_code, 200, bundle_response.status)
             with zipfile.ZipFile(BytesIO(bundle_response.data)) as bundle:
-                self.assertIn('inputs/samples.resolved.tsv', bundle.namelist())
-                self.assertIn(str(raw_data_dir.resolve()), bundle.read('inputs/samples.resolved.tsv').decode('utf-8'))
+                bundled_table = bundle.read('inputs/samples.resolved.tsv')
+                audit = json.loads(bundle.read('publication-audit.json').decode('utf-8'))
+                bundled_databases = json.loads(bundle.read('run/database-manifest.json').decode('utf-8'))
+                bundled_manifest = json.loads(bundle.read('run/manifest.json').decode('utf-8'))
+                bundled_config = bundle.read('run/config.yaml')
+                self.assertNotIn('database-manifest.json', bundle.namelist())
+
+            # The bundled table must be the exact bytes the manifest attests to.
+            self.assertIn(str(raw_data_dir.resolve()), bundled_table.decode('utf-8'))
+            self.assertEqual(
+                hashlib.sha256(bundled_table).hexdigest(),
+                provenance_manifest['resolved_input_table']['sha256'],
+            )
+            # The bundle carries the run-time database snapshot, not current server state.
+            self.assertEqual(bundled_databases, database_snapshot)
+            self.assertEqual(bundled_manifest, provenance_manifest)
+            self.assertEqual(
+                hashlib.sha256(bundled_config).hexdigest(),
+                provenance_manifest['effective_config_sha256'],
+            )
+
+            # This run is a dry run over an incomplete database manifest, so the
+            # audit must refuse to call it publishable evidence.
+            self.assertFalse(audit['ok'])
+            self.assertIn('run_mode', audit['blockers'])
+            self.assertIn('database_manifest', audit['blockers'])
+            self.assertNotIn('resolved_inputs', audit['blockers'])
+            provenance = self.client.get(
+                f"/api/pipeline/{project['id']}/workflow-runs/{smk_payload['workflow_run_id']}/provenance"
+            ).get_json()
+            self.assertEqual(provenance['publication_audit']['blockers'], audit['blockers'])
+
+            # Editing the archived resolved table after the run must become a blocker.
+            original_resolved = resolved_manifest.read_bytes()
+            resolved_manifest.write_text('sample_id\tforward_reads\treverse_reads\n', encoding='utf-8')
+            tampered = self.client.get(
+                f"/api/pipeline/{project['id']}/workflow-runs/{smk_payload['workflow_run_id']}/provenance"
+            ).get_json()
+            self.assertIn('resolved_inputs', tampered['publication_audit']['blockers'])
+            resolved_manifest.write_bytes(original_resolved)
 
             original_manifest_path = project_dir / 'samples.tsv'
             original_manifest_contents = original_manifest_path.read_text(encoding='utf-8')

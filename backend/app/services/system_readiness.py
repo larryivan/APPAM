@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+import platform
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ..database import DATABASE_FILE
@@ -15,9 +17,11 @@ from ..paths import (
 from .auth_service import count_active_admins
 from .database_manifest import load_database_manifest, validate_database_manifest
 from .local_executor import embedded_worker_running
+from .provenance import repository_state
 from .runtime_resources import get_appam_smk_runtime_checks, get_appam_smk_runtime_settings
 
 
+READINESS_SCHEMA_VERSION = 1
 PUBLICATION_DATABASES = ('checkm2_db', 'gunc_db', 'gtdbtk_db', 'prokka_db')
 
 
@@ -299,7 +303,7 @@ def _paleoproteomics_checks() -> list[dict]:
     ]
 
 
-def _publication_checks() -> list[dict]:
+def _publication_checks(environment: dict) -> list[dict]:
     manifest = load_database_manifest()
     errors = validate_database_manifest(manifest, list(PUBLICATION_DATABASES))
     if errors:
@@ -310,7 +314,26 @@ def _publication_checks() -> list[dict]:
     else:
         detail = 'Exact database releases are recorded for the publication preset.'
         status = 'ok'
+    commit = str(environment.get('commit') or '').strip()
+    dirty = environment.get('dirty')
+    checkout_ok = bool(commit) and dirty is False
+    if checkout_ok:
+        checkout_detail = f'Clean checkout at commit {commit}.'
+    elif not commit:
+        checkout_detail = 'The APPAM Git commit could not be identified.'
+    elif dirty is None:
+        checkout_detail = f'Commit {commit} was found, but checkout cleanliness could not be determined.'
+    else:
+        checkout_detail = f'Commit {commit} has uncommitted changes.'
     return [
+        _check(
+            'software_checkout',
+            'Software checkout',
+            'ok' if checkout_ok else 'error',
+            checkout_detail,
+            publication_required=True,
+            action='Commit the intended release state and run this check again from a clean checkout.' if not checkout_ok else None,
+        ),
         _check(
             'database_manifest',
             'Database version manifest',
@@ -318,7 +341,7 @@ def _publication_checks() -> list[dict]:
             detail,
             publication_required=True,
             path=manifest.get('path'),
-            action='Copy docker/database-manifest.example.json and replace every placeholder version.' if errors else None,
+            action='Copy docker/database-manifest.example.json, replace every placeholder version, and delete its "template" field.' if errors else None,
         ),
         _check(
             'database_root',
@@ -331,12 +354,31 @@ def _publication_checks() -> list[dict]:
     ]
 
 
+def _environment_record() -> dict:
+    """Identity of the checkout and host that produced this report.
+
+    Deliberately excludes the interpreter path and other host-personal locations:
+    the version and platform carry the reproducibility-relevant information.
+    """
+    revision = repository_state(REPO_ROOT)
+    return {
+        'generated_at': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'repository': revision.get('repository'),
+        'commit': revision.get('commit'),
+        'dirty': revision.get('dirty'),
+        'python_version': platform.python_version(),
+        'platform': platform.platform(),
+        'machine': platform.machine(),
+    }
+
+
 def collect_system_readiness() -> dict:
+    environment = _environment_record()
     groups = [
         {'id': 'platform', 'label': 'Platform', 'checks': _platform_checks()},
         {'id': 'metagenomics', 'label': 'Metagenomics', 'checks': _metagenomics_checks()},
         {'id': 'paleoproteomics', 'label': 'Paleoproteomics', 'optional': True, 'checks': _paleoproteomics_checks()},
-        {'id': 'publication', 'label': 'Publication record', 'checks': _publication_checks()},
+        {'id': 'publication', 'label': 'Publication record', 'checks': _publication_checks(environment)},
     ]
     checks = [check for group in groups for check in group['checks']]
     core_blockers = [check for check in checks if check.get('required') and check['status'] == 'error']
@@ -359,6 +401,9 @@ def collect_system_readiness() -> dict:
     )
 
     return {
+        'schema_version': READINESS_SCHEMA_VERSION,
+        'scope': 'host_environment',
+        'environment': environment,
         'ready': not core_blockers,
         'publication_ready': not publication_blockers,
         'summary': {
@@ -368,6 +413,8 @@ def collect_system_readiness() -> dict:
             'core_blockers': len(core_blockers),
             'publication_blockers': len(publication_blockers),
         },
+        'core_blockers': [check['id'] for check in core_blockers],
+        'publication_blockers': [check['id'] for check in publication_blockers],
         'capabilities': capabilities,
         'groups': groups,
     }

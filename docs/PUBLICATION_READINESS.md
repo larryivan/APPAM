@@ -52,6 +52,14 @@ Each reported run must be traceable to one immutable release and include:
 
 Synthetic fixtures, dry runs, lint results, and UI tests demonstrate software behavior only. They are not biological validation and must not appear as performance evidence.
 
+`python backend/manage.py audit-run RUN_DIR --json` mechanically checks the identity parts of items 1 and 2 and returns a stable report with explicit blocker and warning identifiers. Blockers: a dry run; an unclean or unrecorded workflow commit; a missing or mismatched effective-configuration digest; a resolved input table that has no SHA-256, is missing from disk, or no longer matches its recorded digest; metadata-only or missing input fingerprints; runtime identity that is absent or too shallow; a database manifest that was missing, invalid, or no longer matches its run-time snapshot digest; an unrecorded command line; and an accepted `APPAM_ALLOW_RUNTIME_DRIFT_ON_RETRY` deviation. The same report is written into every downloadable provenance bundle as `publication-audit.json`.
+
+Runtime identity is judged against what the run actually used. A run that claims a container image must record its immutable digest; a native Mamba run must record installed-package fingerprints for every environment its enabled modules consume, and disabled modules do not gate. A paleoproteomics run must fingerprint both the conversion environment and the MaxQuant binary. A workflow the audit has no depth rule for produces a warning, never a silent pass.
+
+Provenance bundles are assembled entirely from the archived run: the database manifest in a bundle is the snapshot taken when the run was prepared, never the manifest currently on the server.
+
+The audit assesses evidence completeness, never scientific validity. Input accessions, per-rule resource accounting and excluded-run reasons (item 3), controls and blanks (item 5), and the mapping from figures to runs (item 6) are not machine-checkable here and stay a manual submission step.
+
 ## Minimum publishable study design
 
 The first defensible article should be a software/methods paper, not a new-algorithm paper. A compact but credible study has four layers:
@@ -67,13 +75,15 @@ Recommended main figures are the frozen architecture/provenance model, the exact
 
 1. Freeze the manuscript branch, software version, author list, license, and `CITATION.cff`.
 2. Run CI from a clean clone on Linux x86_64.
-3. Archive the machine-readable output of `python backend/manage.py doctor --json` and resolve every publication blocker.
-4. Complete a real small FASTQ end-to-end run and archive its provenance bundle.
+3. Archive the machine-readable output of `python backend/manage.py doctor --json --require-publication` and resolve every host-environment publication blocker, including a dirty or unidentified Git checkout. The command exits non-zero while any blocker remains; it does not replace real-run or biological validation.
+4. Complete a real small FASTQ end-to-end run and archive its provenance bundle. `python backend/manage.py audit-run RUN_DIR` must exit zero for that run.
 5. Complete licensed Thermo RAW and Bruker `.d` fixture runs and compare expected mzML/MaxQuant tables.
-6. Fill the database manifest with exact releases and checksum it.
-7. Pre-register `benchmark/design/` tables before held-out analysis.
+6. Fill the database manifest with exact releases and checksum it. Delete the `"template": true` field copied from `docker/database-manifest.example.json`; the readiness check and the run audit both reject a manifest that still declares itself a template.
+7. Pre-register `benchmark/design/` tables before held-out analysis. Write each `*.tsv` with `status=frozen`, unique identifiers, and no placeholder fields, then analyse with `require_design: true` so every observed dataset, scenario, and method must appear in the frozen tables. `summary.json` then records each table's SHA-256.
 8. Publish raw benchmark observations, failure logs, configs, environment exports, and analysis outputs in a DOI-backed archive.
 9. Replace all placeholders in citation/release metadata and tag the exact archived commit.
+
+Gates 3, 6, and 7 are verifiable from a checkout today, and gate 4 becomes verifiable as soon as one real run exists. Gates 1, 2, 5, 8, and 9 depend on real data, licensed vendor files, or an external archive.
 
 The current metagenomics workflow requires paired-end input, does not perform automatic host depletion, and runs Prokka in bacterial metagenome mode. A manuscript must either scope its validation data accordingly or add and validate those capabilities before claiming broader coverage.
 
