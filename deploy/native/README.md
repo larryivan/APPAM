@@ -73,6 +73,10 @@ The generated environment expects:
 ~/db/krakenuniq_refseq_bav
 ```
 
+When a GTDB-Tk archive is extracted as `~/db/gtdbtk_r226/release226`, the
+environment renderer automatically records that inner release directory as
+`GTDBTK_DATA_PATH`.
+
 `~/db/checkm` is optional and only needed for CheckM1 or MetaWRAP refinement. KrakenUniq is optional when its advanced read-taxonomy tool is not used. Create `~/db/appam-db-manifest.json` from `docker/database-manifest.example.json`, replace placeholders with exact releases and download dates, and delete the `"template": true` field once the versions are real.
 
 RGI command-line analysis requires CARD reference data even without `--local`. Use `global` mode only after loading CARD into the RGI environment; use `local` mode with `APPAM_SMK_RGI_DB` pointing to a directory prepared by `rgi load --local`.

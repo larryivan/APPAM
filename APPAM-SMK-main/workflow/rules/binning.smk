@@ -62,7 +62,7 @@ rule metawrap_bin_refinement:
         r"""
         mkdir -p {params.outdir:q} "$(dirname {log:q})"
         find {input.metabat2:q} {input.maxbin2:q} {input.concoct:q} -name "bin.BinMembers.txt" -delete
-        checkm data setRootPath {params.checkm_db:q}
+        checkm data setRoot {params.checkm_db:q}
         metawrap bin_refinement -o {params.outdir:q} -t {threads} \
             -c {params.completeness} -x {params.contamination} \
             -A {input.metabat2:q} -B {input.maxbin2:q} -C {input.concoct:q} &> {log:q}
@@ -87,10 +87,20 @@ rule checkm2:
     shell:
         r"""
         mkdir -p {params.outdir:q} "$(dirname {log:q})"
+        db_path={params.db:q}
+        if [ -d "$db_path" ]; then
+            db_file="$(find "$db_path" -type f -name 'uniref100.KO.1.dmnd' | head -n 1)"
+            if [ -z "$db_file" ]; then
+                echo "No CheckM2 uniref100.KO.1.dmnd database found under $db_path" >&2
+                exit 1
+            fi
+        else
+            db_file="$db_path"
+        fi
         checkm2 predict \
             --input {input:q} \
             --output-directory {params.outdir:q} \
-            --database_path {params.db:q} \
+            --database_path "$db_file" \
             --threads {threads} \
             -x fa &> {log}
         test -s {output.quality}
@@ -115,7 +125,7 @@ rule checkm:
     shell:
         r"""
         mkdir -p {params.outdir:q} "$(dirname {log:q})"
-        checkm data setRootPath {params.db:q}
+        checkm data setRoot {params.db:q}
         checkm lineage_wf -t {threads} -x fa --tab_table \
             -f {output.qa:q} {input:q} {params.outdir:q} 2> {log:q}
         """

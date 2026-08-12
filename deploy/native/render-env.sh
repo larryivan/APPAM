@@ -42,6 +42,10 @@ if ! ENV_RUNNER_BIN="$(command -v "${ENV_RUNNER}")"; then
 fi
 CONDA_BASE="$(resolve_environment_base "${ENV_RUNNER_BIN}")"
 ENV_ROOT="${CONDA_BASE}/envs"
+GTDBTK_DB="${DB_ROOT}/gtdbtk_r226"
+if [[ -d "${GTDBTK_DB}/release226" ]]; then
+  GTDBTK_DB="${GTDBTK_DB}/release226"
+fi
 SECRET="$(openssl rand -hex 32)"
 mkdir -p "$(dirname "${OUTPUT}")" "${PROJECTS_ROOT}" "${HOME}/appam-data"
 
@@ -94,7 +98,7 @@ APPAM_SMK_ANTISMASH_ENV=${ENV_ROOT}/antismash
 APPAM_SMK_CHECKM1_DB=${DB_ROOT}/checkm
 APPAM_SMK_CHECKM2_DB=${DB_ROOT}/checkm2
 APPAM_SMK_GUNC_DB=${DB_ROOT}/gunc
-APPAM_SMK_GTDBTK_DB=${DB_ROOT}/gtdbtk_r226
+APPAM_SMK_GTDBTK_DB=${GTDBTK_DB}
 APPAM_SMK_EGGNOG_DB=${DB_ROOT}/eggnog
 APPAM_KRAKENUNIQ_DB=${DB_ROOT}/krakenuniq_refseq_bav
 APPAM_SMK_RGI_DB_MODE=global

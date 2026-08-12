@@ -245,7 +245,7 @@
       { "name": "command", "description": "CheckM2 command to run", "type": "string", "options": ["predict"], "default": "predict", "positional": true, "order": 0, "required": true },
       { "name": "--input", "description": "One or more genome FASTA files", "type": "file", "multiple": true, "extensions": [".fasta", ".fa", ".fna", ".fasta.gz", ".fa.gz", ".fna.gz"], "required": true },
       { "name": "--output-directory", "description": "Output directory for results", "type": "directory", "default": "results/checkm2", "path_role": "output", "create_output_directory": true },
-      { "name": "--database_path", "description": "CheckM2 database under APPAM_DATABASES_ROOT", "type": "string", "default": "checkm2", "default_env": "APPAM_SMK_CHECKM2_DB", "path_role": "input", "path_scope": "shared", "path_kind": "directory", "required": true },
+      { "name": "--database_path", "description": "CheckM2 database under APPAM_DATABASES_ROOT", "type": "string", "default": "checkm2", "default_env": "APPAM_SMK_CHECKM2_DB", "path_role": "input", "path_scope": "shared", "path_kind": "file", "path_select": "uniref100.KO.1.dmnd", "required": true },
       { "name": "--threads", "description": "Number of threads to use", "type": "integer", "default": 1 },
       { "name": "--extension", "description": "File extension for input files (needed for gzipped folders)", "type": "string", "options": ["fasta", "fa", "fna", "gz"] },
       { "name": "--genes", "description": "Input files are protein files (predicted by Prodigal)", "type": "flag", "default": false },

@@ -4,3 +4,5 @@ channels:
   - conda-forge
 dependencies:
   - checkm-genome==1.2.4
+  # CheckM1 imports pkg_resources, which setuptools 81 removed.
+  - setuptools<81

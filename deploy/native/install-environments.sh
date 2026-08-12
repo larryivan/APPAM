@@ -45,7 +45,7 @@ install_environment() {
   fi
   if environment_exists "${name}"; then
     if [[ "${UPDATE}" == true ]]; then
-      "${RUNNER}" env update -n "${name}" -f "${spec}" --prune
+      "${RUNNER}" env update -y -n "${name}" -f "${spec}" --prune
     else
       printf '[skip] environment exists: %s\n' "${name}"
     fi

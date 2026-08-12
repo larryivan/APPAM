@@ -166,7 +166,7 @@ def get_appam_smk_runtime_checks(settings: dict | None = None) -> list[dict]:
 
     if modules.get('enable_checkm2'):
         checks.append(_env_check('checkm2_env', tools.get('checkm2_env'), 'CheckM2'))
-        checks.append(_path_check('checkm2_db', databases.get('checkm2_db'), 'CheckM2 database', kind='dir'))
+        checks.append(_path_check('checkm2_db', databases.get('checkm2_db'), 'CheckM2 database', kind='file_or_dir'))
     if modules.get('enable_gunc'):
         checks.append(_env_check('gunc_env', tools.get('gunc_env'), 'GUNC'))
         checks.append(_path_check('gunc_db', databases.get('gunc_db'), 'GUNC database', kind='file_or_dir'))
