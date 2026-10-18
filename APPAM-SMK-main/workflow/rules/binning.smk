@@ -102,7 +102,7 @@ rule checkm2:
             --output-directory {params.outdir:q} \
             --database_path "$db_file" \
             --threads {threads} \
-            -x fa &> {log}
+            -x fa &> {log:q}
         test -s {output.quality}
         """
 
@@ -141,6 +141,8 @@ rule gunc:
         db=config["databases"]["gunc_db"]
     log:
         f"{LOGS_DIR}/gunc/{{sample}}.log"
+    benchmark:
+        f"{BENCHMARK_DIR}/gunc/{{sample}}.txt"
     threads: 24
     resources:
         mem_mb=64000

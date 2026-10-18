@@ -160,6 +160,9 @@ else:
             all_se=f"{PREPROCESS_DIR}/{{sample}}.all.single.fastq.gz"
         log:
             f"{LOGS_DIR}/adapter_removal/{{sample}}.normalize.log"
+        benchmark:
+            f"{BENCHMARK_DIR}/adapter_removal/{{sample}}.normalize.txt"
+        threads: 1
         resources:
             mem_mb=1024
         shell:
