@@ -85,6 +85,22 @@ STUBS = {
         (out / 'metabat2_bins' / 'bin.unbinned.fa').write_text(first_contig)
         (out / 'metabat2_bins' / 'bin.lowDepth.fa').write_text('')
     ''',
+    'gtdbtk': '''
+        args = sys.argv[1:]
+        if args[0] != 'classify_wf':
+            sys.exit(f'gtdbtk stub: unsupported command {args[0]}')
+        out = Path(args[args.index('--out_dir') + 1])
+        tmpdir = Path(args[args.index('--tmpdir') + 1]) if '--tmpdir' in args else Path('/tmp')
+        # The real ANI screen sketches ~46 GB of reference genomes into the
+        # temporary directory, so it has to live with the run's results.
+        if not tmpdir.is_dir() or not tmpdir.resolve().is_relative_to(out.resolve()):
+            sys.exit(f'gtdbtk stub: reference sketches would be written to {tmpdir}')
+        (tmpdir / 'sketch_ref').mkdir()
+        genomes = sorted(Path(args[args.index('--genome_dir') + 1]).glob('*.fa'))
+        lineage = 'd__Bacteria;p__Bacteroidota;c__Bacteroidia;o__Bacteroidales;f__Tannerellaceae;g__Tannerella;s__Tannerella forsythia'
+        rows = ['user_genome\\tclassification'] + [f'{genome.stem}\\t{lineage}' for genome in genomes]
+        (out / 'gtdbtk.bac120.summary.tsv').write_text('\\n'.join(rows) + '\\n')
+    ''',
     'seqkit': '''
         args = sys.argv[1:]
         invert = '-v' in args
@@ -102,7 +118,7 @@ STUBS = {
 
 RULES = [
     'megahit', 'bowtie2_index', 'bowtie2_align', 'index_bam',
-    'count_read_lengths', 'split_contigs_by_pydamage', 'metawrap_binning',
+    'count_read_lengths', 'split_contigs_by_pydamage', 'metawrap_binning', 'gtdbtk_classify',
     'mag_summary_per_sample', 'mag_summary',
 ]
 
@@ -163,7 +179,7 @@ class AppamSmkScriptExecutionTests(unittest.TestCase):
             }
             for tool in config['tools']:
                 config['tools'][tool] = str(ENVIRONMENTS / 'reporting.yml')
-            for module in ('enable_checkm2', 'enable_gunc', 'enable_gtdbtk', 'enable_prokka'):
+            for module in ('enable_checkm2', 'enable_gunc', 'enable_prokka'):
                 config['params'][module] = False
             config_path = root / 'config.yaml'
             config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding='utf-8')
@@ -224,10 +240,14 @@ class AppamSmkScriptExecutionTests(unittest.TestCase):
             self.assertEqual(sorted(p.name for p in (binning / 'metabat2_unbinned').glob('*.fa')),
                              ['bin.lowDepth.fa', 'bin.unbinned.fa'])
 
-            # mag_summary: one row per bin, sample-qualified
+            # gtdbtk_classify: sketches kept beside the results, then cleaned up
+            self.assertFalse((results / 'gtdbtk' / 'S1' / 'tmp').exists())
+
+            # mag_summary: one row per bin, sample-qualified, with its taxonomy
             summary = (results / 'summaries' / 'MAG_summary.tsv').read_text().splitlines()
             self.assertEqual(len(summary), 2)
             self.assertTrue(summary[1].startswith('S1\tbin.1'))
+            self.assertIn('Tannerella', summary[1])
 
 
 if __name__ == '__main__':
