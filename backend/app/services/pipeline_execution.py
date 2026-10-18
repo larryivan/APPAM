@@ -1320,7 +1320,7 @@ def _paleoproteomics_context(project_id: str, job_id: str, params: dict, run_id:
                 'enzyme_mode': int(params.get('enzyme_mode', 4)),
                 'max_missed_cleavages': int(params.get('max_missed_cleavages', 0)),
                 'max_missed_cleavages_dia': int(params.get('max_missed_cleavages_dia', params.get('max_missed_cleavages', 0))),
-                'identifier_parse_rule': str(params.get('identifier_parse_rule', r'^>((tr\|)|(sp\|))?(\S+)')),
+                'identifier_parse_rule': str(params.get('identifier_parse_rule', r'^>(?:sp\||tr\|)?([^|\s]+)')),
                 'description_parse_rule': str(params.get('description_parse_rule', r'^\S+\s+(.*)$')),
                 'fixed_modifications': _list_parameter(params, 'fixed_modifications', ['Carbamidomethyl (C)']),
                 'variable_modifications': _list_parameter(

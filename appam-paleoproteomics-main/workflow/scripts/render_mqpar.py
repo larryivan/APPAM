@@ -307,7 +307,7 @@ def render_mqpar(
     _replace_optional_text(
         root,
         ".//fastaFiles/FastaFileInfo/identifierParseRule",
-        _config_value(config, "identifier_parse_rule", r"^>((tr\|)|(sp\|))?(\S+)"),
+        _config_value(config, "identifier_parse_rule", r"^>(?:sp\||tr\|)?([^|\s]+)"),
     )
     _replace_optional_text(
         root,

@@ -3,7 +3,7 @@
    <fastaFiles>
       <FastaFileInfo>
          <fastaFilePath>/path/to/reference.fasta</fastaFilePath>
-         <identifierParseRule>^>((tr\|)|(sp\|))?(\S+)</identifierParseRule>
+         <identifierParseRule>^>(?:sp\||tr\|)?([^|\s]+)</identifierParseRule>
          <descriptionParseRule>^\S+\s+(.*)$</descriptionParseRule>
          <taxonomyParseRule></taxonomyParseRule>
          <variationParseRule></variationParseRule>
