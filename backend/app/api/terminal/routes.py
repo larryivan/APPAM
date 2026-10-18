@@ -8,10 +8,10 @@ import termios
 import shlex
 import shutil
 from collections import deque
-from flask import Blueprint, request, session as flask_session
+from flask import Blueprint, jsonify, request, session as flask_session
 from flask_socketio import emit, join_room, leave_room
 from app import socketio
-from app.auth import can, get_project_for_user, session_user, user_is_admin
+from app.auth import admin_required, can, get_project_for_user, session_user, user_is_admin
 from app.paths import OPENCODE_ASSETS_ROOT, get_project_dir
 import logging
 
@@ -593,5 +593,19 @@ def read_terminal_output(session_id):
 
 
 # 注册蓝图
+@terminal_bp.get('/assistant')
+@admin_required
+def assistant_status():
+    """Whether the OpenCode assistant panel can start.
+
+    The panel runs the OpenCode CLI in a terminal, so it needs only the CLI.
+    The OpenCode API server is a separate dependency of parameter filling.
+    """
+    launch_command = _build_launch_command("opencode", _resolve_terminal_command("opencode", None))
+    executable = launch_command[0] if launch_command else ""
+    available = os.path.isabs(executable) and os.access(executable, os.X_OK)
+    return jsonify({'available': available})
+
+
 def register_terminal_routes(app):
     app.register_blueprint(terminal_bp, url_prefix='/api/terminal') 

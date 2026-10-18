@@ -297,7 +297,7 @@ const activeToolSection = computed(() => {
 })
 const openCodeTitle = computed(() => {
   if (opencodeAvailable.value === null) return 'Checking OpenCode availability'
-  return opencodeAvailable.value ? 'Open OpenCode assistant' : 'OpenCode is not configured on this server'
+  return opencodeAvailable.value ? 'Open OpenCode assistant' : 'The OpenCode CLI is not installed on this server'
 })
 
 const overviewRoute = computed(() => ({ name: 'Overview', params: { id: projectId.value } }))
@@ -360,7 +360,8 @@ async function checkOpenCodeAvailability(admin) {
   opencodeAvailable.value = null
   if (!admin) return
   try {
-    const response = await fetch('/api/parameter-fill/health')
+    // The panel runs the OpenCode CLI; it does not need the OpenCode API server.
+    const response = await fetch('/api/terminal/assistant')
     const payload = await response.json().catch(() => ({}))
     opencodeAvailable.value = response.ok && payload.available === true
   } catch {

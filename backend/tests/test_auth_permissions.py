@@ -120,6 +120,29 @@ class AuthPermissionApiTests(unittest.TestCase):
         })
         self.assertIsNone(response.headers.get('Access-Control-Allow-Origin'))
 
+    def test_assistant_status_needs_only_the_opencode_cli(self):
+        # The assistant panel runs the CLI in a terminal; it must not wait for
+        # the OpenCode API server that parameter filling uses.
+        self.register(self.client, 'assistantadmin')
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cli = Path(tmpdir) / 'opencode'
+            cli.write_text('#!/bin/sh\n')
+            cli.chmod(0o755)
+            with mock.patch.dict(os.environ, {'OPENCODE_CLI_COMMAND': str(cli)}), mock.patch(
+                'app.api.parameter_fill.routes.opencode_service.health',
+                return_value={'available': False, 'version': ''},
+            ):
+                installed = self.client.get('/api/terminal/assistant')
+            with mock.patch.dict(os.environ, {'OPENCODE_CLI_COMMAND': str(Path(tmpdir) / 'missing')}):
+                missing = self.client.get('/api/terminal/assistant')
+
+        self.assertEqual(installed.get_json(), {'available': True})
+        self.assertEqual(missing.get_json(), {'available': False})
+
+        member = self.app.test_client()
+        self.register(member, 'assistantmember')
+        self.assertEqual(member.get('/api/terminal/assistant').status_code, 403)
+
     def test_parameter_fill_rejects_invalid_json(self):
         self.register(self.client, 'parameterjsonadmin')
         response = self.client.post(

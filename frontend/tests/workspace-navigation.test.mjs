@@ -46,3 +46,9 @@ test('routed workspace views scroll inside the clipped content region', async ()
     assert.match(rule, /overflow-y: auto;/, `${path} root must scroll`)
   }
 })
+
+test('the assistant is offered whenever the OpenCode CLI is installed', () => {
+  // The panel runs the CLI in a terminal; the API server only backs parameter filling.
+  assert.match(workspaceSource, /fetch\('\/api\/terminal\/assistant'\)/)
+  assert.doesNotMatch(workspaceSource, /parameter-fill\/health/)
+})
