@@ -17,15 +17,37 @@ const normalizeUrl = (input) => {
   return ''
 }
 
-const isApiRequest = (url) => {
-  if (!url) return false
-  return url.startsWith('/api/') || url.includes('/api/')
+// Reduce any request target to a same-origin path, so `/api/auth/me?x=1` and
+// an absolute URL to this origin are recognised, and a third-party URL that
+// merely contains "/api/" is not treated as ours.
+const sameOriginPath = (url) => {
+  if (!url) return ''
+  try {
+    const parsed = new URL(url, window.location.origin)
+    return parsed.origin === window.location.origin ? parsed.pathname : ''
+  } catch {
+    return ''
+  }
 }
 
 const shouldHandleUnauthorized = (url, response) => {
   if (!response || response.status !== 401) return false
-  if (!isApiRequest(url)) return false
-  return !AUTH_EXEMPT_PATHS.has(url)
+  const path = sameOriginPath(url)
+  if (!path.startsWith('/api/')) return false
+  return !AUTH_EXEMPT_PATHS.has(path)
+}
+
+// Where to send the user after they sign in again. While already on the login
+// page, keep the destination it carries instead of wrapping the login URL in
+// another redirect (which grew as /login?redirect=/login?redirect=...).
+const resumeDestination = (current) => {
+  if (current?.name === 'Login') {
+    const existing = current.query?.redirect
+    return typeof existing === 'string' && existing.startsWith('/') && !existing.startsWith('/login')
+      ? existing
+      : '/projects'
+  }
+  return current?.fullPath || '/projects'
 }
 
 export const installApiInterceptors = (router) => {
@@ -42,9 +64,7 @@ export const installApiInterceptors = (router) => {
 
       if (!redirectInFlight) {
         redirectInFlight = true
-        const current = router.currentRoute.value
-        const redirect =
-          current?.fullPath && current.fullPath !== '/login' ? current.fullPath : '/projects'
+        const redirect = resumeDestination(router.currentRoute.value)
 
         Promise.resolve(
           router.replace({
