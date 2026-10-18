@@ -114,6 +114,25 @@ def _replace_text(root: ET.Element, xpath: str, value: object) -> None:
     node.text = _xml_text(value)
 
 
+def _replace_any_text(root: ET.Element, xpaths: list[str], value: object) -> None:
+    updated = False
+    for xpath in xpaths:
+        node = root.find(xpath)
+        if node is not None:
+            node.text = _xml_text(value)
+            updated = True
+    if not updated:
+        raise ValueError(f"missing XML node: one of {', '.join(xpaths)}")
+
+
+def _replace_optional_text(root: ET.Element, xpath: str, value: object) -> bool:
+    node = root.find(xpath)
+    if node is None:
+        return False
+    node.text = _xml_text(value)
+    return True
+
+
 def _xml_text(value: object) -> str:
     if isinstance(value, bool):
         return "True" if value else "False"
@@ -194,6 +213,8 @@ def render_mqpar(
     output_path: Path,
     config_data: Mapping[str, object] | None = None,
     mzml_paths: Mapping[str, Path] | None = None,
+    sample_ids: list[str] | None = None,
+    combined_dir: Path | None = None,
     config_base_dir: Path | None = None,
 ) -> Path:
     if config_data is None:
@@ -211,14 +232,7 @@ def render_mqpar(
     samples = _read_samples(samples_path)
     if not samples:
         raise ValueError("samples.tsv has no sample rows")
-    file_paths = []
-    experiments = []
-    fractions = []
-    ptms = []
-    reference_channels = []
     seen_sample_ids: set[str] = set()
-    resolved_mzml_paths = {} if mzml_paths is None else {sample_id: Path(path) for sample_id, path in mzml_paths.items()}
-
     for sample in samples:
         sample_id = _require_nonempty(sample["sample_id"], "sample_id")
         if not SAMPLE_ID_PATTERN.fullmatch(sample_id):
@@ -226,6 +240,28 @@ def render_mqpar(
         if sample_id in seen_sample_ids:
             raise ValueError(f"duplicate sample_id: {sample_id}")
         seen_sample_ids.add(sample_id)
+
+    if sample_ids is None:
+        selected_samples = samples
+    else:
+        requested_ids = [_require_nonempty(str(sample_id), "sample_id") for sample_id in sample_ids]
+        missing_ids = [sample_id for sample_id in requested_ids if sample_id not in seen_sample_ids]
+        if missing_ids:
+            raise ValueError(f"unknown sample_id requested for mqpar: {', '.join(missing_ids)}")
+        requested_set = set(requested_ids)
+        selected_samples = [sample for sample in samples if sample["sample_id"] in requested_set]
+    if not selected_samples:
+        raise ValueError("no samples selected for mqpar")
+
+    file_paths = []
+    experiments = []
+    fractions = []
+    ptms = []
+    reference_channels = []
+    resolved_mzml_paths = {} if mzml_paths is None else {sample_id: Path(path) for sample_id, path in mzml_paths.items()}
+
+    for sample in selected_samples:
+        sample_id = _require_nonempty(sample["sample_id"], "sample_id")
 
         input_path = Path(_require_nonempty(sample.get("input_path"), "input_path", sample_id))
         _validate_input_path(input_path)
@@ -250,20 +286,27 @@ def render_mqpar(
     _replace_list(root, "ptms", "boolean", ptms)
     _replace_list(root, "referenceChannel", "string", reference_channels)
 
-    maxquant_output_dir = _resolve_config_path(
-        _config_value(config, "maxquant_output_dir", str(output_path.parent.parent.resolve())),
-        resolved_config_base_dir,
-    )
-    fixed_search_folder = str(Path(maxquant_output_dir) / "search")
-    fixed_combined_folder = str(Path(maxquant_output_dir) / "combined")
-    temp_folder = str(Path(maxquant_output_dir) / "tmp")
+    run_dir = output_path.parent.resolve()
+    fixed_search_folder = str(run_dir / "search")
+    fixed_combined_folder = str((combined_dir or run_dir / "combined").resolve())
+    temp_folder = str(run_dir / "tmp")
     _replace_text(root, ".//fixedSearchFolder", fixed_search_folder)
-    _replace_text(root, ".//fixedCombinedFolder", fixed_combined_folder)
+    _replace_any_text(root, [".//fixedCombinedFolder", ".//combinedFolder"], fixed_combined_folder)
     _replace_text(root, ".//tempFolder", temp_folder)
     _replace_text(
         root,
         ".//fastaFiles/FastaFileInfo/fastaFilePath",
         _resolve_config_path(_config_value(config, "fasta_path", ""), resolved_config_base_dir),
+    )
+    _replace_optional_text(
+        root,
+        ".//fastaFiles/FastaFileInfo/identifierParseRule",
+        _config_value(config, "identifier_parse_rule", r"^>((tr\|)|(sp\|))?(\S+)"),
+    )
+    _replace_optional_text(
+        root,
+        ".//fastaFiles/FastaFileInfo/descriptionParseRule",
+        _config_value(config, "description_parse_rule", r"^\S+\s+(.*)$"),
     )
     _replace_text(root, ".//matchBetweenRuns", _config_value(config, "match_between_runs", False))
     _replace_text(root, ".//includeContaminants", _config_value(config, "include_contaminants", True))
@@ -290,6 +333,11 @@ def render_mqpar(
             parameter_group,
             "./maxMissedCleavages",
             _config_value(config, "max_missed_cleavages", 0),
+        )
+        _replace_optional_text(
+            parameter_group,
+            "./maxMissedCleavagesDia",
+            _config_value(config, "max_missed_cleavages_dia", 0),
         )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

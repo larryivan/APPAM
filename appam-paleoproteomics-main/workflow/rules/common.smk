@@ -45,6 +45,7 @@ def _load_samples() -> list[dict[str, str]]:
 SAMPLES = _load_samples()
 SAMPLE_IDS = [row["sample_id"] for row in SAMPLES]
 SAMPLES_BY_ID = {row["sample_id"]: row for row in SAMPLES}
+SAMPLE_ID_REGEX = "|".join(re.escape(sample_id) for sample_id in SAMPLE_IDS) or "(?!)"
 RAW_SAMPLE_ID_REGEX = "|".join(
     re.escape(row["sample_id"])
     for row in SAMPLES
@@ -55,6 +56,29 @@ D_SAMPLE_ID_REGEX = "|".join(
     for row in SAMPLES
     if Path(row["input_path"]).name.lower().endswith(".d") and Path(row["input_path"]).is_dir()
 ) or "(?!)"
+MAXQUANT_MODE = str(config.get("maxquant_mode", "batch")).strip().lower()
+if MAXQUANT_MODE not in {"batch", "per_sample_id"}:
+    raise WorkflowError(
+        f"maxquant_mode must be batch or per_sample_id; got {MAXQUANT_MODE!r}"
+    )
+
+MZML_TARGETS = expand("<results>/mzml/{sample}.mzML", sample=SAMPLE_IDS)
+if MAXQUANT_MODE == "batch":
+    MQPAR_TARGETS = ["<maxquant>/batch/mqpar.xml"]
+    MAXQUANT_TARGETS = [
+        "<maxquant>/batch/combined/txt/proteinGroups.txt",
+        "<maxquant>/batch/combined/txt/peptides.txt",
+        "<maxquant>/batch/combined/txt/evidence.txt",
+    ]
+    QC_INPUT_TARGETS = ["<results>/reports/maxquant/batch.qc.json"]
+else:
+    MQPAR_TARGETS = expand("<maxquant>/samples/{sample}/mqpar.xml", sample=SAMPLE_IDS)
+    MAXQUANT_TARGETS = [
+        *expand("<maxquant>/samples/{sample}/combined/txt/proteinGroups.txt", sample=SAMPLE_IDS),
+        *expand("<maxquant>/samples/{sample}/combined/txt/peptides.txt", sample=SAMPLE_IDS),
+        *expand("<maxquant>/samples/{sample}/combined/txt/evidence.txt", sample=SAMPLE_IDS),
+    ]
+    QC_INPUT_TARGETS = expand("<results>/reports/maxquant/samples/{sample}.qc.json", sample=SAMPLE_IDS)
 
 
 def _sample_input_path(sample: str) -> Path:

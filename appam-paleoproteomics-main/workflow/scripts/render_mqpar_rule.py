@@ -24,6 +24,8 @@ render_mqpar_module.render_mqpar(
     output_path=Path(snakemake.output.mqpar),
     config_data=snakemake.config,
     mzml_paths=MZML_PATHS,
+    sample_ids=list(snakemake.params.sample_ids),
+    combined_dir=Path(snakemake.params.combined_dir),
     config_base_dir=Path.cwd(),
 )
 

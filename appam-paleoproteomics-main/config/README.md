@@ -74,12 +74,15 @@ Important keys:
 - `mqpar_template`: path to the version-controlled MaxQuant template XML
 - `results_dir`: root directory for converted mzML files and logs
 - `maxquant_output_dir`: MaxQuant result directory
+- `maxquant_mode`: `batch` or `per_sample_id`
 - `threads`: threads passed to tools and written into the generated MaxQuant parameters
 - `runtime_env`: existing Conda/Mamba environment prefix activated for every rule
 - `fasta_path`: FASTA database path written into the generated mqpar XML
 - `match_between_runs`
 - `enzymes`
 - `enzyme_mode`
+- `max_missed_cleavages` and `max_missed_cleavages_dia`
+- `identifier_parse_rule` and `description_parse_rule`
 - `fixed_modifications`
 - `variable_modifications`
 - `peptide_fdr`
@@ -128,16 +131,22 @@ Output locations in the container:
 - Thermo intermediate mzML: `/workspace/results/thermo`
 - Bruker intermediate mzML: `/workspace/results/bruker`
 - final mzML: `/workspace/results/mzml`
-- rendered mqpar: `/workspace/results/maxquant/mqpar/all_samples.mqpar.xml`
-- MaxQuant tables: `/workspace/results/maxquant`
+- batch mqpar: `/workspace/results/maxquant/batch/mqpar.xml`
+- batch MaxQuant tables: `/workspace/results/maxquant/batch/combined/txt`
+- per-sample searches: `/workspace/results/maxquant/samples/{sample}`
+- consolidated QC: `/workspace/results/reports/paleoproteomics-qc.html`
 
 ## `mqpar.template.xml` and Generated `mqpar.xml`
 
 `workflow/templates/mqpar.template.xml` is the tracked template for MaxQuant. It should contain placeholder paths instead of real sample-specific paths.
 
-At runtime, the workflow renders a batch-specific file at:
+In `batch` mode, the workflow renders:
 
-- `results/maxquant/mqpar/all_samples.mqpar.xml`
+- `results/maxquant/batch/mqpar.xml`
+
+In `per_sample_id` mode, it renders one file per acquisition:
+
+- `results/maxquant/samples/{sample}/mqpar.xml`
 
 The rendered file is the one passed to MaxQuant. The template is not used directly for execution.
 
@@ -150,6 +159,7 @@ The workflow rewrites these parts of the template on each run:
 - `ptms`
 - `referenceChannel`
 - `fastaFiles/FastaFileInfo/fastaFilePath`
+- `fastaFiles/FastaFileInfo/identifierParseRule` and `descriptionParseRule`
 - `matchBetweenRuns`
 - `includeContaminants`
 - `minPeptideLength`
@@ -157,7 +167,8 @@ The workflow rewrites these parts of the template on each run:
 - `proteinFdr`
 - `siteFdr`
 - `numThreads`
-- each `parameterGroup` block's `enzymeMode`, `enzymes`, `fixedModifications`, `variableModifications`, `firstSearchTol`, `mainSearchTol`
+- `maxQuantVersion`, search/combined/temp folders, and thread count
+- each `parameterGroup` block's enzyme mode, missed-cleavage limits, enzymes, modifications, and mass tolerances
 
 All samples currently use the same MaxQuant search parameter group. The workflow therefore writes every `paramGroupIndices` entry as `0`, and the template must contain at least one `<parameterGroup>`.
 

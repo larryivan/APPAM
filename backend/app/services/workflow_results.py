@@ -49,9 +49,11 @@ APPAM_SMK_PATTERNS = (
 
 PALEO_PATTERNS = (
     ('mqpar', '**/*.mqpar.xml', 'config'),
+    ('mqpar', '**/mqpar.xml', 'config'),
     ('mzML', '**/*.mzML', 'spectra'),
     ('proteinGroups', '**/proteinGroups.txt', 'maxquant'),
     ('peptides', '**/peptides.txt', 'maxquant'),
+    ('evidence', '**/evidence.txt', 'maxquant'),
     ('Paleoproteomics QC', '**/paleoproteomics-qc.json', 'quality'),
     ('Paleoproteomics QC report', '**/paleoproteomics-qc.html', 'report'),
 )
@@ -331,9 +333,10 @@ def build_paleoproteomics_summary(results_dir: Path) -> dict:
         'workflow_id': 'appam-paleoproteomics',
         'counts': {
             'mzml_files': len(list(results_dir.rglob('*.mzML'))),
-            'mqpar_files': len(list(results_dir.rglob('mqpar.xml'))),
+            'mqpar_files': len(list(results_dir.rglob('mqpar.xml'))) + len(list(results_dir.rglob('*.mqpar.xml'))),
             'protein_groups': len(list(results_dir.rglob('proteinGroups.txt'))),
             'peptides': len(list(results_dir.rglob('peptides.txt'))),
+            'evidence_tables': len(list(results_dir.rglob('evidence.txt'))),
             'qc_reports': len(list(results_dir.rglob('paleoproteomics-qc.json'))),
         },
     }

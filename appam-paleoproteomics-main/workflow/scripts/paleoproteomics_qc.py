@@ -100,6 +100,7 @@ def run(snakemake_object) -> None:
         Path(snakemake_object.input.peptides),
         Path(snakemake_object.input.evidence),
     )
+    payload['analysis_id'] = str(snakemake_object.params.analysis_id)
     json_path.write_text(json.dumps(payload, indent=2), encoding='utf-8')
     html_path.write_text(render_html(payload), encoding='utf-8')
     log_path.write_text('Paleoproteomics QC report generated.\n', encoding='utf-8')

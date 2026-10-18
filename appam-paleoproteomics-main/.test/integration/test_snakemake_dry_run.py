@@ -87,8 +87,11 @@ class SnakemakeDryRunTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("results/mzml/S1_RAW.mzML", result.stdout)
         self.assertIn("results/mzml/S2_D.mzML", result.stdout)
-        self.assertIn("results/maxquant/combined/txt/proteinGroups.txt", result.stdout)
-        self.assertIn("results/maxquant/mqpar/all_samples.mqpar.xml", result.stdout)
+        self.assertIn("results/maxquant/batch/combined/txt/proteinGroups.txt", result.stdout)
+        self.assertIn("results/maxquant/batch/combined/txt/peptides.txt", result.stdout)
+        self.assertIn("results/maxquant/batch/combined/txt/evidence.txt", result.stdout)
+        self.assertIn("results/maxquant/batch/mqpar.xml", result.stdout)
+        self.assertIn("results/reports/paleoproteomics-qc.html", result.stdout)
         self.assertIn("finalize_raw_mzml", result.stdout)
         self.assertIn("finalize_bruker_mzml", result.stdout)
 
@@ -118,19 +121,34 @@ class SnakemakeDryRunTests(unittest.TestCase):
     def test_dry_run_shows_maxquant_command(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             result = self._run_snakemake(
-                ["-n", "-p", "--cores", "1", "results/maxquant/combined/txt/proteinGroups.txt"],
+                ["-n", "-p", "--cores", "1", "results/maxquant/batch/combined/txt/proteinGroups.txt"],
                 tmpdir,
             )
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("dotnet", result.stdout)
         self.assertIn("/opt/tools/maxquant-current/bin/MaxQuantCmd.dll", result.stdout)
-        self.assertIn("all_samples.mqpar.xml", result.stdout)
+        self.assertIn("mqpar.xml", result.stdout)
         self.assertIn("proteinGroups.txt", result.stdout)
-        self.assertIn("cd results/maxquant", result.stdout)
-        self.assertIn("results/logs/run_maxquant.log", result.stdout)
-        self.assertNotIn("./results/logs/run_maxquant.log", result.stdout)
+        self.assertIn("peptides.txt", result.stdout)
+        self.assertIn("evidence.txt", result.stdout)
+        self.assertIn("cd results/maxquant/batch", result.stdout)
+        self.assertIn("results/logs/run_maxquant/batch.log", result.stdout)
         self.assertNotIn("if [ ! -f", result.stdout)
+
+    def test_dry_run_supports_per_sample_maxquant(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = self._run_snakemake(
+                ["-n", "--cores", "1", "--config", "maxquant_mode=per_sample_id"],
+                tmpdir,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("results/maxquant/samples/S1_RAW/mqpar.xml", result.stdout)
+        self.assertIn("results/maxquant/samples/S2_D/mqpar.xml", result.stdout)
+        self.assertIn("results/maxquant/samples/S1_RAW/combined/txt/proteinGroups.txt", result.stdout)
+        self.assertIn("results/maxquant/samples/S2_D/combined/txt/evidence.txt", result.stdout)
+        self.assertIn("paleoproteomics_qc_sample", result.stdout)
 
     def test_dry_run_quotes_tool_paths_from_config(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -165,7 +183,7 @@ class SnakemakeDryRunTests(unittest.TestCase):
             result.stdout,
         )
         self.assertIn(
-            f"cd {shell_quote(str(tmp_path / 'tool paths with spaces' / 'MaxQuant Output'))}",
+            f"cd {shell_quote(str(tmp_path / 'tool paths with spaces' / 'MaxQuant Output' / 'batch'))}",
             result.stdout,
         )
 

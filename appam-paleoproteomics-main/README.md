@@ -1,6 +1,6 @@
 # APPAM paleoproteomics
 
-This Snakemake workflow converts Thermo `.RAW` files and Bruker `.d` directories to mzML, renders one batch MaxQuant parameter file, runs MaxQuant, and generates descriptive paleoproteomics QC.
+This Snakemake workflow converts Thermo `.RAW` files and Bruker `.d` directories to mzML, renders MaxQuant parameters, runs either a joint or per-sample MaxQuant search, and generates descriptive paleoproteomics QC.
 
 It is an optional APPAM workflow. Deamidation and identification counts are reported descriptively; they are not, by themselves, evidence of peptide antiquity or authenticity.
 
@@ -28,6 +28,8 @@ Sample IDs must be unique. `experiment` must be non-empty and `fraction` must be
 - minimum peptide length and mass tolerances;
 - match-between-runs and contaminant settings;
 - exact converter, .NET, and MaxQuant executable paths.
+- `maxquant_mode`: `batch` for one joint search or `per_sample_id` for one isolated search per acquisition.
+- the MaxQuant version, FASTA parsing rules, and DDA/DIA missed-cleavage limits written into every generated XML file.
 
 For local changes, use an ignored `config/config.local.yaml` rather than editing tracked defaults.
 The tracked MaxQuant template is `workflow/templates/mqpar.template.xml`.
@@ -45,12 +47,11 @@ Snakemake discovers `workflow/Snakefile` from the repository root.
 
 - `results/thermo/` and `results/bruker/`: converter intermediates.
 - `results/mzml/`: normalized mzML inputs.
-- `results/maxquant/mqpar/all_samples.mqpar.xml`: rendered batch search config.
-- `results/maxquant/combined/txt/proteinGroups.txt`
-- `results/maxquant/combined/txt/peptides.txt`
-- `results/maxquant/combined/txt/evidence.txt`
-- `results/reports/paleoproteomics-qc.json`
-- `results/reports/paleoproteomics-qc.html`
+- `results/maxquant/batch/mqpar.xml`: rendered joint-search config in `batch` mode.
+- `results/maxquant/batch/combined/txt/`: batch proteinGroups, peptides, and evidence tables.
+- `results/maxquant/samples/{sample}/`: isolated mqpar and result tables in `per_sample_id` mode.
+- `results/reports/maxquant/`: per-search QC JSON and HTML files.
+- `results/reports/paleoproteomics-qc.{json,html}`: combined QC summary for either mode.
 
 The QC report counts identified groups/peptides/evidence, reverse and contaminant records, raw-file coverage, and available deamidation fields. Authentication, taxonomic interpretation, and contamination assessment still require study-specific controls and expert review.
 

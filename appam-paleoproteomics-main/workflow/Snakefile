@@ -11,8 +11,8 @@ include: "rules/maxquant.smk"
 
 rule all:
     input:
-        expand("<results>/mzml/{sample}.mzML", sample=SAMPLE_IDS),
-        "<maxquant>/mqpar/all_samples.mqpar.xml",
-        "<maxquant>/combined/txt/proteinGroups.txt",
+        MZML_TARGETS,
+        MQPAR_TARGETS,
+        MAXQUANT_TARGETS,
         "<results>/reports/paleoproteomics-qc.json",
         "<results>/reports/paleoproteomics-qc.html",

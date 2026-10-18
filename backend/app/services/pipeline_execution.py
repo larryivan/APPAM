@@ -1286,6 +1286,9 @@ def _paleoproteomics_context(project_id: str, job_id: str, params: dict, run_id:
                 'maxquant_output_dir': str(maxquant_output_dir),
             })
         else:
+            maxquant_mode = str(params.get('maxquant_mode', 'batch')).strip().lower()
+            if maxquant_mode not in {'batch', 'per_sample_id'}:
+                raise ValueError('maxquant_mode must be batch or per_sample_id')
             config_overrides = {
                 'sample_table': str(resolved_sample_table),
                 'mqpar_template': str(workflow_root / 'workflow' / 'templates' / 'mqpar.template.xml'),
@@ -1294,11 +1297,15 @@ def _paleoproteomics_context(project_id: str, job_id: str, params: dict, run_id:
                 'threads': int(params.get('cores', 4)),
                 'runtime_env': str(runtime_env),
                 'maxquant_version': os.getenv('APPAM_PALEO_MAXQUANT_VERSION', '2.8.1.0'),
+                'maxquant_mode': maxquant_mode,
                 'fasta_path': str(fasta_path),
                 'match_between_runs': bool(params.get('match_between_runs', False)),
                 'enzymes': _list_parameter(params, 'enzymes', ['Trypsin/P']),
                 'enzyme_mode': int(params.get('enzyme_mode', 4)),
                 'max_missed_cleavages': int(params.get('max_missed_cleavages', 0)),
+                'max_missed_cleavages_dia': int(params.get('max_missed_cleavages_dia', params.get('max_missed_cleavages', 0))),
+                'identifier_parse_rule': str(params.get('identifier_parse_rule', r'^>((tr\|)|(sp\|))?(\S+)')),
+                'description_parse_rule': str(params.get('description_parse_rule', r'^\S+\s+(.*)$')),
                 'fixed_modifications': _list_parameter(params, 'fixed_modifications', ['Carbamidomethyl (C)']),
                 'variable_modifications': _list_parameter(
                     params,

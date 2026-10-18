@@ -115,6 +115,64 @@ class RenderMqparTests(unittest.TestCase):
             root = ET.parse(output_xml).getroot()
             self.assertEqual(root.findtext(".//filePaths/string"), str(explicit_mzml))
 
+    def test_render_mqpar_filters_to_requested_sample_ids(self):
+        module = load_render_mqpar_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            first_input = tmp_path / "S1.RAW"
+            second_input = tmp_path / "S2.RAW"
+            first_input.write_text("raw1", encoding="utf-8")
+            second_input.write_text("raw2", encoding="utf-8")
+            first_mzml = (tmp_path / "mzml" / "S1.mzML").resolve()
+            second_mzml = (tmp_path / "mzml" / "S2.mzML").resolve()
+            first_mzml.parent.mkdir(parents=True, exist_ok=True)
+            first_mzml.write_text("mzml1", encoding="utf-8")
+            second_mzml.write_text("mzml2", encoding="utf-8")
+            samples_path = self.write_samples_tsv(
+                tmp_path,
+                [
+                    ("S1", str(first_input), "Experiment1", "1"),
+                    ("S2", str(second_input), "Experiment2", "2"),
+                ],
+            )
+            output_xml = tmp_path / "S2" / "mqpar.xml"
+
+            module.render_mqpar(
+                samples_path=samples_path,
+                config_path=FIXTURE_DIR / "test_config.yaml",
+                template_path=FIXTURE_DIR / "test_mqpar.template.xml",
+                mzml_dir=Path("results/mzml"),
+                output_path=output_xml,
+                mzml_paths={"S1": first_mzml, "S2": second_mzml},
+                sample_ids=["S2"],
+            )
+
+            root = ET.parse(output_xml).getroot()
+            self.assertEqual([node.text for node in root.findall(".//filePaths/string")], [str(second_mzml)])
+            self.assertEqual([node.text for node in root.findall(".//experiments/string")], ["Experiment2"])
+            self.assertEqual([node.text for node in root.findall(".//fractions/short")], ["2"])
+
+    def test_render_mqpar_rejects_unknown_requested_sample_id(self):
+        module = load_render_mqpar_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            input_path = tmp_path / "S1.RAW"
+            input_path.write_text("raw1", encoding="utf-8")
+            samples_path = self.write_samples_tsv(
+                tmp_path,
+                [("S1", str(input_path), "Experiment1", "1")],
+            )
+
+            with self.assertRaisesRegex(ValueError, "unknown sample_id requested for mqpar: S2"):
+                module.render_mqpar(
+                    samples_path=samples_path,
+                    config_path=FIXTURE_DIR / "test_config.yaml",
+                    template_path=FIXTURE_DIR / "test_mqpar.template.xml",
+                    mzml_dir=Path("results/mzml"),
+                    output_path=tmp_path / "mqpar.xml",
+                    sample_ids=["S2"],
+                )
+
     def test_render_mqpar_accepts_config_data_without_config_path(self):
         module = load_render_mqpar_module()
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -192,15 +250,15 @@ class RenderMqparTests(unittest.TestCase):
             root = ET.parse(output_xml).getroot()
             self.assertEqual(
                 root.findtext(".//fixedSearchFolder"),
-                str((tmp_path / "results" / "maxquant" / "search").resolve()),
+                str((tmp_path / "results" / "maxquant" / "mqpar" / "search").resolve()),
             )
             self.assertEqual(
                 root.findtext(".//fixedCombinedFolder"),
-                str((tmp_path / "results" / "maxquant" / "combined").resolve()),
+                str((tmp_path / "results" / "maxquant" / "mqpar" / "combined").resolve()),
             )
             self.assertEqual(
                 root.findtext(".//tempFolder"),
-                str((tmp_path / "results" / "maxquant" / "tmp").resolve()),
+                str((tmp_path / "results" / "maxquant" / "mqpar" / "tmp").resolve()),
             )
 
     def test_render_mqpar_preserves_scalar_types_from_template(self):
