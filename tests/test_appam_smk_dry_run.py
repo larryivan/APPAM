@@ -118,6 +118,8 @@ class AppamSmkDryRunTests(unittest.TestCase):
                     self.assertIn('megahit', result.stdout)
                     self.assertIn('bowtie2_align', result.stdout)
                     self.assertIn('metawrap_binning', result.stdout)
+                    self.assertIn('mag_summary', result.stdout)
+                    self.assertIn('visualization_report', result.stdout)
                     if ancient_only:
                         self.assertIn('split_contigs_by_pydamage', result.stdout)
                     if refinement:
@@ -131,6 +133,7 @@ class AppamSmkDryRunTests(unittest.TestCase):
                 'enable_abricate': True,
                 'enable_rgi': True,
                 'enable_antismash': True,
+                'enable_variants': True,
             })
             annotation_path = root / 'full-annotation.yaml'
             annotation_path.write_text(yaml.safe_dump(annotation_config, sort_keys=False), encoding='utf-8')
@@ -154,6 +157,8 @@ class AppamSmkDryRunTests(unittest.TestCase):
             self.assertEqual(annotation_result.returncode, 0, annotation_result.stdout)
             self.assertIn('rgi_annotation', annotation_result.stdout)
             self.assertIn('antismash_annotation', annotation_result.stdout)
+            self.assertIn('freebayes_variants', annotation_result.stdout)
+            self.assertIn('filter_variants_and_consensus', annotation_result.stdout)
 
 
 if __name__ == '__main__':

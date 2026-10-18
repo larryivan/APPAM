@@ -159,7 +159,8 @@ THREAD_PARAMETER_NAMES = {
 ADMIN_ONLY_WORKFLOW_PARAMETERS = {
     'metawrap_env', 'pydamage_env', 'checkm_env', 'checkm1_env', 'checkm2_env',
     'gunc_env', 'gtdbtk_env', 'prokka_env', 'eggnog_env', 'abricate_env',
-    'rgi_env', 'antismash_env', 'checkm_db', 'checkm1_db', 'checkm2_db',
+    'rgi_env', 'antismash_env', 'freebayes_env', 'bcftools_env', 'reporting_env',
+    'checkm_db', 'checkm1_db', 'checkm2_db',
     'gunc_db', 'gtdbtk_db', 'eggnog_db', 'rgi_db', 'runtime_env', 'dotnet_bin',
     'maxquant_cmd_dll', 'thermo_raw_file_parser', 'timsconvert_bin',
     'openms_fileconverter',
@@ -350,6 +351,8 @@ ADDITIONAL_TOOLS = [
             {'name': 'enable_abricate', 'description': 'Run ABRicate screening', 'type': 'flag', 'default': False},
             {'name': 'enable_rgi', 'description': 'Run RGI resistome screening', 'type': 'flag', 'default': False},
             {'name': 'enable_antismash', 'description': 'Run antiSMASH BGC annotation', 'type': 'flag', 'default': False},
+            {'name': 'enable_variants', 'description': 'Run haploid FreeBayes variant calling and build a consensus sequence', 'type': 'flag', 'default': False},
+            {'name': 'enable_visualization', 'description': 'Generate publication-ready plots and a self-contained report', 'type': 'flag', 'default': True},
             {'name': 'annotation_threads', 'description': 'Threads for per-sample annotation modules', 'type': 'integer', 'default': 8},
             {'name': 'abricate_db', 'description': 'ABRicate database name', 'type': 'string', 'options': ['ncbi', 'card', 'vfdb', 'plasmidfinder', 'resfinder'], 'default': 'vfdb'},
             {'name': 'target_rule', 'description': 'Optional rule or file target', 'type': 'string'},
@@ -375,6 +378,9 @@ ADDITIONAL_TOOLS = [
             {'name': 'rgi_db_mode', 'description': 'RGI database mode', 'type': 'string', 'options': ['global', 'local'], 'default': 'global'},
             {'name': 'rgi_db', 'description': 'Override local RGI database path when using local mode (optional)', 'type': 'string'},
             {'name': 'antismash_env', 'description': 'Override antiSMASH conda environment path (optional)', 'type': 'string'},
+            {'name': 'freebayes_env', 'description': 'Override FreeBayes conda environment path (optional)', 'type': 'string'},
+            {'name': 'bcftools_env', 'description': 'Override BCFtools conda environment path (optional)', 'type': 'string'},
+            {'name': 'reporting_env', 'description': 'Override reporting conda environment path (optional)', 'type': 'string'},
         ],
     },
     {

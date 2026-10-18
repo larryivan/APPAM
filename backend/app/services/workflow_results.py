@@ -17,6 +17,8 @@ INTERESTING_SUFFIXES = {
     '.html',
     '.json',
     '.mzml',
+    '.pdf',
+    '.png',
     '.tsv',
     '.txt',
     '.xml',
@@ -37,6 +39,12 @@ APPAM_SMK_PATTERNS = (
     ('ABRicate combined report', 'annotation/abricate/*/abricate.tsv', 'annotation'),
     ('RGI reports', 'annotation/rgi/*/*.txt', 'annotation'),
     ('antiSMASH index', 'annotation/antismash/*/*/index.html', 'annotation'),
+    ('MAG summary', 'summaries/MAG_summary.tsv', 'summary'),
+    ('Visualization report', 'visualization/report.html', 'report'),
+    ('Visualization report data', 'visualization/report-data.json', 'summary'),
+    ('Visualization plot', 'visualization/**/*.png', 'visualization'),
+    ('Filtered variants', 'variants/*/*.filtered.vcf.gz', 'variants'),
+    ('Consensus sequence', 'consensus/*.consensus.fa.gz', 'fasta'),
 )
 
 PALEO_PATTERNS = (
@@ -290,11 +298,14 @@ def build_appam_smk_summary(results_dir: Path) -> dict:
     checkm2_reports = sorted(results_dir.glob('checkm2/*/quality_report.tsv'))
     gunc_reports = sorted(results_dir.glob('gunc/*/GUNC.progenomes_2.1.maxCSS_level.tsv'))
     gtdb_reports = sorted(results_dir.glob('gtdbtk/*/*.summary.tsv'))
+    mag_summary = results_dir / 'summaries' / 'MAG_summary.tsv'
     return {
         'workflow_id': 'appam-smk',
         'counts': {
             'pydamage_reports': len(list(results_dir.glob('pydamage/*/pydamage_results.csv'))),
-            'refined_mag_dirs': len(list(results_dir.glob('metawrap/bin_refinement/*/metawrap_50_10_bins'))),
+            'refined_mag_dirs': len(list(results_dir.glob('metawrap/bin_refinement/*/metawrap_*_bins'))),
+            'initial_bin_dirs': len(list(results_dir.glob('metawrap/binning/*/*_bins'))),
+            'mag_summary_rows': _count_tsv_rows(mag_summary),
             'checkm2_reports': len(checkm2_reports),
             'gunc_reports': len(gunc_reports),
             'gtdbtk_reports': len(gtdb_reports),
@@ -303,8 +314,11 @@ def build_appam_smk_summary(results_dir: Path) -> dict:
             'abricate_done': len(list(results_dir.glob('annotation/abricate/*/abricate.done'))),
             'rgi_done': len(list(results_dir.glob('annotation/rgi/*/rgi.done'))),
             'antismash_done': len(list(results_dir.glob('annotation/antismash/*/antismash.done'))),
+            'variant_sets': len(list(results_dir.glob('variants/*/*.filtered.vcf.gz'))),
+            'visualization_reports': len(list(results_dir.glob('visualization/report.html'))),
         },
         'previews': {
+            'mag_summary': _read_tsv_preview(mag_summary),
             'checkm2': _read_tsv_preview(checkm2_reports[0]) if checkm2_reports else {'exists': False, 'rows': []},
             'gunc': _read_tsv_preview(gunc_reports[0]) if gunc_reports else {'exists': False, 'rows': []},
             'gtdbtk': _read_tsv_preview(gtdb_reports[0]) if gtdb_reports else {'exists': False, 'rows': []},

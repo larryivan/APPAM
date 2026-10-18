@@ -29,7 +29,14 @@ _FROZEN_MODES = {'retry', 'resume'}
 
 # Environments APPAM-SMK always executes, plus the ones each optional module adds.
 # Mirrors get_appam_smk_runtime_checks so only enabled tools gate the audit.
-_APPAM_SMK_CORE_TOOLS = ('preprocessing_env', 'mapping_env', 'assembly_env', 'metawrap_env', 'pydamage_env')
+_APPAM_SMK_CORE_TOOLS = (
+    'preprocessing_env',
+    'mapping_env',
+    'assembly_env',
+    'metawrap_env',
+    'pydamage_env',
+    'reporting_env',
+)
 _APPAM_SMK_MODULE_TOOLS = {
     'enable_bin_refinement': ('checkm1_env',),
     'enable_checkm1': ('checkm1_env',),
@@ -41,6 +48,7 @@ _APPAM_SMK_MODULE_TOOLS = {
     'enable_abricate': ('abricate_env',),
     'enable_rgi': ('rgi_env',),
     'enable_antismash': ('antismash_env',),
+    'enable_variants': ('freebayes_env', 'bcftools_env'),
 }
 
 

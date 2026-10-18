@@ -36,6 +36,8 @@ Edit a local copy of `config/config.yaml`. Important switches are:
 - `enable_checkm1`: legacy CheckM1 report; default `false`.
 - `enable_checkm2`, `enable_gunc`, `enable_gtdbtk`, `enable_prokka`: core result modules.
 - `enable_eggnog`, `enable_abricate`, `enable_rgi`, `enable_antismash`: optional expensive/specialized modules.
+- `enable_variants`: optional haploid FreeBayes/BCFtools SNP calling and consensus generation; default `false`.
+- `visualization.enabled`: generate dynamic figures and a self-contained HTML report; default `true`. The merged MAG table is always generated.
 - `require_database_manifest`: fail before execution when a versioned database manifest is absent; enabled by the Web publication preset.
 
 The `tools` entries may point to existing Conda/Mamba environment prefixes. Snakemake activates those prefixes through the local or Slurm profile. Environment specifications used by APPAM are under `../docker/tools/environments/`.
@@ -81,9 +83,13 @@ For Slurm, use `--profile profiles/slurm` after adapting account/partition defau
 - `metawrap/bin_refinement/{sample}/`: optional refined bins.
 - `checkm2/`, `gunc/`, `gtdbtk/`: MAG quality and taxonomy.
 - `prokka/`, `eggnog/`, `abricate/`, `rgi/`, `antismash/`: enabled annotations.
+- `summaries/MAG_summary.tsv`: one merged, machine-readable MAG table built from the outputs that were actually enabled.
+- `visualization/report.html`: self-contained run report containing only generated figures and effective scientific settings.
+- `visualization/report-data.json`: machine-readable report index and aggregate counts.
+- `variants/{sample}/` and `consensus/`: optional filtered variants and haploid consensus sequences.
 - benchmark and log directories declared in the effective config.
 
-Variant calling outputs are auxiliary and are not interpreted as a general ancient-DNA damage correction.
+The report never inserts bundled example results. Missing or disabled analysis modules are omitted rather than presented as completed. Variant calling outputs are auxiliary and are not interpreted as a general ancient-DNA damage correction.
 
 ## Scientific boundaries
 
@@ -91,6 +97,7 @@ Variant calling outputs are auxiliary and are not interpreted as a general ancie
 - Host depletion is not performed automatically. Apply and document study-appropriate host screening before APPAM when required.
 - The Prokka workflow currently uses bacterial metagenome mode. Archaeal or mixed-domain MAG sets require taxonomy-aware annotation outside this rule.
 - Empty selected bin sets and empty annotation inputs are treated as failures rather than successful zero-result runs.
+- `High-quality` and `Medium-quality` in `MAG_summary.tsv` are completeness/contamination proxy labels. APPAM does not currently evaluate the rRNA/tRNA requirements needed for a full MIMAG high-quality classification; the `Quality_Basis` column records this limitation.
 - Negative controls, extraction blanks, damage thresholds, and downstream biological interpretation remain study-design decisions and must be reported separately.
 
 ## Validation

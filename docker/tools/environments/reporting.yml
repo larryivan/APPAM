@@ -1,0 +1,15 @@
+name: reporting
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.12
+  - numpy=1.26.4
+  - pandas=2.2
+  # Every plotting script calls matplotlib.use("Agg"), so the headless
+  # matplotlib-base package is the correct dependency; the full package would
+  # only add an unused GUI toolkit to the image.
+  # Pinned to the 3.10 series rather than one patch release: confirm the exact
+  # build against conda-forge and tighten to `==` before a release tag.
+  - matplotlib-base=3.10
+  - seaborn=0.13.2

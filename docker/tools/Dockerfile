@@ -90,6 +90,7 @@ RUN retry-bash "micromamba create -y -n rgi -f /opt/appam/docker/tools/environme
 RUN retry-bash "micromamba create -y -n abricate -f /opt/appam/docker/tools/environments/abricate.yml && micromamba clean --all --yes"
 RUN retry-bash "micromamba create -y -n gtdbtk -f /opt/appam/docker/tools/environments/gtdbtk.yml && micromamba clean --all --yes"
 RUN retry-bash "micromamba create -y -n antismash -f /opt/appam/docker/tools/environments/antismash.yml && micromamba clean --all --yes"
+RUN retry-bash "micromamba create -y -n reporting -f /opt/appam/docker/tools/environments/reporting.yml && micromamba clean --all --yes"
 
 RUN retry-bash "micromamba create -y -n paleoproteomics -f /opt/appam/appam-paleoproteomics-main/docker/environment.yml && micromamba run -n paleoproteomics pip install -r /opt/appam/appam-paleoproteomics-main/docker/requirements-pypi.txt && micromamba install -y -n paleoproteomics -c bioconda -c conda-forge openms && micromamba run -n paleoproteomics pip install --no-deps git+https://github.com/gtluu/pyimzML.git@fe24388984aa96a18ef2ed54927ec05d6701cc04 git+https://github.com/gtluu/pyTDFSDK.git@4808da81d3e37f82da96f392dbb446c3733edacb git+https://github.com/gtluu/pyBaf2Sql.git@06bb37fa3168b113c73b22d1d85fb4203bb83fb9 git+https://github.com/gtluu/timsconvert.git@c8bbfd98251e07e24522220fd4309e37eea4d7a9 && micromamba clean --all --yes"
 
@@ -157,6 +158,9 @@ ENV APPAM_SMK_ABRICATE_ENV=/opt/conda/envs/abricate
 ENV APPAM_SMK_RGI_ENV=/opt/conda/envs/rgi
 ENV APPAM_SMK_RGI_DB_MODE=global
 ENV APPAM_SMK_ANTISMASH_ENV=/opt/conda/envs/antismash
+ENV APPAM_SMK_FREEBAYES_ENV=/opt/conda/envs/freebayes
+ENV APPAM_SMK_BCFTOOLS_ENV=/opt/conda/envs/bcftools
+ENV APPAM_SMK_REPORTING_ENV=/opt/conda/envs/reporting
 ENV APPAM_PALEO_DOTNET_BIN=dotnet
 ENV APPAM_PALEO_MAXQUANT_CMD=/opt/tools/maxquant-current/bin/MaxQuantCmd.dll
 ENV APPAM_PALEO_MAXQUANT_VERSION=2.8.1.0

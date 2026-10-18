@@ -40,6 +40,7 @@ DEFAULT_SMK_TOOLS = (
     'assembly_env',
     'metawrap_env',
     'pydamage_env',
+    'reporting_env',
     'checkm2_env',
     'gunc_env',
     'gtdbtk_env',
@@ -57,6 +58,8 @@ DEFAULT_SMK_MODULES = {
     'enable_abricate': False,
     'enable_rgi': False,
     'enable_antismash': False,
+    'enable_variants': False,
+    'enable_visualization': True,
 }
 
 
@@ -592,6 +595,15 @@ class CommandExecutionContractTests(unittest.TestCase):
 
     def test_publication_audit_requires_package_identity_for_enabled_local_tools(self):
         manifest = complete_evidence_manifest()
+        manifest['runtime_metadata']['tools'].pop('reporting_env')
+        report = audit_run_manifest(manifest)
+        self.assertIn('runtime_identity', report['blockers'])
+        self.assertIn(
+            'reporting_env',
+            next(check['detail'] for check in report['checks'] if check['id'] == 'runtime_identity'),
+        )
+
+        manifest = complete_evidence_manifest()
         manifest['runtime_metadata']['tools'].pop('gtdbtk_env')
         report = audit_run_manifest(manifest)
         self.assertIn('runtime_identity', report['blockers'])
@@ -607,6 +619,14 @@ class CommandExecutionContractTests(unittest.TestCase):
         # An enabled optional module must.
         manifest['runtime_metadata']['modules']['enable_antismash'] = True
         self.assertIn('runtime_identity', audit_run_manifest(manifest)['blockers'])
+
+        manifest = complete_evidence_manifest()
+        manifest['runtime_metadata']['modules']['enable_variants'] = True
+        report = audit_run_manifest(manifest)
+        self.assertIn('runtime_identity', report['blockers'])
+        detail = next(check['detail'] for check in report['checks'] if check['id'] == 'runtime_identity')
+        self.assertIn('freebayes_env', detail)
+        self.assertIn('bcftools_env', detail)
 
     def test_publication_audit_requires_environment_and_maxquant_identity_for_paleoproteomics(self):
         manifest = complete_paleoproteomics_manifest()

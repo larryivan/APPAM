@@ -746,6 +746,13 @@ class AuthPermissionApiTests(unittest.TestCase):
         parameter_names = {parameter['name'] for parameter in catalog['parameters']}
         self.assertNotIn('metawrap_env', parameter_names)
         self.assertNotIn('checkm2_db', parameter_names)
+        self.assertNotIn('reporting_env', parameter_names)
+        self.assertNotIn('freebayes_env', parameter_names)
+        paleo_parameters = {
+            parameter['name']
+            for parameter in user_tools['workflow-appam-paleoproteomics']['parameters']
+        }
+        self.assertNotIn('timsconvert_env', paleo_parameters)
         self.assertNotIn('maxquant', user_tools)
 
         rejected = user_client.post(
@@ -762,6 +769,7 @@ class AuthPermissionApiTests(unittest.TestCase):
         admin_catalog = admin_client.get('/api/tools').get_json()['tools_by_key']['workflow-appam-smk']
         admin_parameter_names = {parameter['name'] for parameter in admin_catalog['parameters']}
         self.assertIn('metawrap_env', admin_parameter_names)
+        self.assertIn('reporting_env', admin_parameter_names)
         self.assertIn('maxquant', admin_client.get('/api/tools').get_json()['tools_by_key'])
 
     def test_admin_worker_status_endpoint_reports_local_executor(self):
@@ -1022,6 +1030,7 @@ class AuthPermissionApiTests(unittest.TestCase):
         eggnog_env = Path(TEST_TEMP_DIR) / 'envs' / 'eggnog_py310'
         abricate_env = Path(TEST_TEMP_DIR) / 'envs' / 'abricate'
         antismash_env = Path(TEST_TEMP_DIR) / 'envs' / 'antismash'
+        reporting_env = Path(TEST_TEMP_DIR) / 'envs' / 'reporting'
         paleoproteomics_env = Path(TEST_TEMP_DIR) / 'envs' / 'paleoproteomics'
         checkm_db = Path(TEST_TEMP_DIR) / 'db' / 'checkm'
         checkm2_db = Path(TEST_TEMP_DIR) / 'db' / 'checkm2'
@@ -1044,6 +1053,7 @@ class AuthPermissionApiTests(unittest.TestCase):
             eggnog_env,
             abricate_env,
             antismash_env,
+            reporting_env,
             paleoproteomics_env,
             checkm_db,
             checkm2_db,
@@ -1078,6 +1088,7 @@ class AuthPermissionApiTests(unittest.TestCase):
             'APPAM_SMK_EGGNOG_DB': str(eggnog_db),
             'APPAM_SMK_ABRICATE_ENV': str(abricate_env),
             'APPAM_SMK_ANTISMASH_ENV': str(antismash_env),
+            'APPAM_SMK_REPORTING_ENV': str(reporting_env),
             'APPAM_PALEO_MAXQUANT_CMD': str(maxquant_cmd),
             'APPAM_PALEO_ENV': str(paleoproteomics_env),
             'APPAM_PALEO_DOTNET_BIN': '/bin/echo',
@@ -1150,6 +1161,8 @@ class AuthPermissionApiTests(unittest.TestCase):
             config_payload = yaml.safe_load(generated_config.read_text(encoding='utf-8'))
             self.assertIn('adapter1', config_payload['params'])
             self.assertFalse(config_payload['params']['use_ancient_contigs'])
+            self.assertTrue(config_payload['visualization']['enabled'])
+            self.assertEqual(config_payload['tools']['reporting_env'], str(reporting_env))
             resolved_manifest = Path(config_payload['samples_file'])
             self.assertTrue(resolved_manifest.is_file())
             self.assertIn(str(raw_data_dir.resolve()), resolved_manifest.read_text(encoding='utf-8'))

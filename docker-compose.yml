@@ -77,6 +77,9 @@ services:
       APPAM_SMK_RGI_ENV: ${APPAM_SMK_RGI_ENV:-/opt/conda/envs/rgi}
       APPAM_SMK_RGI_DB_MODE: ${APPAM_SMK_RGI_DB_MODE:-global}
       APPAM_SMK_ANTISMASH_ENV: ${APPAM_SMK_ANTISMASH_ENV:-/opt/conda/envs/antismash}
+      APPAM_SMK_FREEBAYES_ENV: ${APPAM_SMK_FREEBAYES_ENV:-/opt/conda/envs/freebayes}
+      APPAM_SMK_BCFTOOLS_ENV: ${APPAM_SMK_BCFTOOLS_ENV:-/opt/conda/envs/bcftools}
+      APPAM_SMK_REPORTING_ENV: ${APPAM_SMK_REPORTING_ENV:-/opt/conda/envs/reporting}
       APPAM_RUNTIME_LOG_DIR: "/runtime-logs"
       OPENCODE_PORT: "19455"
       OPENCODE_BASE_URL: "http://127.0.0.1:19455"

@@ -79,6 +79,9 @@ def get_appam_smk_runtime_settings(params: dict | None = None) -> dict:
             'abricate_env': _setting(params, ('abricate_env',), ('APPAM_SMK_ABRICATE_ENV',), '/opt/conda/envs/abricate'),
             'rgi_env': _setting(params, ('rgi_env',), ('APPAM_SMK_RGI_ENV',), '/opt/conda/envs/rgi'),
             'antismash_env': _setting(params, ('antismash_env',), ('APPAM_SMK_ANTISMASH_ENV',), '/opt/conda/envs/antismash'),
+            'freebayes_env': _setting(params, ('freebayes_env',), ('APPAM_SMK_FREEBAYES_ENV',), '/opt/conda/envs/freebayes'),
+            'bcftools_env': _setting(params, ('bcftools_env',), ('APPAM_SMK_BCFTOOLS_ENV',), '/opt/conda/envs/bcftools'),
+            'reporting_env': _setting(params, ('reporting_env',), ('APPAM_SMK_REPORTING_ENV',), '/opt/conda/envs/reporting'),
         },
         'databases': {
             'checkm1_db': _database_setting(
@@ -108,6 +111,8 @@ def get_appam_smk_runtime_settings(params: dict | None = None) -> dict:
             'enable_abricate': _bool_setting(params, 'enable_abricate', False),
             'enable_rgi': _bool_setting(params, 'enable_rgi', False),
             'enable_antismash': _bool_setting(params, 'enable_antismash', False),
+            'enable_variants': _bool_setting(params, 'enable_variants', False),
+            'enable_visualization': _bool_setting(params, 'enable_visualization', True),
         },
     }
 
@@ -158,6 +163,7 @@ def get_appam_smk_runtime_checks(settings: dict | None = None) -> list[dict]:
         _env_check('assembly_env', tools.get('assembly_env'), 'Assembly'),
         _env_check('metawrap_env', tools.get('metawrap_env'), 'MetaWRAP'),
         _env_check('pydamage_env', tools.get('pydamage_env'), 'PyDamage'),
+        _env_check('reporting_env', tools.get('reporting_env'), 'Summary and reporting'),
     ]
 
     if modules.get('enable_bin_refinement') or modules.get('enable_checkm1'):
@@ -199,6 +205,9 @@ def get_appam_smk_runtime_checks(settings: dict | None = None) -> list[dict]:
         checks.append(_env_check('antismash_env', tools.get('antismash_env'), 'antiSMASH'))
         checks.append({'name': 'antismash_db', 'status': 'ok', 'required': False, 'message': f"antiSMASH database: {databases.get('antismash_db')}"})
         checks.append({'name': 'antismash_resources', 'status': 'warn', 'required': False, 'message': 'antiSMASH can be CPU and memory intensive; consider disabling it for quick validation runs.'})
+    if modules.get('enable_variants'):
+        checks.append(_env_check('freebayes_env', tools.get('freebayes_env'), 'FreeBayes'))
+        checks.append(_env_check('bcftools_env', tools.get('bcftools_env'), 'BCFtools'))
 
     return checks
 

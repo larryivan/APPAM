@@ -32,6 +32,7 @@ params:
   enable_abricate: false
   enable_rgi: false
   enable_antismash: false
+  enable_variants: false
   annotation_threads: 8
   abricate_db: "vfdb"
   abricate_minid: 80
@@ -65,3 +66,22 @@ tools:
   abricate_env: "/path/to/abricate_env"
   rgi_env: "/path/to/rgi_env"
   antismash_env: "/path/to/antismash_env"
+  freebayes_env: "/path/to/freebayes_env"
+  bcftools_env: "/path/to/bcftools_env"
+  reporting_env: "/path/to/reporting_env"
+
+variants:
+  min_alternate_fraction: 0.33
+  min_base_quality: 20
+  min_variant_quality: 30
+  rescue_variant_quality: 20
+  rescue_alternate_observations: 2
+
+visualization:
+  enabled: true
+  reads_length_bin_size: 10
+  ani_bin_start: 95
+  ani_bin_end: 100
+  ani_bin_step: 1
+  rose_chart_min_fraction: 0.01
+  species_top_n: 10

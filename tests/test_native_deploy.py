@@ -108,6 +108,7 @@ class NativeDeploymentTests(unittest.TestCase):
             self.assertIn(f'APPAM_PALEO_TIMSCONVERT_BIN={root / ".local" / "bin" / "appam-timsconvert"}', rendered)
             self.assertIn(f'APPAM_PALEO_THERMO_RAW_FILE_PARSER={root / ".local" / "bin" / "ThermoRawFileParser"}', rendered)
             self.assertIn(f'APPAM_KRAKENUNIQ_KDB={database_root / "krakenuniq_refseq_bav" / "database.kdb"}', rendered)
+            self.assertIn(f'APPAM_SMK_REPORTING_ENV={root / "conda" / "envs" / "reporting"}', rendered)
 
     def test_checkm_contract_uses_compatible_runtime(self):
         spec = (REPO_ROOT / 'docker' / 'tools' / 'environments' / 'checkm.yml').read_text(encoding='utf-8')

@@ -194,9 +194,13 @@ def _runtime_settings_from_appam_config(config_data: dict) -> dict:
         'enable_abricate',
         'enable_rgi',
         'enable_antismash',
+        'enable_variants',
     ):
         if name in workflow_params:
             runtime_params[name] = workflow_params[name]
+    visualization = config_data.get('visualization') or {}
+    if 'enabled' in visualization:
+        runtime_params['enable_visualization'] = visualization['enabled']
     return get_appam_smk_runtime_settings(runtime_params)
 
 
@@ -1026,6 +1030,7 @@ def _appam_smk_context(project_id: str, job_id: str, params: dict, run_id: str, 
                     'enable_abricate': bool(modules.get('enable_abricate', False)),
                     'enable_rgi': bool(modules.get('enable_rgi', False)),
                     'enable_antismash': bool(modules.get('enable_antismash', False)),
+                    'enable_variants': bool(modules.get('enable_variants', False)),
                 },
                 'databases': {
                     'checkm_db': str(checkm1_db),
@@ -1055,6 +1060,25 @@ def _appam_smk_context(project_id: str, job_id: str, params: dict, run_id: str, 
                     'abricate_env': str(tools.get('abricate_env')),
                     'rgi_env': str(tools.get('rgi_env')),
                     'antismash_env': str(tools.get('antismash_env')),
+                    'freebayes_env': str(tools.get('freebayes_env')),
+                    'bcftools_env': str(tools.get('bcftools_env')),
+                    'reporting_env': str(tools.get('reporting_env')),
+                },
+                'variants': {
+                    'min_alternate_fraction': float(params.get('min_alternate_fraction', 0.33)),
+                    'min_base_quality': int(params.get('min_base_quality', 20)),
+                    'min_variant_quality': int(params.get('min_variant_quality', 30)),
+                    'rescue_variant_quality': int(params.get('rescue_variant_quality', 20)),
+                    'rescue_alternate_observations': int(params.get('rescue_alternate_observations', 2)),
+                },
+                'visualization': {
+                    'enabled': bool(modules.get('enable_visualization', True)),
+                    'reads_length_bin_size': int(params.get('reads_length_bin_size', 10)),
+                    'ani_bin_start': int(params.get('ani_bin_start', 95)),
+                    'ani_bin_end': int(params.get('ani_bin_end', 100)),
+                    'ani_bin_step': int(params.get('ani_bin_step', 1)),
+                    'rose_chart_min_fraction': float(params.get('rose_chart_min_fraction', 0.01)),
+                    'species_top_n': int(params.get('species_top_n', 10)),
                 },
             }
             config_data = _materialize_config(default_config_path, config_overrides)

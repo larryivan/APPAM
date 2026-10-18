@@ -41,6 +41,9 @@ include: "rules/contigs_filter.smk"
 include: "rules/binning.smk"
 include: "rules/classify.smk"
 include: "rules/annotation.smk"
+include: "rules/variants.smk"
+include: "rules/summary.smk"
+include: "rules/visualization.smk"
 
 BINNING_TARGETS = [
     *expand(FINAL_BINS_PATTERN, sample=SAMPLES),
@@ -65,6 +68,20 @@ if config["params"].get("enable_rgi", False):
     ANNOTATION_TARGETS += expand(f"{RESULTS_DIR}/annotation/rgi/{{sample}}/rgi.done", sample=SAMPLES)
 if config["params"].get("enable_antismash", False):
     ANNOTATION_TARGETS += expand(f"{RESULTS_DIR}/annotation/antismash/{{sample}}/antismash.done", sample=SAMPLES)
+
+VARIANT_TARGETS = []
+if ENABLE_VARIANTS:
+    VARIANT_TARGETS = [
+        *expand(f"{RESULTS_DIR}/variants/{{sample}}/{{sample}}.filtered.vcf.gz", sample=SAMPLES),
+        *expand(f"{RESULTS_DIR}/consensus/{{sample}}.consensus.fa.gz", sample=SAMPLES),
+    ]
+
+REPORT_TARGETS = [f"{RESULTS_DIR}/summaries/MAG_summary.tsv"]
+if ENABLE_VISUALIZATION:
+    REPORT_TARGETS += [
+        f"{VISUALIZATION_DIR}/report.html",
+        f"{VISUALIZATION_DIR}/report-data.json",
+    ]
 
 # optional messages, log and error handling
 # -----------------------------------------------------
@@ -108,5 +125,7 @@ rule all:
             # Binning & bin quality
             *BINNING_TARGETS,
             *ANNOTATION_TARGETS,
+            *VARIANT_TARGETS,
+            *REPORT_TARGETS,
         ]
     default_target: True
