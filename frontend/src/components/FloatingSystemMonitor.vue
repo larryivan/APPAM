@@ -21,9 +21,10 @@
         @touchstart="startDrag"
       >
         <div class="header-info">
-          <h3>System Performance Monitor</h3>
+          <h3>System monitor</h3>
           <div class="status-indicator">
-            <span>Live server metrics</span>
+            <span class="status-dot"></span>
+            <span>Live</span>
           </div>
         </div>
         <div class="header-actions">
@@ -31,7 +32,7 @@
             <Icon :name="isFullscreen ? 'minimize-2' : 'maximize-2'" :size="16" />
           </button>
           <button type="button" @click="minimizeWindow" class="control-btn" title="Minimize">
-            <Icon name="minimize-2" :size="16" />
+            <Icon name="minus" :size="16" />
           </button>
           <button type="button" @click="closeWindow" class="control-btn close-btn" title="Close">
             <Icon name="x" :size="16" />
@@ -386,14 +387,14 @@ onUnmounted(() => {
 
 .monitor-button {
   background: var(--surface-1);
-  border: var(--border-width) solid rgba(var(--accent-rgb), 0.25);
-  border-radius: 50%;
-  width: 48px;
-  height: 48px;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-base);
+  width: 40px;
+  height: 40px;
   color: var(--primary-600);
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
-  transition: all var(--transition-base);
+  box-shadow: none;
+  transition: background var(--transition-fast), color var(--transition-fast);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -401,28 +402,27 @@ onUnmounted(() => {
 }
 
 .monitor-button:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
   background: var(--surface-2);
 }
 
 /* Monitor window */
 .monitor-window {
   background: var(--surface-1);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border: var(--border-width) solid var(--border-color-light);
-  animation: scaleIn 0.2s ease-out;
+  animation: windowIn var(--transition-base);
 }
 
 /* 头部 */
 .monitor-header {
   background: var(--surface-2);
   color: var(--gray-900);
-  padding: 12px 16px;
+  min-height: 44px;
+  padding: 0 10px 0 14px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -432,8 +432,8 @@ onUnmounted(() => {
 }
 
 .header-info h3 {
-  margin: 0 0 4px 0;
-  font-size: 14px;
+  margin: 0;
+  font-size: 13px;
   font-weight: var(--font-semibold);
   font-family: var(--font-family-display);
 }
@@ -442,13 +442,26 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  color: var(--gray-600);
+  font-size: 11px;
+  color: var(--gray-500);
+}
+
+.header-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success-500);
 }
 
 .header-actions {
   display: flex;
-  gap: 8px;
+  gap: 4px;
 }
 
 .control-btn {
@@ -463,14 +476,13 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
 }
 
 .control-btn:hover {
   background: var(--surface-2);
   color: var(--gray-800);
   border-color: var(--border-color);
-  transform: translateY(-1px);
 }
 
 .close-btn:hover {
@@ -568,13 +580,13 @@ onUnmounted(() => {
 }
 
 /* 动画 */
-@keyframes scaleIn {
+@keyframes windowIn {
   from {
-    transform: scale(0.95);
+    transform: translateY(4px);
     opacity: 0;
   }
   to {
-    transform: scale(1);
+    transform: translateY(0);
     opacity: 1;
   }
 }
@@ -583,13 +595,12 @@ onUnmounted(() => {
 @media (hover: none) and (pointer: coarse) {
   .monitor-button:hover {
     transform: none;
-    box-shadow: var(--shadow-sm);
+    box-shadow: none;
     background: var(--surface-1);
   }
 
   .monitor-button:active {
-    transform: scale(0.95);
-    transition-duration: 0.1s;
+    background: var(--surface-3);
   }
 
   .control-btn:hover {
@@ -600,8 +611,7 @@ onUnmounted(() => {
   }
 
   .control-btn:active {
-    transform: scale(0.96);
-    transition-duration: 0.1s;
+    background: var(--surface-3);
   }
 }
 
@@ -613,8 +623,8 @@ onUnmounted(() => {
   }
 
   .monitor-button {
-    width: 44px;
-    height: 44px;
+    width: 42px;
+    height: 42px;
   }
 
   .monitor-window {

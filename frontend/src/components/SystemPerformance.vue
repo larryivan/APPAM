@@ -3,11 +3,7 @@
     <div class="performance-header">
       <div class="header-controls">
         <button @click="refreshData" class="btn btn-secondary refresh-btn" :class="{ loading: loading }">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="23 4 23 10 17 10"></polyline>
-            <polyline points="1 20 1 14 7 14"></polyline>
-            <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-          </svg>
+          <Icon name="rotate-ccw" :size="16" :spin="loading" />
           Refresh
         </button>
 
@@ -113,7 +109,7 @@
         <!-- Memory Usage -->
         <div class="chart-card">
           <div class="chart-header">
-            <h4>Memory Usage Distribution</h4>
+            <h4>Memory usage distribution</h4>
           </div>
           <div ref="memoryChart" class="chart-container"></div>
         </div>
@@ -121,7 +117,7 @@
         <!-- Disk Usage -->
         <div class="chart-card">
           <div class="chart-header">
-            <h4>Disk Space Usage</h4>
+            <h4>Disk space usage</h4>
           </div>
           <div ref="diskChart" class="chart-container"></div>
         </div>
@@ -129,7 +125,7 @@
         <!-- System Load -->
         <div class="chart-card">
           <div class="chart-header">
-            <h4>System Load Trend</h4>
+            <h4>System load trend</h4>
             <div class="chart-controls">
               <button @click="clearLoadHistory" class="btn btn-ghost clear-btn">Clear History</button>
             </div>
@@ -266,8 +262,8 @@ const getChartTheme = () => {
   const accentRgb = getThemeValue('--accent-rgb', '37, 99, 235')
   return {
     accentRgb,
-    primary: getThemeValue('--primary-500', '#2563eb'),
-    primary700: getThemeValue('--primary-700', '#1e40af'),
+    primary: getThemeValue('--accent-500', '#2f62c4'),
+    primary700: getThemeValue('--accent-700', '#1f458d'),
     success: getThemeValue('--success-500', '#16a34a'),
     warning: getThemeValue('--warning-500', '#f59e0b'),
     error: getThemeValue('--error-500', '#ef4444'),
@@ -674,10 +670,7 @@ onUnmounted(() => {
 <style scoped>
 .system-performance {
   background: var(--surface-1);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-6);
-  box-shadow: var(--shadow-sm);
-  border: var(--border-width) solid var(--border-color-light);
+  padding: 16px;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -688,8 +681,8 @@ onUnmounted(() => {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  margin-bottom: var(--spacing-5);
-  padding-bottom: var(--spacing-4);
+  margin-bottom: 16px;
+  padding-bottom: 12px;
   border-bottom: var(--border-width) solid var(--border-color-light);
   gap: var(--spacing-4);
   flex-shrink: 0;
@@ -707,21 +700,12 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: var(--spacing-2) var(--spacing-4);
-  border-radius: var(--radius-md);
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: var(--radius-base);
   font-size: var(--text-sm);
   font-weight: var(--font-medium);
 }
-
-.refresh-btn:hover {
-  transform: translateY(-1px);
-}
-
-.refresh-btn.loading svg {
-  animation: spin 1s linear infinite;
-}
-
-
 
 .update-indicator {
   display: flex;
@@ -731,7 +715,8 @@ onUnmounted(() => {
   color: var(--gray-600);
   background: var(--surface-2);
   border: var(--border-width) solid var(--border-color-light);
-  padding: var(--spacing-2) var(--spacing-3);
+  min-height: 28px;
+  padding: 0 9px;
   border-radius: var(--radius-full);
 }
 
@@ -745,7 +730,6 @@ onUnmounted(() => {
 
 .update-dot.active {
   background: var(--success-500);
-  box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.15);
   animation: pulse 2s infinite;
 }
 
@@ -794,7 +778,7 @@ onUnmounted(() => {
 }
 
 .status-card {
-  background: linear-gradient(180deg, var(--surface-1) 0%, var(--surface-2) 100%);
+  background: var(--surface-1);
   border: var(--border-width) solid var(--border-color-light);
   border-radius: var(--radius-lg);
   padding: var(--spacing-4);
@@ -802,14 +786,13 @@ onUnmounted(() => {
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: var(--spacing-4);
-  transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
   position: relative;
   overflow: hidden;
 }
 
 .status-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  background: var(--surface-2);
   border-color: var(--border-color-dark);
 }
 
@@ -819,21 +802,20 @@ onUnmounted(() => {
 
 .status-card.warning {
   border-left: 4px solid var(--warning-500);
-  background: linear-gradient(180deg, var(--warning-50) 0%, var(--surface-1) 60%);
+  background: var(--warning-50);
 }
 
 .status-card.critical {
   border-left: 4px solid var(--error-500);
-  background: linear-gradient(180deg, var(--error-50) 0%, var(--surface-1) 60%);
+  background: var(--error-50);
 }
 
 .status-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-md);
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-base);
   border: var(--border-width) solid var(--border-color-light);
   background: var(--surface-1);
-  box-shadow: var(--shadow-xs);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -862,7 +844,7 @@ onUnmounted(() => {
 }
 
 .status-value {
-  font-size: var(--text-2xl);
+  font-size: 20px;
   font-weight: var(--font-bold);
   color: var(--gray-900);
   margin-bottom: var(--spacing-1);
@@ -872,8 +854,7 @@ onUnmounted(() => {
   font-size: var(--text-xs);
   color: var(--gray-500);
   font-weight: var(--font-medium);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 .status-details {
@@ -902,7 +883,6 @@ onUnmounted(() => {
   border: var(--border-width) solid var(--border-color-light);
   border-radius: var(--radius-lg);
   padding: var(--spacing-4);
-  box-shadow: var(--shadow-xs);
   display: flex;
   flex-direction: column;
   min-height: 320px;
@@ -978,23 +958,9 @@ onUnmounted(() => {
 .performance-content {
   flex: 1;
   overflow-y: auto;
-  padding-right: var(--spacing-2);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-5);
   min-height: 0;
-}
-
-.performance-content::-webkit-scrollbar {
-  width: 4px;
-}
-
-.performance-content::-webkit-scrollbar-thumb {
-  background: var(--gray-300);
-  border-radius: 2px;
-}
-
-.performance-content::-webkit-scrollbar-track {
-  background: transparent;
 }
 </style>

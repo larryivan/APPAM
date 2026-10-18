@@ -199,7 +199,7 @@ const windowStyle = computed(() => {
       width: '100vw',
       height: isMobile.value ? '100vh' : '100vh',
       zIndex: 9999,
-      borderRadius: isMobile.value ? '0' : 'var(--radius-lg, 12px)'
+      borderRadius: '0'
     }
   }
 
@@ -299,8 +299,8 @@ const clearTerminal = () => {
 const initTerminal = () => {
   const darkBg = getThemeValue('--dark-bg', '#0b1220')
   const textLight = getThemeValue('--text-light', '#e2e8f0')
-  const primary400 = getThemeValue('--primary-400', '#5f8cff')
-  const primary500 = getThemeValue('--primary-500', '#2563eb')
+  const primary400 = getThemeValue('--accent-200', '#bcd0ee')
+  const primary500 = getThemeValue('--accent-500', '#2f62c4')
   const success500 = getThemeValue('--success-500', '#16a34a')
   const warning500 = getThemeValue('--warning-500', '#f59e0b')
   const error500 = getThemeValue('--error-500', '#ef4444')
@@ -611,14 +611,14 @@ onUnmounted(() => {
 
 .terminal-button {
   background: var(--surface-1);
-  border: var(--border-width) solid rgba(var(--accent-rgb), 0.25);
-  border-radius: 50%;
-  width: 48px;
-  height: 48px;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-base);
+  width: 40px;
+  height: 40px;
   color: var(--primary-600);
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
-  transition: all var(--transition-base);
+  box-shadow: none;
+  transition: background var(--transition-fast), color var(--transition-fast);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -626,28 +626,27 @@ onUnmounted(() => {
 }
 
 .terminal-button:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
   background: var(--surface-2);
 }
 
 /* 终端窗口 */
 .terminal-window {
   background: var(--surface-1);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border: var(--border-width) solid var(--border-color-light);
-  animation: scaleIn 0.2s ease-out;
+  animation: windowIn var(--transition-base);
 }
 
 /* 标题栏 */
 .terminal-header {
   background: var(--surface-2);
   color: var(--gray-900);
-  padding: 12px 16px;
+  min-height: 44px;
+  padding: 0 10px 0 14px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -662,7 +661,7 @@ onUnmounted(() => {
 }
 
 .terminal-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: var(--font-semibold);
   margin: 0;
   font-family: var(--font-family-display);
@@ -670,7 +669,7 @@ onUnmounted(() => {
 
 .header-right {
   display: flex;
-  gap: 8px;
+  gap: 4px;
 }
 
 .control-btn {
@@ -685,14 +684,13 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
 }
 
 .control-btn:hover {
   background: var(--surface-2);
   color: var(--gray-800);
   border-color: var(--border-color);
-  transform: translateY(-1px);
 }
 
 .close-btn:hover {
@@ -724,18 +722,13 @@ onUnmounted(() => {
 }
 
 /* 全屏状态下的特殊样式 */
-.terminal-window:has(.terminal-header) {
-  animation: scaleIn 0.2s ease-out;
-}
-
-/* 动画 */
-@keyframes scaleIn {
+@keyframes windowIn {
   from {
-    transform: scale(0.95);
+    transform: translateY(4px);
     opacity: 0;
   }
   to {
-    transform: scale(1);
+    transform: translateY(0);
     opacity: 1;
   }
 }
@@ -882,13 +875,12 @@ onUnmounted(() => {
 @media (hover: none) and (pointer: coarse) {
   .terminal-button:hover {
     transform: none;
-    box-shadow: var(--shadow-sm);
+    box-shadow: none;
     background: var(--surface-1);
   }
 
   .terminal-button:active {
-    transform: scale(0.95);
-    transition-duration: 0.1s;
+    background: var(--surface-3);
   }
 
   .control-btn:hover {
@@ -899,8 +891,7 @@ onUnmounted(() => {
   }
 
   .control-btn:active {
-    transform: scale(0.96);
-    transition-duration: 0.1s;
+    background: var(--surface-3);
   }
 }
 </style>

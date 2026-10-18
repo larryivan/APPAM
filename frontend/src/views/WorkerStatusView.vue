@@ -1,161 +1,246 @@
 <template>
-  <div class="worker-status">
-    <AdminNav active="worker" />
-    <header class="worker-status__hero">
-      <div>
-        <div class="worker-status__kicker">Execution Runtime</div>
-        <h1>Local Worker Status</h1>
-        <p>Monitor the embedded database-backed executor, active jobs, queue depth, and stale-job recovery.</p>
-      </div>
-      <button class="worker-status__refresh" type="button" @click="refresh" :disabled="loading">
-        {{ loading ? 'Refreshing...' : 'Refresh' }}
-      </button>
-    </header>
+  <div class="queue-admin">
+    <PageHeader title="Queue" description="Worker health and analysis activity">
+      <template #meta>
+        <span v-if="data">Updates every 5 seconds · {{ formatRelative(updatedAt) }}</span>
+      </template>
+      <template #actions>
+        <button
+          class="icon-button"
+          type="button"
+          :disabled="loading"
+          title="Refresh queue status"
+          aria-label="Refresh queue status"
+          @click="refresh"
+        >
+          <Icon name="rotate-ccw" :size="17" :spin="loading" />
+        </button>
+      </template>
+    </PageHeader>
 
-    <div v-if="error" class="worker-status__error">{{ error }}</div>
+    <div v-if="error" class="queue-message queue-message--error" role="alert">
+      <Icon name="circle-x" :size="18" />
+      <span>{{ error }}</span>
+      <button type="button" @click="refresh">Retry</button>
+    </div>
 
-    <section v-if="data" class="worker-status__grid">
-      <article class="worker-card worker-card--summary">
-        <div class="worker-card__top">
-          <h2>Worker</h2>
-          <span class="worker-pill" :class="data.embedded_worker_running ? 'ok' : 'idle'">
-            {{ data.embedded_worker_running ? 'Running' : 'Stopped' }}
+    <div v-if="loading && !data" class="queue-loading" aria-label="Loading queue status">
+      <span></span><span></span><span></span>
+    </div>
+
+    <template v-else-if="data">
+      <section class="worker-banner" :class="{ 'worker-banner--offline': !workerHealthy }">
+        <span class="worker-banner__icon">
+          <Icon :name="workerHealthy ? 'activity' : 'triangle-alert'" :size="19" />
+        </span>
+        <div class="worker-banner__copy">
+          <strong>{{ workerHealthy ? 'Worker online' : 'Worker unavailable' }}</strong>
+          <span>{{ workerHeadline }}</span>
+        </div>
+        <span class="worker-banner__heartbeat">{{ heartbeatLabel }}</span>
+      </section>
+
+      <section class="queue-summary" aria-label="Queue summary">
+        <article v-for="item in queueSummary" :key="item.label" :class="{ 'has-alert': item.alert }">
+          <small>{{ item.label }}</small>
+          <strong>{{ item.value }}</strong>
+        </article>
+      </section>
+
+      <section class="queue-section">
+        <header class="section-heading">
+          <div>
+            <h2>Active jobs</h2>
+            <p>Queued, starting, and running analyses</p>
+          </div>
+          <span>{{ data.active_jobs.length }}</span>
+        </header>
+
+        <div v-if="data.active_jobs.length" class="job-table-wrap">
+          <table class="job-table">
+            <thead>
+              <tr>
+                <th>Analysis</th>
+                <th>Status</th>
+                <th>Worker</th>
+                <th>Last activity</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="job in data.active_jobs" :key="job.id">
+                <td>
+                  <span class="job-name">
+                    <strong>{{ job.tool_name }}</strong>
+                    <code>{{ compactId(job.id) }}</code>
+                  </span>
+                </td>
+                <td><span class="pill" :class="jobTone(job.status)">{{ humanize(job.status) }}</span></td>
+                <td><code class="job-worker">{{ job.claimed_by || 'Unclaimed' }}</code></td>
+                <td class="job-time">{{ formatDateTime(job.heartbeat_at || job.started_at || job.created_at) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div v-else class="queue-empty">
+          <span><Icon name="circle-check" :size="18" /></span>
+          <div>
+            <strong>Queue is clear</strong>
+            <p>No analyses are waiting or running.</p>
+          </div>
+        </div>
+      </section>
+
+      <section v-if="data.stale_jobs.length || data.worker.last_error" class="queue-section queue-section--attention">
+        <header class="section-heading">
+          <div>
+            <h2>Needs attention</h2>
+            <p>Stale jobs and the latest worker error</p>
+          </div>
+          <span>{{ data.stale_jobs.length + (data.worker.last_error ? 1 : 0) }}</span>
+        </header>
+
+        <article v-if="data.worker.last_error" class="attention-row">
+          <Icon name="circle-x" :size="17" />
+          <div><strong>Worker error</strong><p>{{ data.worker.last_error }}</p></div>
+        </article>
+        <article v-for="job in data.stale_jobs" :key="job.id" class="attention-row">
+          <Icon name="triangle-alert" :size="17" />
+          <div>
+            <strong>{{ job.tool_name }}</strong>
+            <p>{{ humanize(job.status) }} · {{ compactId(job.id) }} · pid {{ job.pid || 'n/a' }}</p>
+          </div>
+        </article>
+      </section>
+
+      <details class="worker-details">
+        <summary>
+          <span>
+            <Icon name="cpu" :size="17" />
+            Worker details
           </span>
-        </div>
-        <dl class="worker-meta">
+          <Icon name="chevron-down" :size="16" />
+        </summary>
+        <dl>
           <div><dt>Mode</dt><dd>{{ data.mode }}</dd></div>
-          <div><dt>Worker ID</dt><dd class="mono">{{ data.worker.worker_id }}</dd></div>
           <div><dt>Host</dt><dd>{{ data.worker.host }}</dd></div>
+          <div><dt>Worker ID</dt><dd><code>{{ data.worker.worker_id }}</code></dd></div>
           <div><dt>Started</dt><dd>{{ formatDateTime(data.worker.started_at) }}</dd></div>
-          <div><dt>Heartbeat</dt><dd>{{ formatDateTime(data.worker.last_heartbeat_at) }}</dd></div>
-          <div><dt>Current Job</dt><dd class="mono">{{ data.worker.current_job_id || 'Idle' }}</dd></div>
-          <div><dt>Last Claimed</dt><dd>{{ formatDateTime(data.worker.last_claimed_at) }}</dd></div>
-          <div><dt>Last Idle</dt><dd>{{ formatDateTime(data.worker.last_idle_at) }}</dd></div>
-          <div><dt>Poll Interval</dt><dd>{{ data.poll_interval_seconds }}s</dd></div>
-          <div><dt>Stale Timeout</dt><dd>{{ data.stale_timeout_seconds }}s</dd></div>
-          <div><dt>Recovered</dt><dd>{{ data.worker.recovered_jobs }}</dd></div>
+          <div><dt>Last heartbeat</dt><dd>{{ formatDateTime(data.worker.last_heartbeat_at) }}</dd></div>
+          <div><dt>Current job</dt><dd><code>{{ data.worker.current_job_id || 'Idle' }}</code></dd></div>
+          <div><dt>Last claimed</dt><dd>{{ formatDateTime(data.worker.last_claimed_at) }}</dd></div>
+          <div><dt>Last idle</dt><dd>{{ formatDateTime(data.worker.last_idle_at) }}</dd></div>
+          <div><dt>Poll interval</dt><dd>{{ data.poll_interval_seconds }}s</dd></div>
+          <div><dt>Stale timeout</dt><dd>{{ data.stale_timeout_seconds }}s</dd></div>
+          <div><dt>Recovered jobs</dt><dd>{{ data.worker.recovered_jobs }}</dd></div>
         </dl>
-        <p v-if="data.worker.last_error" class="worker-card__error">
-          Last error: {{ data.worker.last_error }}
-        </p>
-      </article>
-
-      <article class="worker-card">
-        <h2>Queue Overview</h2>
-        <div class="worker-counts">
-          <div class="worker-count">
-            <strong>{{ data.counts.queued }}</strong>
-            <span>Queued</span>
-          </div>
-          <div class="worker-count">
-            <strong>{{ data.counts.starting }}</strong>
-            <span>Starting</span>
-          </div>
-          <div class="worker-count">
-            <strong>{{ data.counts.running }}</strong>
-            <span>Running</span>
-          </div>
-          <div class="worker-count">
-            <strong>{{ data.counts.failed }}</strong>
-            <span>Failed</span>
-          </div>
-          <div class="worker-count">
-            <strong>{{ data.counts.completed }}</strong>
-            <span>Completed</span>
-          </div>
-          <div class="worker-count">
-            <strong>{{ data.counts.canceled }}</strong>
-            <span>Canceled</span>
-          </div>
-        </div>
-      </article>
-
-      <article class="worker-card">
-        <div class="worker-card__top">
-          <h2>Stale Jobs</h2>
-          <span class="worker-pill subtle">{{ data.stale_jobs.length }}</span>
-        </div>
-        <div v-if="data.stale_jobs.length === 0" class="worker-empty">No stale jobs detected.</div>
-        <div v-else class="worker-list">
-          <div v-for="job in data.stale_jobs" :key="job.id" class="worker-row">
-            <div>
-              <strong>{{ job.tool_name }}</strong>
-              <div class="mono">{{ job.id }}</div>
-            </div>
-            <div class="worker-row__meta">
-              <span class="worker-pill warning">{{ job.status }}</span>
-              <span class="mono">pid {{ job.pid || 'n/a' }}</span>
-            </div>
-          </div>
-        </div>
-      </article>
-
-      <article class="worker-card worker-card--wide">
-        <div class="worker-card__top">
-          <h2>Active Jobs</h2>
-          <span class="worker-pill subtle">{{ data.active_jobs.length }}</span>
-        </div>
-        <div v-if="data.active_jobs.length === 0" class="worker-empty">No queued or running jobs.</div>
-        <div v-else class="worker-table">
-          <div class="worker-table__head">
-            <span>Tool</span>
-            <span>Status</span>
-            <span>Claim</span>
-            <span>Heartbeat</span>
-          </div>
-          <div v-for="job in data.active_jobs" :key="job.id" class="worker-table__row">
-            <span>
-              <strong>{{ job.tool_name }}</strong>
-              <small class="mono">{{ job.id }}</small>
-            </span>
-            <span class="worker-pill" :class="job.status">{{ humanize(job.status) }}</span>
-            <span class="mono">{{ job.claimed_by || 'Unclaimed' }}</span>
-            <span>{{ formatDateTime(job.heartbeat_at || job.started_at || job.created_at) }}</span>
-          </div>
-        </div>
-      </article>
-    </section>
+      </details>
+    </template>
   </div>
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue'
-import AdminNav from '../components/AdminNav.vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+
+import Icon from '../components/ui/Icon.vue'
+import PageHeader from '../components/ui/PageHeader.vue'
 
 const data = ref(null)
 const error = ref('')
 const loading = ref(false)
+const updatedAt = ref(null)
+const now = ref(Date.now())
 let pollTimer = null
+let clockTimer = null
+
+const workerHealthy = computed(() => Boolean(data.value?.embedded_worker_running && !data.value?.worker?.last_error))
+
+const activeCount = computed(() => (
+  (data.value?.counts?.queued || 0)
+  + (data.value?.counts?.starting || 0)
+  + (data.value?.counts?.running || 0)
+))
+
+const workerHeadline = computed(() => {
+  if (!data.value) return ''
+  if (!data.value.embedded_worker_running) return 'The execution worker is not responding.'
+  if (data.value.worker.last_error) return 'Online with a reported error.'
+  if (data.value.worker.current_job_id) return `Running job ${compactId(data.value.worker.current_job_id)} on ${data.value.worker.host}.`
+  return `Idle on ${data.value.worker.host}. Ready to claim analyses.`
+})
+
+const heartbeatLabel = computed(() => {
+  const value = data.value?.worker?.last_heartbeat_at
+  return value ? `Heartbeat ${formatRelative(value)}` : 'No heartbeat'
+})
+
+const queueSummary = computed(() => {
+  const counts = data.value?.counts || {}
+  return [
+    { label: 'Active', value: activeCount.value },
+    { label: 'Queued', value: counts.queued || 0 },
+    { label: 'Completed', value: counts.completed || 0 },
+    { label: 'Failed', value: counts.failed || 0, alert: Boolean(counts.failed) },
+    { label: 'Canceled', value: counts.canceled || 0 },
+  ]
+})
+
+function parseDate(value) {
+  if (!value) return null
+  const date = value instanceof Date ? value : new Date(String(value).replace(' ', 'T'))
+  return Number.isNaN(date.getTime()) ? null : date
+}
 
 function formatDateTime(value) {
-  if (!value) return 'Unknown'
-  const date = new Date(String(value).replace(' ', 'T'))
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString()
+  const date = parseDate(value)
+  if (!date) return value || 'Never'
+  return new Intl.DateTimeFormat('en', {
+    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).format(date)
+}
+
+function formatRelative(value) {
+  const date = parseDate(value)
+  if (!date) return 'just now'
+  const delta = Math.max(0, Math.floor((now.value - date.getTime()) / 1000))
+  if (delta < 5) return 'just now'
+  if (delta < 60) return `${delta}s ago`
+  const minutes = Math.floor(delta / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}h ago`
+}
+
+function compactId(value) {
+  const text = String(value || '')
+  return text.length > 14 ? `${text.slice(0, 8)}…${text.slice(-4)}` : text || 'Unknown'
 }
 
 function humanize(status) {
-  const map = {
-    queued: 'Queued',
-    starting: 'Starting',
-    running: 'Running',
-    failed: 'Failed',
-    completed: 'Completed',
-    canceled: 'Canceled',
+  const labels = {
+    queued: 'Queued', starting: 'Starting', running: 'Running', failed: 'Failed', completed: 'Completed', canceled: 'Canceled',
   }
-  return map[status] || status
+  return labels[status] || status
+}
+
+function jobTone(status) {
+  if (status === 'running') return 'pill--running'
+  if (status === 'failed' || status === 'canceled') return 'pill--danger'
+  if (status === 'queued' || status === 'starting') return 'pill--warning'
+  return 'pill--muted'
 }
 
 async function refresh() {
+  if (loading.value) return
   loading.value = true
   error.value = ''
   try {
     const response = await fetch('/api/system/worker')
-    const payload = await response.json()
-    if (!response.ok || !payload.success) {
-      throw new Error(payload.error || 'Failed to load worker status')
-    }
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok || !payload.success) throw new Error(payload.error || 'Failed to load queue status.')
     data.value = payload.data
+    updatedAt.value = new Date()
+    now.value = Date.now()
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -166,276 +251,291 @@ async function refresh() {
 onMounted(() => {
   refresh()
   pollTimer = window.setInterval(refresh, 5000)
+  clockTimer = window.setInterval(() => { now.value = Date.now() }, 1000)
 })
 
 onUnmounted(() => {
-  if (pollTimer) window.clearInterval(pollTimer)
+  window.clearInterval(pollTimer)
+  window.clearInterval(clockTimer)
 })
 </script>
 
 <style scoped>
-.worker-status {
-  max-width: 1180px;
-  margin: 0 auto;
-  height: calc(100vh - var(--header-height));
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 2rem 1.5rem 2rem;
-  box-sizing: border-box;
+.queue-admin {
+  min-width: 0;
 }
 
-.worker-status__hero {
+.icon-button {
+  display: grid;
+  width: var(--control-height);
+  height: var(--control-height);
+  place-items: center;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-base);
+  background: var(--surface-1);
+  color: var(--gray-600);
+  cursor: pointer;
+}
+
+.icon-button:hover:not(:disabled) { border-color: var(--border-color-dark); color: var(--gray-900); }
+.icon-button:disabled { cursor: wait; color: var(--gray-400); }
+
+.queue-message {
   display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  padding: 8px 10px;
+  margin-bottom: 16px;
+  border: 1px solid #f0c7c3;
+  border-radius: var(--radius-base);
+  background: var(--error-50);
+  color: var(--error-600);
+  font-size: var(--text-xs);
+}
+
+.queue-message span { flex: 1; }
+.queue-message button { border: 0; background: transparent; color: inherit; font-weight: var(--font-semibold); cursor: pointer; }
+
+.queue-loading {
+  display: grid;
+  gap: 12px;
+}
+
+.queue-loading span {
+  height: 70px;
+  border-radius: var(--radius-base);
+  background: var(--surface-2);
+  animation: queue-pulse 1.2s ease-in-out infinite alternate;
+}
+
+.worker-banner {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  min-height: 66px;
+  padding: 12px 14px;
+  margin: 20px 0 18px;
+  border: 1px solid #c9e7d8;
+  border-radius: var(--radius-md);
+  background: var(--success-50);
+}
+
+.worker-banner--offline {
+  border-color: #f0c7c3;
+  background: var(--error-50);
+}
+
+.worker-banner__icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: var(--radius-full);
+  background: var(--surface-1);
+  color: var(--success-600);
+}
+
+.worker-banner--offline .worker-banner__icon { color: var(--error-600); }
+
+.worker-banner__copy {
+  display: grid;
+  min-width: 0;
+}
+
+.worker-banner__copy strong {
+  color: var(--gray-900);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+}
+
+.worker-banner__copy span,
+.worker-banner__heartbeat {
+  margin-top: 2px;
+  color: var(--gray-600);
+  font-size: var(--text-xs);
+}
+
+.worker-banner__heartbeat {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.queue-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-bottom: 30px;
+  border-block: 1px solid var(--border-color);
+}
+
+.queue-summary article {
+  min-width: 0;
+  padding: 14px 16px;
+  border-right: 1px solid var(--border-color-light);
+}
+
+.queue-summary article:last-child { border-right: 0; }
+.queue-summary small,
+.queue-summary strong { display: block; }
+.queue-summary small { color: var(--gray-500); font-size: 11px; }
+.queue-summary strong { margin-top: 3px; color: var(--gray-900); font-size: 18px; font-weight: var(--font-semibold); font-variant-numeric: tabular-nums; }
+.queue-summary article.has-alert strong { color: var(--error-600); }
+
+.queue-section {
+  margin-top: 28px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 1.5rem;
-  align-items: flex-start;
-  margin-bottom: 1.5rem;
+  gap: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-color);
 }
 
-.worker-status__kicker {
-  font-size: 0.78rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #6b7280;
-  margin-bottom: 0.5rem;
+.section-heading h2 { margin: 0; color: var(--gray-900); font-size: 16px; font-weight: var(--font-semibold); }
+.section-heading p { margin: 3px 0 0; color: var(--gray-500); font-size: var(--text-xs); }
+.section-heading > span { color: var(--gray-500); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+
+.job-table-wrap {
+  overflow-x: auto;
 }
 
-.worker-status__hero h1 {
-  margin: 0;
-  font-size: clamp(2rem, 4vw, 3rem);
-  color: #111827;
+.job-table {
+  width: 100%;
+  min-width: 660px;
+  border-collapse: collapse;
 }
 
-.worker-status__hero p {
-  margin: 0.6rem 0 0;
-  max-width: 54rem;
-  color: #6b7280;
-  line-height: 1.6;
+.job-table th,
+.job-table td {
+  padding: 11px 8px;
+  border-bottom: 1px solid var(--border-color-light);
+  text-align: left;
+  vertical-align: middle;
 }
 
-.worker-status__refresh {
-  border: 1px solid #d7dce7;
-  background: #fff;
-  border-radius: 999px;
-  padding: 0.8rem 1.25rem;
-  font-weight: 700;
-  color: #1f2937;
+.job-table th { color: var(--gray-500); font-size: 11px; font-weight: var(--font-medium); }
+
+.job-name { display: grid; }
+.job-name strong { color: var(--gray-800); font-size: var(--text-xs); font-weight: var(--font-medium); }
+.job-name code { margin-top: 2px; color: var(--gray-500); font-size: 11px; }
+.job-worker { color: var(--gray-600); font-size: 11px; overflow-wrap: anywhere; }
+.job-time { color: var(--gray-500); font-size: var(--text-xs); }
+
+.queue-empty {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 80px;
+  padding: 14px 4px;
+  border-bottom: 1px solid var(--border-color-light);
 }
 
-.worker-status__grid {
+.queue-empty > span {
   display: grid;
-  grid-template-columns: 1.3fr 1fr;
-  gap: 1rem;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: var(--radius-full);
+  background: var(--success-50);
+  color: var(--success-600);
 }
 
-.worker-card {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 24px;
-  padding: 1.25rem;
-  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.06);
+.queue-empty strong { display: block; color: var(--gray-800); font-size: var(--text-sm); font-weight: var(--font-medium); }
+.queue-empty p { margin: 2px 0 0; color: var(--gray-500); font-size: var(--text-xs); }
+
+.queue-section--attention .section-heading h2 { color: var(--error-600); }
+
+.attention-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 9px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--border-color-light);
+  color: var(--error-600);
 }
 
-.worker-card--summary,
-.worker-card--wide {
-  grid-column: span 2;
+.attention-row strong { color: var(--gray-800); font-size: var(--text-xs); font-weight: var(--font-medium); }
+.attention-row p { margin: 2px 0 0; color: var(--gray-600); font-size: 11px; }
+
+.worker-details {
+  margin-top: 30px;
+  border-block: 1px solid var(--border-color);
 }
 
-.worker-card__top {
+.worker-details summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  min-height: 48px;
+  color: var(--gray-700);
+  cursor: pointer;
+  list-style: none;
 }
 
-.worker-card h2 {
+.worker-details summary::-webkit-details-marker { display: none; }
+.worker-details summary > span { display: flex; align-items: center; gap: 8px; font-size: var(--text-xs); font-weight: var(--font-medium); }
+.worker-details summary > :deep(svg) { color: var(--gray-400); transition: transform var(--transition-fast); }
+.worker-details[open] summary > :deep(svg) { transform: rotate(180deg); }
+
+.worker-details dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 28px;
   margin: 0;
-  font-size: 1.05rem;
-  color: #111827;
+  padding-bottom: 12px;
 }
 
-.worker-pill {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 0.32rem 0.7rem;
-  font-size: 0.82rem;
-  font-weight: 700;
-  background: rgba(37, 99, 235, 0.12);
-  color: #1d4ed8;
-}
-
-.worker-pill.ok,
-.worker-pill.running {
-  background: rgba(16, 185, 129, 0.12);
-  color: #047857;
-}
-
-.worker-pill.idle,
-.worker-pill.queued,
-.worker-pill.starting,
-.worker-pill.warning {
-  background: rgba(245, 158, 11, 0.12);
-  color: #b45309;
-}
-
-.worker-pill.failed,
-.worker-pill.canceled {
-  background: rgba(220, 38, 38, 0.12);
-  color: #b91c1c;
-}
-
-.worker-pill.subtle {
-  background: rgba(15, 23, 42, 0.06);
-  color: #475569;
-}
-
-.worker-meta {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.85rem 1rem;
-  margin: 0;
-}
-
-.worker-meta div {
-  display: grid;
-  gap: 0.25rem;
-}
-
-.worker-meta dt {
-  color: #6b7280;
-  font-size: 0.82rem;
-}
-
-.worker-meta dd {
-  margin: 0;
-  color: #111827;
-  font-weight: 600;
-}
-
-.worker-counts {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.85rem;
-}
-
-.worker-count {
-  border: 1px solid #e5e7eb;
-  border-radius: 18px;
-  padding: 1rem;
-  display: grid;
-  gap: 0.25rem;
-}
-
-.worker-count strong {
-  font-size: 1.6rem;
-  color: #111827;
-}
-
-.worker-count span {
-  color: #6b7280;
-}
-
-.worker-list {
-  display: grid;
-  gap: 0.85rem;
-}
-
-.worker-row {
+.worker-details dl div {
   display: flex;
+  min-width: 0;
+  align-items: baseline;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.9rem 0;
-  border-top: 1px solid #eef2f7;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border-color-light);
+  font-size: var(--text-xs);
 }
 
-.worker-row:first-child {
-  border-top: 0;
-  padding-top: 0;
-}
+.worker-details dt { color: var(--gray-500); }
+.worker-details dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--gray-800); font-weight: var(--font-medium); text-align: right; }
+.worker-details code { font-size: 11px; }
 
-.worker-row__meta {
-  display: flex;
-  gap: 0.65rem;
-  align-items: center;
-}
+@keyframes queue-pulse { to { opacity: 0.45; } }
 
-.worker-table {
-  display: grid;
-}
-
-.worker-table__head,
-.worker-table__row {
-  display: grid;
-  grid-template-columns: 1.5fr 0.9fr 1.2fr 1fr;
-  gap: 1rem;
-  align-items: center;
-}
-
-.worker-table__head {
-  color: #6b7280;
-  font-size: 0.82rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.worker-table__row {
-  padding: 0.9rem 0;
-  border-bottom: 1px solid #eef2f7;
-}
-
-.worker-table__row:last-child {
-  border-bottom: 0;
-}
-
-.worker-table__row span {
-  display: grid;
-  gap: 0.2rem;
-  color: #111827;
-}
-
-.worker-table__row small {
-  color: #6b7280;
-}
-
-.worker-status__error,
-.worker-card__error,
-.worker-empty {
-  color: #b91c1c;
-  background: rgba(254, 242, 242, 0.9);
-  border: 1px solid rgba(248, 113, 113, 0.25);
-  border-radius: 18px;
-  padding: 0.9rem 1rem;
-}
-
-.worker-empty {
-  color: #6b7280;
-  background: rgba(248, 250, 252, 0.92);
-  border-color: #e5e7eb;
-}
-
-.mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-}
-
-@media (max-width: 920px) {
-  .worker-status__grid {
-    grid-template-columns: 1fr;
+@media (max-width: 760px) {
+  .queue-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .worker-card--summary,
-  .worker-card--wide {
-    grid-column: span 1;
+  .queue-summary article:nth-child(3) { border-right: 0; }
+  .queue-summary article:nth-child(-n + 3) { border-bottom: 1px solid var(--border-color-light); }
+  .worker-details dl { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 520px) {
+  .worker-banner {
+    grid-template-columns: 34px minmax(0, 1fr);
   }
 
-  .worker-meta,
-  .worker-counts,
-  .worker-table__head,
-  .worker-table__row {
-    grid-template-columns: 1fr;
+  .worker-banner__heartbeat {
+    grid-column: 2;
   }
+
+  .queue-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .queue-summary article,
+  .queue-summary article:nth-child(3) {
+    border-right: 1px solid var(--border-color-light);
+    border-bottom: 1px solid var(--border-color-light);
+  }
+
+  .queue-summary article:nth-child(even) { border-right: 0; }
+  .queue-summary article:last-child { border-bottom: 0; }
 }
 </style>
