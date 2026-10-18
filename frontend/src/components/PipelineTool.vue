@@ -29,11 +29,7 @@
         <div class="form-card">
           <div class="form-header">
             <h4>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z"></path>
-                <path d="M12 8v4"></path>
-                <path d="M12 16h.01"></path>
-              </svg>
+              <Icon name="sliders-horizontal" :size="17" />
               Setup
             </h4>
           </div>
@@ -54,40 +50,25 @@
                 <div v-if="param.multiple && Array.isArray(formValues[param.name])" class="file-list">
                   <div v-for="(file, index) in formValues[param.name]" :key="index" class="selected-file">
                     <div class="file-info">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
-                        <polyline points="13 2 13 9 20 9"></polyline>
-                      </svg>
+                      <Icon name="file" :size="16" />
                       <span class="file-path">{{ file }}</span>
                     </div>
-                    <button @click="removeFile(param.name, index)" class="remove-file">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                      </svg>
+                    <button type="button" @click="removeFile(param.name, index)" class="remove-file" title="Remove file" aria-label="Remove file">
+                      <Icon name="x" :size="15" />
                     </button>
                   </div>
                 </div>
                 <div v-else-if="!param.multiple && formValues[param.name]" class="selected-file">
                   <div class="file-info">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
-                      <polyline points="13 2 13 9 20 9"></polyline>
-                    </svg>
+                    <Icon name="file" :size="16" />
                     <span class="file-path">{{ formValues[param.name] }}</span>
                   </div>
-                  <button @click="formValues[param.name] = ''" class="remove-file">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <line x1="18" y1="6" x2="6" y2="18"></line>
-                      <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
+                  <button type="button" @click="formValues[param.name] = ''" class="remove-file" title="Remove file" aria-label="Remove file">
+                    <Icon name="x" :size="15" />
                   </button>
                 </div>
-                <button @click="openFilePicker(param)" class="file-select-btn">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
-                    <polyline points="13 2 13 9 20 9"></polyline>
-                  </svg>
+                <button type="button" @click="openFilePicker(param)" class="file-select-btn">
+                  <Icon name="file" :size="16" />
                   {{ param.multiple ? 'Choose Files' : 'Choose File' }}
                 </button>
               </div>
@@ -97,37 +78,25 @@
                 <div v-if="param.multiple && Array.isArray(formValues[param.name])" class="file-list">
                   <div v-for="(dir, index) in formValues[param.name]" :key="index" class="selected-file">
                     <div class="file-info">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                      </svg>
+                      <Icon name="folder" :size="16" />
                       <span class="file-path">{{ dir }}</span>
                     </div>
-                    <button @click="removeFile(param.name, index)" class="remove-file">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                      </svg>
+                    <button type="button" @click="removeFile(param.name, index)" class="remove-file" title="Remove directory" aria-label="Remove directory">
+                      <Icon name="x" :size="15" />
                     </button>
                   </div>
                 </div>
                 <div v-else-if="!param.multiple && formValues[param.name]" class="selected-file">
                   <div class="file-info">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                    </svg>
+                    <Icon name="folder" :size="16" />
                     <span class="file-path">{{ formValues[param.name] }}</span>
                   </div>
-                  <button @click="formValues[param.name] = ''" class="remove-file">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <line x1="18" y1="6" x2="6" y2="18"></line>
-                      <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
+                  <button type="button" @click="formValues[param.name] = ''" class="remove-file" title="Remove directory" aria-label="Remove directory">
+                    <Icon name="x" :size="15" />
                   </button>
                 </div>
-                <button @click="openFilePicker(param)" class="file-select-btn">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                  </svg>
+                <button type="button" @click="openFilePicker(param)" class="file-select-btn">
+                  <Icon name="folder" :size="16" />
                   {{ param.multiple ? 'Choose Directories' : 'Choose Directory' }}
                 </button>
               </div>
@@ -166,9 +135,7 @@
                     </option>
                   </select>
                   <div class="select-icon">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <polyline points="6 9 12 15 18 9"></polyline>
-                    </svg>
+                    <Icon name="chevron-down" :size="16" />
                   </div>
                 </div>
               </div>
@@ -185,12 +152,6 @@
                   class="param-input"
                   :placeholder="param.default ?? toolParameterLabel(param)"
                 />
-                <div class="input-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 6v6l4 2"></path>
-                    <circle cx="12" cy="12" r="10"></circle>
-                  </svg>
-                </div>
               </div>
             </div>
           </div>
@@ -209,11 +170,7 @@
             </ul>
           </div>
           <div v-else-if="tool.parameters.length === 0" class="no-params">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"></circle>
-              <path d="M12 16v-4"></path>
-              <path d="M12 8h.01"></path>
-            </svg>
+            <Icon name="circle-check" :size="32" />
             <p>This tool does not require parameter configuration</p>
           </div>
         </div>
@@ -226,12 +183,8 @@
           :title="tool.available === false ? tool.availability_message : hasMissingRequiredParameters ? 'Complete the required parameters first' : runButtonLabel"
         >
           <div class="button-content">
-            <svg v-if="taskStatus === 'starting' || taskStatus === 'running'" class="spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 12a9 9 0 1 1-9-9c4.97 0 9 4.03 9 9z"></path>
-            </svg>
-            <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="5 3 19 12 5 21 5 3"></polygon>
-            </svg>
+            <Icon v-if="taskStatus === 'starting' || taskStatus === 'running'" name="rotate-ccw" :size="18" spin />
+            <Icon v-else name="play" :size="18" />
             <span>
               {{ taskStatus === 'starting' ? 'Starting...' : taskStatus === 'running' ? 'Running...' : taskStatus === 'queued' ? 'Queued...' : runButtonLabel }}
             </span>
@@ -246,32 +199,21 @@
         </summary>
         <div class="logs-header">
           <div class="logs-actions">
-            <button @click="clearLogs" class="clear-logs-btn" title="Clear Logs">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 6h18l-2 13H5L3 6z"></path>
-                <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              </svg>
+            <button type="button" @click="clearLogs" class="clear-logs-btn" title="Clear logs" aria-label="Clear logs">
+              <Icon name="trash-2" :size="16" />
             </button>
-                  <button @click="showVerboseLogs = !showVerboseLogs" 
+                  <button type="button" @click="showVerboseLogs = !showVerboseLogs"
                           class="toggle-verbose-btn" 
                           :class="{ active: showVerboseLogs }"
                           :title="showVerboseLogs ? 'Hide system messages' : 'Show system messages'">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M9 12l2 2 4-4"></path>
-                <path d="M21 12c-1 0-3-1-3-3s2-3 3-3 3 1 3 3-2 3-3 3"></path>
-                <path d="M3 12c1 0 3-1 3-3s-2-3-3-3-3 1-3 3 2 3 3 3"></path>
-              </svg>
+              <Icon name="list" :size="16" />
             </button>
             <span class="log-count">{{ filteredLogs.length }} / {{ allLogs.length }} logs</span>
           </div>
         </div>
         <div class="logs-container" ref="logsContainer" :class="{ empty: filteredLogs.length === 0 }">
           <div v-if="filteredLogs.length === 0" class="empty-logs">
-            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-              <circle cx="9" cy="9" r="2"></circle>
-              <path d="M21 15l-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path>
-            </svg>
+            <Icon name="square-terminal" :size="36" />
               <p>Run the tool to view real-time output</p>
               <span>Logs will be displayed here in real-time</span>
           </div>
@@ -290,12 +232,7 @@
   
   <!-- 空状态 -->
   <div v-else class="loading-pane">
-    <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
-      <path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
-      <path d="m2 2 7.586 7.586"></path>
-      <circle cx="11" cy="11" r="2"></circle>
-    </svg>
+    <Icon name="rotate-ccw" :size="28" spin />
     <p>Loading tool...</p>
   </div>
   
@@ -683,6 +620,7 @@ onUnmounted(() => {
   stopLogPolling();
   if (statusInterval) {
     clearInterval(statusInterval);
+    statusInterval = null;
   }
 });
 
@@ -736,32 +674,11 @@ html, body {
   -webkit-overflow-scrolling: touch;
 }
 
-/* 主容器滚动条样式 */
-.tool-interface-container::-webkit-scrollbar {
-  width: 12px;
-}
-
-.tool-interface-container::-webkit-scrollbar-track {
-  background: var(--surface-2);
-  border-radius: 6px;
-}
-
-.tool-interface-container::-webkit-scrollbar-thumb {
-  background: var(--gray-300);
-  border-radius: 6px;
-  border: 2px solid var(--surface-2);
-}
-
-.tool-interface-container::-webkit-scrollbar-thumb:hover {
-  background: var(--gray-400);
-}
-
 /* 现代化工具头部 */
 .tool-header {
   background: var(--surface-1);
   border-bottom: var(--border-width) solid var(--border-color-light);
-  padding: var(--spacing-4) var(--spacing-6);
-  box-shadow: var(--shadow-xs);
+  padding: 16px 20px;
 }
 
 .tool-header-content {
@@ -780,16 +697,16 @@ html, body {
 }
 
 .tool-icon {
-  width: 40px;
-  height: 40px;
-  background: var(--gradient-primary);
-  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  background: var(--primary-50);
+  border: 1px solid var(--primary-100);
+  border-radius: var(--radius-base);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: var(--primary-700);
   flex-shrink: 0;
-  box-shadow: 0 10px 20px rgba(var(--accent-rgb), 0.2);
 }
 
 .tool-title {
@@ -802,15 +719,15 @@ html, body {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  margin: 6px 0 0;
+  margin: 4px 0 0;
 }
 
 .meta-badge {
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
+  min-height: 20px;
+  padding: 0 7px;
+  border-radius: var(--radius-sm);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0;
@@ -836,15 +753,15 @@ html, body {
 
 .tool-title h2 {
   margin: 0;
-  font-size: 1.8rem;
+  font-size: 22px;
   font-weight: var(--font-bold);
   color: var(--gray-900);
   line-height: 1.15;
 }
 
 .tool-title p {
-  margin: 8px 0 0 0;
-  font-size: 0.95rem;
+  margin: 5px 0 0;
+  font-size: 13px;
   color: var(--gray-500);
   line-height: 1.4;
   display: -webkit-box;
@@ -901,8 +818,9 @@ html, body {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  border-radius: 16px;
+  min-height: 26px;
+  padding: 4px 9px;
+  border-radius: var(--radius-full);
   font-size: 12px;
   font-weight: 500;
   transition: all var(--transition-base);
@@ -910,9 +828,9 @@ html, body {
 }
 
 .status-indicator.starting {
-  background: rgba(59, 130, 246, 0.12);
-  color: #1d4ed8;
-  border: var(--border-width) solid rgba(59, 130, 246, 0.22);
+  background: var(--accent-50);
+  color: var(--accent-700);
+  border: var(--border-width) solid var(--accent-200);
 }
 
 .status-indicator.running {
@@ -996,8 +914,8 @@ html, body {
   display: grid;
   grid-template-columns: minmax(0, 760px);
   justify-content: center;
-  gap: clamp(14px, 1.6vw, 24px);
-  padding: clamp(14px, 1.8vw, 24px);
+  gap: 16px;
+  padding: clamp(16px, 2vw, 24px);
   min-height: 0;
   max-width: none;
   margin: 0;
@@ -1023,9 +941,8 @@ html, body {
 /* 参数表单区域 */
 .form-card {
   background: var(--surface-1);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   border: var(--border-width) solid var(--border-color-light);
-  box-shadow: var(--shadow-xs);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1036,8 +953,8 @@ html, body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 18px;
-  background: var(--surface-2);
+  padding: 13px 16px;
+  background: var(--surface-1);
   border-bottom: var(--border-width) solid var(--border-color-light);
   gap: 10px;
 }
@@ -1060,29 +977,8 @@ html, body {
 }
 
 .param-list {
-  max-height: calc(100vh - 292px);
-  overflow-y: auto;
-  padding: 16px 18px;
-  flex: 1;
-  -webkit-overflow-scrolling: touch;
-}
-
-.param-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.param-list::-webkit-scrollbar-track {
-  background: var(--surface-2);
-  border-radius: 3px;
-}
-
-.param-list::-webkit-scrollbar-thumb {
-  background: var(--gray-300);
-  border-radius: 3px;
-}
-
-.param-list::-webkit-scrollbar-thumb:hover {
-  background: var(--gray-400);
+  padding: 16px;
+  flex: 0 0 auto;
 }
 
 .param-row {
@@ -1130,9 +1026,10 @@ html, body {
 
 .param-input {
   width: 100%;
-  padding: 10px 14px;
+  height: var(--control-height);
+  padding: 0 11px;
   border: var(--border-width) solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-base);
   font-size: 14px;
   background: var(--surface-1);
   transition: all var(--transition-base);
@@ -1142,7 +1039,7 @@ html, body {
 .param-input:focus {
   outline: none;
   border-color: var(--primary-500);
-  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.16);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.14);
 }
 
 .param-input[type="number"] {
@@ -1157,15 +1054,6 @@ html, body {
   background: var(--surface-2);
   color: var(--gray-400);
   cursor: not-allowed;
-}
-
-.input-icon {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--gray-400);
-  pointer-events: none;
 }
 
 .no-params {
@@ -1213,29 +1101,26 @@ html, body {
   margin: 0;
   padding: 0;
   border: none;
-  border-radius: 10px;
-  background: var(--gradient-primary);
+  border-radius: var(--radius-base);
+  background: var(--primary-600);
   color: white;
   font-weight: var(--font-semibold);
   font-size: 15px;
   cursor: pointer;
-  transition: all var(--transition-base);
-  box-shadow: 0 10px 20px rgba(var(--accent-rgb), 0.18);
+  transition: background var(--transition-fast), border-color var(--transition-fast);
   position: relative;
   overflow: visible;
-  min-height: 46px;
+  min-height: 40px;
 }
 
 .run-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 16px 30px rgba(var(--accent-rgb), 0.25);
+  background: var(--primary-700);
 }
 
 .run-button:disabled {
-  opacity: 0.7;
   cursor: not-allowed;
-  transform: none;
-  background: var(--gray-400);
+  background: var(--gray-300);
+  color: var(--gray-500);
 }
 
 .button-content {
@@ -1243,7 +1128,7 @@ html, body {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 14px 20px;
+  padding: 0 16px;
   width: 100%;
   height: 100%;
   position: relative;
@@ -1275,23 +1160,22 @@ html, body {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 10px 14px;
-  background: var(--surface-2);
-  border: 1.5px dashed var(--border-color);
-  border-radius: 8px;
+  padding: 0 11px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-base);
   font-size: 13px;
   color: var(--gray-600);
   cursor: pointer;
   transition: all var(--transition-base);
   box-sizing: border-box;
-  min-height: 40px;
+  min-height: var(--control-height);
 }
 
 .file-select-btn:hover {
-  background: var(--surface-1);
-  border-color: rgba(var(--accent-rgb), 0.4);
+  background: var(--primary-50);
+  border-color: var(--primary-300);
   color: var(--primary-600);
-  box-shadow: var(--shadow-xs);
 }
 
 .file-select-btn svg {
@@ -1369,9 +1253,8 @@ html, body {
 /* 日志区域 */
 .logs-section {
   background: var(--surface-1);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   border: var(--border-width) solid var(--border-color-light);
-  box-shadow: var(--shadow-xs);
   overflow: hidden;
 }
 
@@ -1404,8 +1287,8 @@ html, body {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  padding: 14px 18px;
-  background: var(--surface-2);
+  padding: 8px 12px;
+  background: var(--surface-1);
   border-bottom: var(--border-width) solid var(--border-color-light);
   gap: 12px;
 }
@@ -1491,7 +1374,7 @@ html, body {
   color: var(--gray-600);
   background: var(--surface-3);
   padding: 3px 6px;
-  border-radius: 10px;
+  border-radius: var(--radius-full);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -1532,24 +1415,6 @@ html, body {
 .tool-notes li {
   line-height: 1.5;
   color: var(--gray-600);
-}
-
-.logs-container::-webkit-scrollbar {
-  width: 6px;
-}
-
-.logs-container::-webkit-scrollbar-track {
-  background: var(--dark-bg-secondary);
-  border-radius: 3px;
-}
-
-.logs-container::-webkit-scrollbar-thumb {
-  background: var(--gray-700);
-  border-radius: 3px;
-}
-
-.logs-container::-webkit-scrollbar-thumb:hover {
-  background: var(--gray-600);
 }
 
 .logs-container.empty {
@@ -1614,7 +1479,7 @@ html, body {
 }
 
 .log-prefix {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: var(--font-semibold);
   padding: 2px 5px;
   border-radius: 3px;
@@ -1657,7 +1522,7 @@ html, body {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  min-height: calc(100vh - 100px);
+  min-height: 320px;
   padding: 32px 16px;
   color: var(--gray-500);
   text-align: center;
@@ -1666,7 +1531,6 @@ html, body {
 
 .loading-pane svg {
   color: var(--gray-300);
-  margin-bottom: 6px;
 }
 
 .loading-pane p {
@@ -1741,9 +1605,9 @@ html, body {
 
 .param-select {
   width: 100%;
-  padding: 10px 36px 10px 14px;
+  padding: 0 36px 0 11px;
   border: var(--border-width) solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-base);
   font-size: 13px;
   background: var(--surface-1);
   color: var(--gray-800);
@@ -1752,13 +1616,13 @@ html, body {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
-  min-height: 40px;
+  min-height: var(--control-height);
 }
 
 .param-select:focus {
   outline: none;
   border-color: var(--primary-500);
-  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.16);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.14);
 }
 
 .param-select:hover {
@@ -1944,7 +1808,7 @@ html, body {
   }
   
   .file-path {
-    font-size: 10px;
+    font-size: 11px;
   }
   
   .flag-slider {
@@ -2005,7 +1869,7 @@ html, body {
   
   .logs-container {
     padding: 8px;
-    font-size: 10px;
+    font-size: 11px;
     max-height: calc(50vh - 80px);
   }
   
@@ -2015,13 +1879,13 @@ html, body {
   }
   
   .log-prefix {
-    font-size: 9px;
+    font-size: 11px;
     min-width: 24px;
     padding: 1px 3px;
   }
   
   .log-content {
-    font-size: 10px;
+    font-size: 11px;
   }
   
   .loading-pane {
@@ -2086,7 +1950,7 @@ html, body {
   
   .logs-container {
     padding: 6px;
-    font-size: 9px;
+    font-size: 11px;
   }
   
   .log-prefix {
@@ -2095,7 +1959,7 @@ html, body {
   }
   
   .log-content {
-    font-size: 9px;
+    font-size: 11px;
   }
 }
 

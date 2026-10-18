@@ -32,7 +32,10 @@ const PARAMETER_LABELS = Object.freeze({
   enable_abricate: 'Resistance and virulence screening',
   enable_rgi: 'Resistome screening',
   enable_antismash: 'Biosynthetic cluster analysis',
+  enable_variants: 'Variant calling and consensus',
+  enable_visualization: 'Generate figures and report',
   fasta_path: 'Reference protein database',
+  maxquant_mode: 'MaxQuant run mode',
   match_between_runs: 'Match features between runs',
   include_contaminants: 'Include contaminant sequences',
 })

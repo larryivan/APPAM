@@ -7,7 +7,6 @@
         :description="project?.description || ''"
       >
         <template #meta>
-          <span class="meta-pill">{{ project?.analysis_workflow ? preferredWorkflow.label : 'No default analysis' }}</span>
           <span>{{ accessRoleLabel }}</span>
         </template>
       </PageHeader>
@@ -23,7 +22,7 @@
       </div>
 
       <template v-else-if="project && dashboard">
-        <section class="next-action" :class="homeState.kind">
+        <section v-if="homeState" class="next-action" :class="homeState.kind">
           <div class="next-action__copy">
             <div class="section-kicker">Next step</div>
             <div class="next-action__title-row">
@@ -46,12 +45,23 @@
           </div>
         </section>
 
-        <section v-if="!project.analysis_workflow" class="analysis-section">
+        <section
+          id="analysis-workflows"
+          class="analysis-section"
+          :class="{ primary: !homeState }"
+        >
           <div class="section-heading">
             <div>
               <div class="section-kicker">Guided workflows</div>
               <h2>Choose an analysis</h2>
             </div>
+            <router-link
+              :to="{ name: 'ToolLibrary', params: { id: projectId } }"
+              class="secondary-action"
+            >
+              <Icon name="wrench" :size="16" />
+              Individual tools
+            </router-link>
           </div>
 
           <div class="analysis-list">
@@ -59,7 +69,6 @@
               v-for="workflow in workflowOptions"
               :key="workflow.id"
               class="analysis-row"
-              :class="{ preferred: workflow.id === preferredWorkflow.id }"
             >
               <div class="analysis-icon">
                 <Icon :name="workflow.id === 'appam-smk' ? 'dna' : 'activity'" :size="22" />
@@ -67,7 +76,6 @@
               <div class="analysis-copy">
                 <div class="analysis-title-line">
                   <h3>{{ workflow.label }}</h3>
-                  <span v-if="workflow.id === preferredWorkflow.id" class="recommended-label">Project default</span>
                 </div>
                 <p>{{ workflow.description }}</p>
                 <span class="input-hint">Input: {{ workflow.inputHint }}</span>
@@ -115,14 +123,13 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import Icon from '../components/ui/Icon.vue'
 import PageHeader from '../components/ui/PageHeader.vue'
 import {
   WORKFLOW_OPTIONS,
-  getWorkflowOption,
   runStatusLabel,
   workflowLabel,
 } from '../lib/workflowUi.js'
@@ -144,11 +151,11 @@ const accessRoleLabel = computed(() => {
 const recentRuns = computed(() => (dashboard.value?.recent_runs || []).slice(0, 6))
 const latestRun = computed(() => recentRuns.value[0] || null)
 const activeJob = computed(() => dashboard.value?.active_job || null)
-const preferredWorkflow = computed(() => (
-  getWorkflowOption(project.value?.analysis_workflow)
-  || getWorkflowOption(latestRun.value?.workflow_id)
-  || WORKFLOW_OPTIONS[0]
-))
+const analysisHubRoute = computed(() => ({
+  name: 'Overview',
+  params: { id: projectId.value },
+  hash: '#analysis-workflows',
+}))
 
 function workflowRun(workflowId) {
   return recentRuns.value.find((run) => run.workflow_id === workflowId) || null
@@ -179,8 +186,9 @@ function routeFor(workflowId, runId = '', tab = '') {
 }
 
 function runRoute(run) {
+  if (!run?.workflow_id) return analysisHubRoute.value
   const tab = run.status === 'completed' ? 'results' : run.status === 'failed' ? 'logs' : 'history'
-  return routeFor(run.workflow_id || preferredWorkflow.value.id, run.id, tab)
+  return routeFor(run.workflow_id, run.id, tab)
 }
 
 function workflowActionRoute(workflowId) {
@@ -200,7 +208,7 @@ function workflowActionLabel(workflowId) {
 const homeState = computed(() => {
   const job = activeJob.value
   if (job) {
-    const workflowId = job.workflow_id || preferredWorkflow.value.id
+    const workflowId = job.workflow_id || latestRun.value?.workflow_id || ''
     const runId = job.workflow_run_id || ''
     const queued = job.status === 'queued'
     const details = []
@@ -216,7 +224,7 @@ const homeState = computed(() => {
       details,
       action: 'View progress',
       icon: 'activity',
-      route: routeFor(workflowId, runId, 'logs'),
+      route: workflowId ? routeFor(workflowId, runId, 'logs') : analysisHubRoute.value,
     }
   }
 
@@ -249,46 +257,7 @@ const homeState = computed(() => {
     }
   }
 
-  if (!project.value?.analysis_workflow) {
-    return {
-      kind: 'new',
-      title: 'Choose your next analysis',
-      status: 'Ready',
-      description: 'Select a guided workflow below, or open Tools for an individual analysis step.',
-      details: [],
-      action: 'Browse tools',
-      icon: 'wrench',
-      route: { name: 'ToolLibrary', params: { id: projectId.value } },
-    }
-  }
-
-  const inputCount = workflowInputCount(preferredWorkflow.value.id)
-  if (inputCount) {
-    const sampleLabel = preferredWorkflow.value.id === 'appam-smk'
-      ? `paired sample${inputCount === 1 ? '' : 's'}`
-      : `mass spectrometry sample${inputCount === 1 ? '' : 's'}`
-    return {
-      kind: 'ready',
-      title: `Ready to start ${preferredWorkflow.value.label.toLowerCase()}`,
-      status: 'Inputs ready',
-      description: `${inputCount} ${sampleLabel} detected. Review the automatic sample mapping and start the analysis.`,
-      details: [`${inputCount} ${sampleLabel}`],
-      action: 'Review and start',
-      icon: 'check',
-      route: routeFor(preferredWorkflow.value.id),
-    }
-  }
-
-  return {
-    kind: 'new',
-    title: `Start ${preferredWorkflow.value.label.toLowerCase()}`,
-    status: 'Not started',
-    description: `Add ${preferredWorkflow.value.inputHint.toLowerCase()}. APPAM will detect samples, validate inputs and prepare the run automatically.`,
-    details: [],
-    action: 'Set up analysis',
-    icon: 'zap',
-    route: routeFor(preferredWorkflow.value.id),
-  }
+  return null
 })
 
 async function fetchJson(url) {
@@ -326,6 +295,17 @@ function formatDateTime(value) {
   }).format(new Date(value))
 }
 
+async function revealAnalysisSection() {
+  if (route.hash !== '#analysis-workflows' || loading.value) return
+  await nextTick()
+  document.getElementById('analysis-workflows')?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'start',
+  })
+}
+
+watch([() => route.hash, loading], revealAnalysisSection)
+
 onMounted(() => {
   loadProject()
   refreshTimer = window.setInterval(() => loadProject({ background: true }), 8000)
@@ -345,26 +325,18 @@ onUnmounted(() => {
 }
 
 .project-home__inner {
-  width: min(1120px, 100%);
+  width: min(var(--content-width), 100%);
   margin: 0 auto;
   padding: var(--spacing-6);
 }
 
-.meta-pill,
 .state-badge,
-.run-state,
-.recommended-label {
+.run-state {
   display: inline-flex;
   align-items: center;
   width: fit-content;
   border-radius: var(--radius-sm);
   font-weight: var(--font-semibold);
-}
-
-.meta-pill {
-  padding: 3px 8px;
-  background: var(--primary-50);
-  color: var(--primary-700);
 }
 
 .header-button,
@@ -375,7 +347,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   gap: var(--spacing-2);
-  min-height: 38px;
+  min-height: var(--control-height);
   border: 1px solid var(--primary-600);
   border-radius: var(--radius-sm);
   background: var(--primary-600);
@@ -431,7 +403,7 @@ onUnmounted(() => {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--spacing-6);
   align-items: center;
-  padding: var(--spacing-6);
+  padding: 20px;
   border: 1px solid var(--border-color);
   border-left: 4px solid var(--primary-500);
   border-radius: var(--radius-sm);
@@ -445,10 +417,10 @@ onUnmounted(() => {
 .next-action.failed { border-left-color: var(--error-500); }
 
 .section-kicker {
-  color: var(--primary-600);
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-  letter-spacing: 0.06em;
+  color: var(--gray-500);
+  font-size: 11px;
+  font-weight: var(--font-medium);
+  letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
 }
 
@@ -526,6 +498,16 @@ onUnmounted(() => {
   border-top: 1px solid var(--border-color-light);
 }
 
+.analysis-section.primary {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+#analysis-workflows {
+  scroll-margin-top: var(--spacing-4);
+}
+
 .section-heading {
   display: flex;
   align-items: end;
@@ -559,8 +541,6 @@ onUnmounted(() => {
   background: var(--surface-1);
 }
 
-.analysis-row.preferred { border-color: rgba(var(--accent-rgb), 0.3); }
-
 .analysis-icon {
   display: grid;
   place-items: center;
@@ -588,13 +568,6 @@ onUnmounted(() => {
   color: var(--gray-600);
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
-}
-
-.recommended-label {
-  padding: 3px 7px;
-  background: var(--primary-50);
-  color: var(--primary-700);
-  font-size: 11px;
 }
 
 .analysis-state {

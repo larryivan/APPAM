@@ -7,13 +7,13 @@
         <p>{{ workflow.description }}</p>
         <div class="workflow-hero-meta">
           <span class="hero-pill">{{ project?.name || `Project ${projectId}` }}</span>
+          <div class="hero-status" :class="statusClass">
+            <span class="status-dot"></span>
+            <span>{{ statusText }}</span>
+          </div>
         </div>
       </div>
       <div class="workflow-hero-actions">
-        <div class="hero-status" :class="statusClass">
-          <span class="status-dot"></span>
-          <span>{{ statusText }}</span>
-        </div>
         <button class="hero-btn primary" @click="handleOneClickRun" :disabled="disableRunActions || !hasReadyInputs">
           {{ startButtonLabel }}
         </button>
@@ -30,7 +30,7 @@
         </button>
         <details v-if="canResumeRun || canRetryRun || displayRun?.id" class="workflow-more">
           <summary class="hero-btn subtle icon-only" aria-label="More actions">···</summary>
-          <div class="workflow-more-menu">
+          <div class="workflow-more-menu" @click="closeMoreMenu">
             <button v-if="canResumeRun" class="more-menu-item" @click="handleResume">Resume</button>
             <button v-if="canRetryRun" class="more-menu-item" @click="handleRetry">Retry</button>
             <button v-if="displayRun?.id" class="more-menu-item" @click="handleProvenanceExport">Export run record</button>
@@ -190,11 +190,31 @@
           <span>Completed workflow artifacts and summaries will appear here.</span>
         </div>
         <template v-else>
+          <section v-if="primaryResultReport || resultFigures.length" class="result-destinations" aria-label="Explore analysis results">
+            <div class="result-destinations__copy">
+              <span class="result-destinations__icon"><Icon name="layout-dashboard" :size="19" /></span>
+              <span>
+                <strong>Explore this run</strong>
+                <small>Reports and figures stay linked to the source analysis.</small>
+              </span>
+            </div>
+            <div class="result-destinations__actions">
+              <router-link v-if="primaryResultReport" :to="reportCenterRoute(primaryResultReport)">
+                <Icon name="clipboard-list" :size="16" />
+                <span>Open report</span>
+              </router-link>
+              <router-link v-if="resultFigures.length" :to="resultFiguresRoute">
+                <Icon name="images" :size="16" />
+                <span>{{ resultFigures.length }} {{ resultFigures.length === 1 ? 'figure' : 'figures' }}</span>
+              </router-link>
+            </div>
+          </section>
+
           <div v-if="resultMetricCards.length" class="result-metric-grid">
             <article v-for="metric in resultMetricCards" :key="metricKey(metric)" class="result-metric">
               <span>{{ humanizeMetric(metric.metric_name) }}</span>
               <strong>{{ displayMetric(metric) }}</strong>
-              <small>{{ metric.sample_id || humanizeMetric(metric.metric_group) }}</small>
+              <small>{{ metricNote(metric) }}</small>
             </article>
           </div>
 
@@ -212,12 +232,20 @@
                 <span class="artifact-size">{{ formatBytes(artifact.size_bytes) }}</span>
                 <div class="artifact-actions">
                   <button
+                    v-if="isPlotTableArtifact(artifact)"
                     type="button"
-                    title="Preview result"
+                    title="Create a plot from this table"
+                    @click="plotArtifact(artifact)"
+                  >
+                    <Icon name="chart-no-axes-combined" :size="15" />
+                  </button>
+                  <button
+                    type="button"
+                    :title="artifactOpenTitle(artifact)"
                     :disabled="!artifact.project_path"
                     @click="openArtifactPreview(artifact)"
                   >
-                    <Icon name="eye" :size="15" />
+                    <Icon :name="artifactOpenIcon(artifact)" :size="15" />
                   </button>
                   <button
                     type="button"
@@ -255,18 +283,15 @@
       @download="downloadPreviewArtifact"
     />
 
-    <div v-if="showRunDialog" class="run-dialog-backdrop" @click.self="closeRunDialog">
-      <div class="run-dialog">
-        <div class="run-dialog-header">
-          <div>
-            <div class="workflow-kicker">Run Workflow</div>
-            <h3>{{ workflow.title }}</h3>
-            <p>Review inputs and options.</p>
-          </div>
-          <button class="dialog-close" @click="closeRunDialog" aria-label="Close dialog">×</button>
-        </div>
-
-        <div class="run-dialog-body">
+    <Modal
+      :open="showRunDialog"
+      eyebrow="Run analysis"
+      :title="workflow.title"
+      subtitle="Review inputs and options."
+      size="lg"
+      @close="closeRunDialog"
+    >
+      <div class="run-dialog-body">
           <div v-if="workflowPresets.length" class="preset-strip">
             <button
               v-for="preset in workflowPresets"
@@ -334,18 +359,17 @@
           </details>
 
           <button v-if="advancedParameters.length" class="advanced-toggle" @click="showAdvancedParams = !showAdvancedParams">
-            {{ showAdvancedParams ? 'Hide Advanced Parameters' : `Show Advanced Parameters (${advancedParameters.length})` }}
+            {{ showAdvancedParams ? 'Hide advanced parameters' : `Show advanced parameters (${advancedParameters.length})` }}
           </button>
         </div>
 
-        <div class="run-dialog-footer">
-          <button class="hero-btn secondary" @click="closeRunDialog">Cancel</button>
-          <button class="hero-btn primary" @click="handleRunConfirm" :disabled="loadingState">
-            {{ runDialogDryRun ? 'Validate setup' : 'Start analysis' }}
-          </button>
-        </div>
-      </div>
-    </div>
+      <template #footer>
+        <button class="hero-btn secondary" @click="closeRunDialog">Cancel</button>
+        <button class="hero-btn primary" @click="handleRunConfirm" :disabled="loadingState">
+          {{ runDialogDryRun ? 'Validate setup' : 'Start analysis' }}
+        </button>
+      </template>
+    </Modal>
   </div>
 
   <div v-else class="workflow-loading">
@@ -355,11 +379,19 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import FilePicker from '@/components/FilePicker.vue'
 import FilePreviewModal from '@/components/FilePreviewModal.vue'
 import DragDropUpload from '@/components/DragDropUpload.vue'
 import Icon from '@/components/ui/Icon.vue'
+import Modal from '@/components/ui/Modal.vue'
+import { collectWorkflowFigures } from '@/lib/plotStudio.js'
+import {
+  collectWorkflowReports,
+  isPlotTableArtifact,
+  isPreviewFigureArtifact,
+  isReportArtifact,
+} from '@/lib/resultArtifacts.js'
 import { describeWorkflowError, parameterLabel } from '@/lib/workflowUi.js'
 import {
   getWorkflowDefinition,
@@ -367,6 +399,7 @@ import {
 } from '@/lib/workflowDefinitions'
 
 const route = useRoute()
+const router = useRouter()
 
 const projectId = computed(() => String(route.params.id || ''))
 const workflow = computed(() => getWorkflowDefinition(String(route.params.workflowId || '')))
@@ -542,6 +575,7 @@ const basicParameterNames = computed(() => {
       'cores',
       'match_between_runs',
       'include_contaminants',
+      'maxquant_mode',
     ])
   }
   return new Set((workflowTool.value?.parameters || []).map((param) => param.name))
@@ -561,30 +595,30 @@ const workflowPresets = computed(() => {
       {
         id: 'quick-validation',
         label: 'Quick validation',
-        values: { dry_run: true, use_ancient_contigs: false, enable_bin_refinement: false, enable_checkm1: false, enable_checkm2: false, enable_gunc: false, enable_gtdbtk: false, enable_prokka: false, enable_antismash: false, enable_rgi: false, enable_eggnog: false, enable_abricate: false, cores: 4 },
+        values: { dry_run: true, use_ancient_contigs: false, enable_bin_refinement: false, enable_checkm1: false, enable_checkm2: false, enable_gunc: false, enable_gtdbtk: false, enable_prokka: false, enable_antismash: false, enable_rgi: false, enable_eggnog: false, enable_abricate: false, enable_variants: false, enable_visualization: true, cores: 4 },
       },
       {
         id: 'mag-recovery',
         label: 'MAG recovery',
-        values: { dry_run: false, use_ancient_contigs: false, enable_bin_refinement: false, enable_checkm1: false, enable_checkm2: true, enable_gunc: true, enable_gtdbtk: true, enable_prokka: false, enable_eggnog: false, enable_abricate: false, enable_rgi: false, enable_antismash: false },
+        values: { dry_run: false, use_ancient_contigs: false, enable_bin_refinement: false, enable_checkm1: false, enable_checkm2: true, enable_gunc: true, enable_gtdbtk: true, enable_prokka: false, enable_eggnog: false, enable_abricate: false, enable_rgi: false, enable_antismash: false, enable_variants: false, enable_visualization: true },
       },
       {
         id: 'full-annotation',
         label: 'Full annotation',
-        values: { dry_run: false, use_ancient_contigs: false, enable_bin_refinement: false, enable_checkm1: false, enable_checkm2: true, enable_gunc: true, enable_gtdbtk: true, enable_prokka: true, enable_eggnog: true, enable_abricate: true, enable_rgi: false, enable_antismash: true },
+        values: { dry_run: false, use_ancient_contigs: false, enable_bin_refinement: false, enable_checkm1: false, enable_checkm2: true, enable_gunc: true, enable_gtdbtk: true, enable_prokka: true, enable_eggnog: true, enable_abricate: true, enable_rgi: false, enable_antismash: true, enable_variants: false, enable_visualization: true },
       },
       {
         id: 'publication-run',
         label: 'Publication run',
-        values: { dry_run: false, input_hash_mode: 'sha256', require_database_manifest: true, use_ancient_contigs: false, enable_bin_refinement: false, enable_checkm1: false, enable_checkm2: true, enable_gunc: true, enable_gtdbtk: true, enable_prokka: true, enable_eggnog: false, enable_abricate: false, enable_rgi: false, enable_antismash: false },
+        values: { dry_run: false, input_hash_mode: 'sha256', require_database_manifest: true, use_ancient_contigs: false, enable_bin_refinement: false, enable_checkm1: false, enable_checkm2: true, enable_gunc: true, enable_gtdbtk: true, enable_prokka: true, enable_eggnog: false, enable_abricate: false, enable_rgi: false, enable_antismash: false, enable_variants: false, enable_visualization: true },
       },
     ]
   }
   if (workflow.value?.id === 'appam-paleoproteomics') {
     return [
       { id: 'recommended', label: 'Recommended', values: {} },
-      { id: 'quick-validation', label: 'Quick validation', values: { dry_run: true, cores: 4, match_between_runs: false } },
-      { id: 'publication-run', label: 'Publication run', values: { dry_run: false, input_hash_mode: 'sha256', cores: 8, match_between_runs: false, include_contaminants: true } },
+      { id: 'quick-validation', label: 'Quick validation', values: { dry_run: true, cores: 4, match_between_runs: false, maxquant_mode: 'batch' } },
+      { id: 'publication-run', label: 'Publication run', values: { dry_run: false, input_hash_mode: 'sha256', cores: 8, match_between_runs: false, include_contaminants: true, maxquant_mode: 'batch' } },
     ]
   }
   return []
@@ -596,14 +630,35 @@ const hasParsedResults = computed(() => Boolean(
   )
 ))
 
+// 'counts' are per-module file tallies for operators (did each module write
+// output?). They stay in the run record but are not results, so they never
+// take a headline slot.
+const HEADLINE_EXCLUDED_GROUPS = new Set(['counts'])
+
+// Read as a sentence: how much was analysed, what was recovered, how good it
+// is, what it is, and whether it is ancient.
+const OVERVIEW_ORDER = Object.freeze([
+  'samples',
+  'mags_recovered',
+  'high_quality_mags',
+  'medium_quality_mags',
+  'median_completeness',
+  'median_contamination',
+  'genera',
+  'damage_supported_contigs',
+])
+
 const resultMetricCards = computed(() => {
-  const priority = ['counts', 'checkm2', 'gunc', 'gtdbtk', 'maxquant', 'paleoproteomics_qc', 'abricate', 'rgi', 'antismash']
-  const metrics = [...(displayRun.value?.metrics || [])]
-  metrics.sort((left, right) => {
-    const leftRank = priority.indexOf(left.metric_group)
-    const rightRank = priority.indexOf(right.metric_group)
-    return (leftRank === -1 ? priority.length : leftRank) - (rightRank === -1 ? priority.length : rightRank)
-  })
+  const priority = ['overview', 'maxquant', 'paleoproteomics_qc', 'checkm2', 'gunc', 'gtdbtk', 'abricate', 'rgi', 'antismash']
+  const metrics = (displayRun.value?.metrics || []).filter((metric) => !HEADLINE_EXCLUDED_GROUPS.has(metric.metric_group))
+  const rank = (list, value) => {
+    const index = list.indexOf(value)
+    return index === -1 ? list.length : index
+  }
+  metrics.sort((left, right) => (
+    rank(priority, left.metric_group) - rank(priority, right.metric_group)
+    || rank(OVERVIEW_ORDER, left.metric_name) - rank(OVERVIEW_ORDER, right.metric_name)
+  ))
   const seen = new Set()
   return metrics.filter((metric) => {
     const key = metricKey(metric)
@@ -624,6 +679,8 @@ const artifactGroups = computed(() => {
     spectra: 'Spectra',
     damage: 'Damage analysis',
     fasta: 'Sequences',
+    visualization: 'Visualizations',
+    variants: 'Variants',
     config: 'Configuration',
   }
   const order = Object.keys(labels)
@@ -641,6 +698,19 @@ const artifactGroups = computed(() => {
       return (leftRank === -1 ? order.length : leftRank) - (rightRank === -1 ? order.length : rightRank)
     })
 })
+
+const resultReports = computed(() => collectWorkflowReports(displayRun.value ? [displayRun.value] : []))
+const primaryResultReport = computed(() => resultReports.value[0] || null)
+const resultFigures = computed(() => collectWorkflowFigures(displayRun.value ? [displayRun.value] : []))
+const resultFiguresRoute = computed(() => ({
+  name: 'PlotStudio',
+  params: { id: projectId.value },
+  query: {
+    view: 'analysis',
+    run: displayRun.value?.id || '',
+    workflow: workflow.value?.id || '',
+  },
+}))
 
 const logLines = computed(() => {
   return logText.value
@@ -679,10 +749,42 @@ function formatBytes(bytes) {
   return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${units[unitIndex]}`
 }
 
+const METRIC_LABELS = Object.freeze({
+  samples: 'Samples',
+  mags_recovered: 'MAGs recovered',
+  high_quality_mags: 'High-quality MAGs',
+  medium_quality_mags: 'Medium-quality MAGs',
+  median_completeness: 'Median completeness',
+  median_contamination: 'Median contamination',
+  genera: 'Genera',
+  damage_supported_contigs: 'Damage-supported contigs',
+})
+
+// One line of context under each overview number, so a headline figure is
+// never read without its basis.
+const METRIC_NOTES = Object.freeze({
+  samples: 'Paired libraries in this run',
+  mags_recovered: 'Bins with a quality assessment',
+  high_quality_mags: 'Completeness ≥90%, contamination ≤5%',
+  medium_quality_mags: 'Completeness ≥50%, contamination ≤10%',
+  median_completeness: 'CheckM2, across all MAGs',
+  median_contamination: 'CheckM2, across all MAGs',
+  genera: 'Distinct GTDB genera',
+})
+
 function humanizeMetric(value) {
+  if (METRIC_LABELS[value]) return METRIC_LABELS[value]
   return String(value || 'Result')
     .replace(/[_-]+/g, ' ')
     .replace(/\b\w/g, (character) => character.toUpperCase())
+}
+
+function metricNote(metric) {
+  if (metric.metric_name === 'damage_supported_contigs' && metric.payload) {
+    const { supported, total, qvalue_max: q, accuracy_min: a } = metric.payload
+    return `${supported} of ${total} contigs · q ≤ ${q}, accuracy ≥ ${a}`
+  }
+  return METRIC_NOTES[metric.metric_name] || metric.sample_id || humanizeMetric(metric.metric_group)
 }
 
 function metricKey(metric) {
@@ -714,6 +816,21 @@ function resetLogState() {
 
 async function openArtifactPreview(artifact) {
   if (!artifact?.project_path) return
+  if (isReportArtifact(artifact)) {
+    await router.push(reportCenterRoute({
+      path: artifact.project_path,
+      runId: displayRun.value?.id || '',
+      workflowId: workflow.value?.id || '',
+    }))
+    return
+  }
+  if (isPreviewFigureArtifact(artifact)) {
+    await router.push({
+      ...resultFiguresRoute.value,
+      query: { ...resultFiguresRoute.value.query, figure: artifact.project_path },
+    })
+    return
+  }
   actionError.value = ''
   try {
     const path = artifact.project_path
@@ -727,6 +844,44 @@ async function openArtifactPreview(artifact) {
   } catch (error) {
     showActionError(error)
   }
+}
+
+function reportCenterRoute(report) {
+  return {
+    name: 'ReportCenter',
+    params: { id: projectId.value },
+    query: {
+      path: report?.path || report?.project_path || '',
+      run: report?.runId || displayRun.value?.id || '',
+      workflow: report?.workflowId || workflow.value?.id || '',
+    },
+  }
+}
+
+function plotArtifact(artifact) {
+  if (!artifact?.project_path) return
+  router.push({
+    name: 'PlotStudio',
+    params: { id: projectId.value },
+    query: {
+      view: 'create',
+      source: artifact.project_path,
+      run: displayRun.value?.id || '',
+      workflow: workflow.value?.id || '',
+    },
+  })
+}
+
+function artifactOpenTitle(artifact) {
+  if (isReportArtifact(artifact)) return 'Open interactive report'
+  if (isPreviewFigureArtifact(artifact)) return 'Open analysis figure'
+  return 'Preview result'
+}
+
+function artifactOpenIcon(artifact) {
+  if (isReportArtifact(artifact)) return 'clipboard-list'
+  if (isPreviewFigureArtifact(artifact)) return 'maximize-2'
+  return 'eye'
 }
 
 function closeArtifactPreview() {
@@ -1305,6 +1460,10 @@ async function handleRun(forceDryRun) {
   }
 }
 
+function closeMoreMenu(event) {
+  event.currentTarget.closest('details')?.removeAttribute('open')
+}
+
 function openRunDialog() {
   actionError.value = ''
   runDialogDryRun.value = false
@@ -1450,6 +1609,7 @@ onUnmounted(() => {
   disposed = true
   if (refreshTimer) {
     window.clearTimeout(refreshTimer)
+    refreshTimer = null
   }
 })
 </script>
@@ -1459,6 +1619,7 @@ onUnmounted(() => {
   min-height: 100%;
   background: var(--surface-0);
   color: var(--gray-900);
+  overflow-y: auto;
 }
 
 .workflow-hero {
@@ -1466,43 +1627,40 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: flex-start;
   gap: 20px;
-  padding: 18px 24px 14px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(255, 255, 255, 0.82);
+  padding: 18px 24px 16px;
+  border-bottom: 1px solid var(--border-color-light);
+  background: var(--surface-1);
 }
 
 .workflow-kicker {
   display: inline-flex;
   align-items: center;
-  min-height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: rgba(47, 111, 237, 0.12);
-  color: #2154b7;
+  color: var(--gray-500);
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-weight: var(--font-medium);
+  letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
 }
 
 .workflow-hero h1 {
-  margin: 8px 0 8px;
-  font-size: clamp(1.7rem, 2.6vw, 2.35rem);
-  line-height: 1.05;
-  letter-spacing: -0.03em;
+  margin: 4px 0 5px;
+  font-size: 24px;
+  line-height: 1.2;
+  letter-spacing: 0;
 }
 
 .workflow-hero p {
   max-width: 720px;
   margin: 0;
-  color: #475569;
-  font-size: 0.94rem;
+  color: var(--gray-500);
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
 .workflow-hero-meta {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   margin-top: 12px;
 }
@@ -1510,13 +1668,13 @@ onUnmounted(() => {
 .hero-pill {
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
-  padding: 0 11px;
-  border-radius: 999px;
-  background: #ffffff;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  font-size: 0.82rem;
-  color: #0f172a;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border-color-light);
+  font-size: var(--text-xs);
+  color: var(--gray-600);
 }
 
 .hero-pill.subtle {
@@ -1528,22 +1686,22 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex-shrink: 0;
   gap: 8px;
-  flex-wrap: wrap;
-  max-width: 320px;
 }
 
 .hero-status {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 0 13px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.86);
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  font-weight: 700;
-  color: #475569;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border-color-light);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  color: var(--gray-600);
 }
 
 .hero-status.running,
@@ -1553,7 +1711,7 @@ onUnmounted(() => {
 
 .hero-status.starting,
 .status-value.starting {
-  color: #1d4ed8;
+  color: var(--accent-700);
 }
 
 .hero-status.completed,
@@ -1586,13 +1744,14 @@ onUnmounted(() => {
 }
 
 .hero-btn {
-  border: none;
-  border-radius: 12px;
-  min-height: 38px;
-  padding: 0 13px;
-  font-weight: 700;
+  min-height: var(--control-height);
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-base);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .hero-btn:hover:not(:disabled) {
@@ -1600,7 +1759,10 @@ onUnmounted(() => {
 }
 
 .hero-btn:disabled {
-  opacity: 0.45;
+  opacity: 1;
+  background: var(--gray-200);
+  border-color: var(--gray-200);
+  color: var(--gray-400);
   cursor: not-allowed;
 }
 
@@ -1622,8 +1784,8 @@ onUnmounted(() => {
 
 .hero-btn.subtle {
   background: transparent;
-  color: #64748b;
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  color: var(--gray-600);
+  border-color: var(--border-color-light);
 }
 
 .hero-btn.icon-only {
@@ -1634,9 +1796,9 @@ onUnmounted(() => {
 }
 
 .hero-btn.danger {
-  background: #fff5f5;
-  color: #b91c1c;
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: var(--error-50);
+  color: var(--error-600);
+  border-color: rgba(170, 57, 57, 0.2);
 }
 
 .workflow-more {
@@ -1652,8 +1814,8 @@ onUnmounted(() => {
 }
 
 .workflow-more[open] .hero-btn.secondary {
-  background: rgba(47, 111, 237, 0.08);
-  color: #1d4ed8;
+  background: var(--accent-50);
+  color: var(--accent-700);
 }
 
 .workflow-more-menu {
@@ -1662,30 +1824,29 @@ onUnmounted(() => {
   right: 0;
   z-index: 20;
   min-width: 180px;
-  padding: 8px;
+  padding: 6px;
   display: grid;
   gap: 6px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.12);
-  backdrop-filter: blur(16px);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-md);
 }
 
 .more-menu-item {
-  min-height: 38px;
+  min-height: 34px;
   padding: 0 12px;
   border: none;
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: #0f172a;
-  font-weight: 600;
+  color: var(--gray-700);
+  font-weight: var(--font-medium);
   text-align: left;
   cursor: pointer;
 }
 
 .more-menu-item:hover:not(:disabled) {
-  background: rgba(47, 111, 237, 0.08);
+  background: var(--accent-50);
 }
 
 .more-menu-item:disabled {
@@ -1696,8 +1857,8 @@ onUnmounted(() => {
 .workflow-banner {
   margin: 14px 24px 0;
   padding: 13px 15px;
-  border-radius: 14px;
-  font-weight: 600;
+  border-radius: var(--radius-base);
+  font-weight: var(--font-medium);
 }
 
 .workflow-banner.error {
@@ -1712,7 +1873,7 @@ onUnmounted(() => {
 }
 
 .workflow-banner-copy span {
-  font-size: 0.84rem;
+  font-size: var(--text-sm);
   font-weight: 500;
 }
 
@@ -1724,7 +1885,7 @@ onUnmounted(() => {
 .error-details summary {
   width: fit-content;
   padding-top: 8px;
-  font-size: 0.76rem;
+  font-size: var(--text-xs);
   cursor: pointer;
 }
 
@@ -1737,7 +1898,7 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.72);
   color: #7f1d1d;
   font-family: var(--font-family-mono);
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   font-weight: 500;
   line-height: 1.45;
   white-space: pre-wrap;
@@ -1751,10 +1912,10 @@ onUnmounted(() => {
 
 .workflow-input-card,
 .workflow-activity-card {
-  background: rgba(255, 255, 255, 0.88);
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 8px;
-  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.05);
+  background: var(--surface-1);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-md);
+  box-shadow: none;
 }
 
 .workflow-input-card {
@@ -1777,8 +1938,8 @@ onUnmounted(() => {
 
 .panel-header p {
   margin: 4px 0 0;
-  color: #64748b;
-  font-size: 0.92rem;
+  color: var(--gray-500);
+  font-size: var(--text-sm);
 }
 
 .panel-header.compact {
@@ -1803,7 +1964,7 @@ onUnmounted(() => {
 
 .sample-review {
   margin: 0 18px 16px;
-  border-top: 1px solid rgba(148, 163, 184, 0.14);
+  border-top: 1px solid var(--border-color);
 }
 
 .quick-upload {
@@ -1813,12 +1974,12 @@ onUnmounted(() => {
 .quick-upload > p {
   margin: 8px 0 0;
   color: #64748b;
-  font-size: 0.76rem;
+  font-size: var(--text-xs);
 }
 
 .quick-upload a {
   margin-left: 5px;
-  color: #1d4ed8;
+  color: var(--accent-700);
   font-weight: 700;
   text-decoration: none;
 }
@@ -1827,7 +1988,7 @@ onUnmounted(() => {
   width: fit-content;
   padding: 12px 0;
   color: #475569;
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
   font-weight: 700;
   cursor: pointer;
 }
@@ -1842,7 +2003,7 @@ onUnmounted(() => {
 
 .file-picker-btn.compact {
   min-height: 36px;
-  border-radius: 12px;
+  border-radius: var(--radius-base);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1855,9 +2016,9 @@ onUnmounted(() => {
   min-height: 26px;
   padding: 0 9px;
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.14);
+  background: var(--surface-3);
   color: #475569;
-  font-size: 0.76rem;
+  font-size: var(--text-xs);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -1882,9 +2043,9 @@ onUnmounted(() => {
   max-height: 260px;
   margin: 0 18px 18px;
   overflow: auto;
-  border-radius: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  background: #fff;
+  border-radius: var(--radius-base);
+  border: 1px solid var(--border-color-light);
+  background: var(--surface-1);
 }
 
 .sample-table {
@@ -1896,9 +2057,9 @@ onUnmounted(() => {
 .sample-table th,
 .sample-table td {
   padding: 10px 12px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  border-bottom: 1px solid var(--border-color-light);
   text-align: left;
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
   vertical-align: top;
 }
 
@@ -1906,9 +2067,9 @@ onUnmounted(() => {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: #f8fafc;
-  color: #475569;
-  font-size: 0.74rem;
+  background: var(--surface-2);
+  color: var(--gray-600);
+  font-size: var(--text-xs);
   text-transform: uppercase;
 }
 
@@ -1946,7 +2107,7 @@ onUnmounted(() => {
 
 .field-topline label {
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
 }
 
 .field-tag {
@@ -1955,29 +2116,29 @@ onUnmounted(() => {
   min-height: 22px;
   padding: 0 8px;
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.14);
+  background: var(--surface-3);
   color: #64748b;
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   font-weight: 700;
 }
 
 .field-help {
   margin: 0;
   color: #64748b;
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   line-height: 1.45;
 }
 
 .compact-input,
 .file-picker-btn {
   width: 100%;
-  min-height: 42px;
-  border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.26);
-  background: #fff;
-  padding: 0 14px;
-  font-size: 0.92rem;
-  color: #0f172a;
+  min-height: var(--control-height);
+  border-radius: var(--radius-base);
+  border: 1px solid var(--border-color);
+  background: var(--surface-1);
+  padding: 0 11px;
+  font-size: var(--text-sm);
+  color: var(--gray-900);
 }
 
 .file-picker-btn {
@@ -1994,79 +2155,21 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
-.run-dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: rgba(15, 23, 42, 0.34);
-  backdrop-filter: blur(10px);
-}
 
-.run-dialog {
-  width: min(720px, 100%);
-  max-height: min(86vh, 960px);
-  display: flex;
-  flex-direction: column;
-  border-radius: 24px;
-  background: #ffffff;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  box-shadow: 0 28px 60px rgba(15, 23, 42, 0.18);
-  overflow: hidden;
-}
 
-.run-dialog-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 20px 22px 14px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
-}
 
-.run-dialog-header h3 {
-  margin: 10px 0 6px;
-  font-size: 1.28rem;
-}
 
-.run-dialog-header p {
-  margin: 0;
-  color: #64748b;
-  font-size: 0.9rem;
-}
 
-.dialog-close {
-  width: 38px;
-  height: 38px;
-  border: none;
-  border-radius: 12px;
-  background: rgba(148, 163, 184, 0.12);
-  color: #334155;
-  font-size: 1.4rem;
-  line-height: 1;
-  cursor: pointer;
-}
 
-.dialog-close:hover {
-  background: rgba(148, 163, 184, 0.2);
-}
 
 .run-dialog-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 18px 22px;
   display: grid;
-  gap: 16px;
+  gap: var(--spacing-5);
 }
 
 .dialog-field {
-  padding: 14px;
-  border-radius: 18px;
-  background: #f8fafc;
-  border: 1px solid rgba(148, 163, 184, 0.14);
+  padding: 0 0 14px;
+  border-bottom: 1px solid var(--border-color-light);
 }
 
 .preset-strip {
@@ -2079,25 +2182,25 @@ onUnmounted(() => {
 .advanced-toggle {
   min-height: 34px;
   padding: 0 11px;
-  border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  background: #fff;
-  color: #475569;
-  font-size: 0.82rem;
-  font-weight: 700;
+  border-radius: var(--radius-base);
+  border: 1px solid var(--border-color);
+  background: var(--surface-1);
+  color: var(--gray-600);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
   cursor: pointer;
 }
 
 .preset-btn.active {
-  background: rgba(47, 111, 237, 0.1);
-  border-color: rgba(47, 111, 237, 0.22);
-  color: #1d4ed8;
+  background: var(--accent-50);
+  border-color: var(--accent-200);
+  color: var(--accent-700);
 }
 
 .advanced-toggle {
   width: 100%;
   min-height: 40px;
-  background: rgba(148, 163, 184, 0.08);
+  background: var(--surface-2);
 }
 
 .run-mode-toggle {
@@ -2106,23 +2209,23 @@ onUnmounted(() => {
   gap: 12px;
   min-height: 48px;
   padding: 0 14px;
-  border-radius: 16px;
-  background: rgba(47, 111, 237, 0.06);
-  border: 1px solid rgba(47, 111, 237, 0.12);
+  border-radius: var(--radius-base);
+  background: var(--primary-50);
+  border: 1px solid var(--primary-100);
   font-weight: 600;
   color: #1e3a8a;
 }
 
 .run-technical-options {
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
-  background: rgba(148, 163, 184, 0.05);
+  background: var(--surface-2);
 }
 
 .run-technical-options > summary {
   padding: 11px 13px;
   color: #64748b;
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
   font-weight: 700;
   cursor: pointer;
 }
@@ -2132,13 +2235,6 @@ onUnmounted(() => {
   border-radius: 8px;
 }
 
-.run-dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  padding: 16px 22px 20px;
-  border-top: 1px solid rgba(148, 163, 184, 0.14);
-}
 
 .workflow-activity-card {
   margin: 16px 24px 24px;
@@ -2151,14 +2247,17 @@ onUnmounted(() => {
 
 .tab-buttons {
   display: flex;
-  gap: 8px;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-base);
+  background: var(--surface-2);
 }
 
 .tab-buttons button {
   min-height: 34px;
   padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: var(--radius-sm);
+  border: 0;
   background: transparent;
   color: #64748b;
   font-weight: 700;
@@ -2166,14 +2265,15 @@ onUnmounted(() => {
 }
 
 .tab-buttons button.active {
-  background: rgba(47, 111, 237, 0.12);
-  color: #1d4ed8;
+  background: var(--surface-1);
+  color: var(--primary-700);
+  box-shadow: var(--shadow-xs);
 }
 
 .activity-meta {
   padding-top: 2px;
   color: #64748b;
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
 }
 
 .activity-panel {
@@ -2186,11 +2286,11 @@ onUnmounted(() => {
   max-height: 360px;
   overflow: auto;
   padding: 16px;
-  border-radius: 18px;
+  border-radius: var(--radius-base);
   background: #0f172a;
   color: #dbe4f0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-  box-shadow: inset 0 0 0 1px rgba(71, 85, 105, 0.35);
+  box-shadow: inset 0 0 0 1px var(--border-color-dark);
 }
 
 .log-row {
@@ -2198,7 +2298,7 @@ onUnmounted(() => {
   grid-template-columns: 40px 1fr;
   gap: 12px;
   line-height: 1.5;
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
 }
 
 .line-no {
@@ -2217,15 +2317,16 @@ onUnmounted(() => {
 
 .history-card {
   padding: 14px 16px;
-  border-radius: 16px;
-  background: rgba(248, 250, 252, 0.9);
-  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: var(--radius-base);
+  background: var(--surface-1);
+  border: 1px solid var(--border-color-light);
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
 .history-card:hover {
-  box-shadow: var(--shadow-sm);
+  border-color: var(--border-color-dark);
+  background: var(--surface-2);
 }
 
 .history-card-top,
@@ -2239,12 +2340,83 @@ onUnmounted(() => {
 .history-card-bottom {
   margin-top: 10px;
   color: #64748b;
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
 }
 
 .result-panel {
   display: grid;
   gap: 22px;
+}
+
+.result-destinations {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--accent-200);
+  border-radius: 6px;
+  background: rgba(239, 246, 255, 0.72);
+}
+
+.result-destinations__copy,
+.result-destinations__copy > span:last-child {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.result-destinations__copy > span:last-child {
+  display: grid;
+  gap: 2px;
+}
+
+.result-destinations__icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--primary-700);
+}
+
+.result-destinations__copy strong {
+  color: var(--gray-900);
+  font-size: var(--text-sm);
+}
+
+.result-destinations__copy small {
+  color: var(--gray-500);
+  font-size: var(--text-xs);
+}
+
+.result-destinations__actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 7px;
+}
+
+.result-destinations__actions a {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid var(--accent-200);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--primary-700);
+  font-size: var(--text-xs);
+  font-weight: 650;
+}
+
+.result-destinations__actions a:hover {
+  border-color: var(--primary-400);
+  background: var(--primary-50);
 }
 
 .result-metric-grid {
@@ -2260,7 +2432,7 @@ onUnmounted(() => {
   align-content: center;
   gap: 4px;
   padding: 12px 14px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
   background: #fff;
 }
@@ -2269,7 +2441,7 @@ onUnmounted(() => {
 .result-metric small {
   overflow-wrap: anywhere;
   color: #64748b;
-  font-size: 0.74rem;
+  font-size: var(--text-xs);
 }
 
 .result-metric strong {
@@ -2293,27 +2465,27 @@ onUnmounted(() => {
 .artifact-group h4 {
   margin: 0;
   color: #172033;
-  font-size: 0.92rem;
+  font-size: var(--text-sm);
 }
 
 .artifact-group > header span {
   color: #64748b;
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
 }
 
 .artifact-list {
-  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  border-top: 1px solid var(--border-color);
 }
 
 .artifact-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto 76px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(76px, auto);
   align-items: center;
   gap: 14px;
   min-height: 58px;
   padding: 9px 4px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .artifact-copy {
@@ -2325,21 +2497,21 @@ onUnmounted(() => {
 .artifact-copy strong {
   overflow-wrap: anywhere;
   color: #1e293b;
-  font-size: 0.84rem;
+  font-size: var(--text-sm);
 }
 
 .artifact-copy span {
   min-width: 0;
   overflow: hidden;
   color: #64748b;
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .artifact-size {
   color: #64748b;
-  font-size: 0.76rem;
+  font-size: var(--text-xs);
   white-space: nowrap;
 }
 
@@ -2355,7 +2527,7 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(148, 163, 184, 0.24);
+  border: 1px solid var(--border-color);
   border-radius: 5px;
   background: #fff;
   color: #475569;
@@ -2363,8 +2535,8 @@ onUnmounted(() => {
 }
 
 .artifact-actions button:hover:not(:disabled) {
-  border-color: rgba(47, 111, 237, 0.4);
-  color: #1d4ed8;
+  border-color: var(--accent-500);
+  color: var(--accent-700);
 }
 
 .artifact-actions button:disabled {
@@ -2390,6 +2562,20 @@ onUnmounted(() => {
   .artifact-size {
     display: none;
   }
+
+  .result-destinations {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .result-destinations__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .result-destinations__actions a {
+    justify-content: center;
+  }
 }
 
 .history-state {
@@ -2398,13 +2584,13 @@ onUnmounted(() => {
   min-height: 24px;
   padding: 0 9px;
   border-radius: 999px;
-  font-size: 0.74rem;
+  font-size: var(--text-xs);
   font-weight: 700;
-  background: rgba(148, 163, 184, 0.14);
+  background: var(--surface-3);
 }
 
-.history-state.starting { background: rgba(96, 165, 250, 0.14); color: #1d4ed8; }
-.history-state.running { background: rgba(47, 111, 237, 0.12); color: #1d4ed8; }
+.history-state.starting { background: var(--accent-50); color: var(--accent-700); }
+.history-state.running { background: var(--accent-50); color: var(--accent-700); }
 .history-state.completed { background: rgba(55, 168, 102, 0.14); color: #166534; }
 .history-state.queued { background: rgba(239, 141, 39, 0.12); color: #b45309; }
 .history-state.failed,
@@ -2432,7 +2618,7 @@ onUnmounted(() => {
 
 .empty-activity span {
   margin-top: 8px;
-  font-size: 0.88rem;
+  font-size: var(--text-sm);
 }
 
 @media (max-width: 900px) {
@@ -2475,14 +2661,6 @@ onUnmounted(() => {
 
   .input-setup-row {
     grid-template-columns: 1fr;
-  }
-
-  .run-dialog-backdrop {
-    padding: 14px;
-  }
-
-  .run-dialog {
-    max-height: 92vh;
   }
 }
 </style>

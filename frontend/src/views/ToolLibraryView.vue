@@ -52,7 +52,7 @@
             <router-link
               v-for="tool in section.tools"
               :key="tool.id"
-              :to="toolRoute(tool)"
+              :to="toolRoute(tool, section.id)"
               class="tool-row"
             >
               <div class="tool-icon">
@@ -75,17 +75,18 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import Icon from '@/components/ui/Icon.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
-import { filterToolSections } from '@/lib/toolUi.js'
+import { filterToolSections, normalizeToolSection } from '@/lib/toolUi.js'
 
 const route = useRoute()
+const router = useRouter()
 const sections = ref([])
 const searchQuery = ref('')
-const selectedSection = ref('')
+const selectedSection = ref(normalizeToolSection(route.query.section))
 const loading = ref(true)
 const errorMessage = ref('')
 const catalogSections = computed(() => sections.value.filter((section) => section.id !== 'workflow-automation'))
@@ -108,10 +109,11 @@ function sectionIcon(icon) {
   }[icon] || 'wrench'
 }
 
-function toolRoute(tool) {
+function toolRoute(tool, sectionId) {
   return {
     name: 'PipelineTool',
     params: { id: route.params.id, tool: tool.id },
+    query: { section: sectionId },
   }
 }
 
@@ -131,6 +133,19 @@ async function loadTools() {
 }
 
 onMounted(loadTools)
+
+watch(() => route.query.section, (sectionId) => {
+  const normalized = normalizeToolSection(sectionId)
+  if (selectedSection.value !== normalized) selectedSection.value = normalized
+})
+
+watch(selectedSection, (sectionId) => {
+  if (sectionId === normalizeToolSection(route.query.section)) return
+  const query = { ...route.query }
+  if (sectionId) query.section = sectionId
+  else delete query.section
+  router.replace({ name: 'ToolLibrary', params: { id: route.params.id }, query })
+})
 </script>
 
 <style scoped>
@@ -141,7 +156,7 @@ onMounted(loadTools)
 }
 
 .tool-library__inner {
-  width: min(980px, 100%);
+  width: min(1040px, 100%);
   margin: 0 auto;
   padding: var(--spacing-6);
 }
@@ -155,7 +170,7 @@ onMounted(loadTools)
 
 .search-field,
 .tool-controls select {
-  min-height: 42px;
+  min-height: var(--control-height);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   background: var(--surface-1);
@@ -198,7 +213,7 @@ onMounted(loadTools)
 
 .tool-sections {
   display: grid;
-  gap: var(--spacing-8);
+  gap: var(--spacing-6);
 }
 
 .section-heading {
@@ -236,7 +251,7 @@ onMounted(loadTools)
   grid-template-columns: 40px minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--spacing-3);
-  min-height: 84px;
+  min-height: 72px;
   padding: var(--spacing-3) var(--spacing-4);
   border: 1px solid var(--border-color-light);
   border-radius: var(--radius-sm);
@@ -247,14 +262,14 @@ onMounted(loadTools)
 
 .tool-row:hover {
   border-color: rgba(var(--accent-rgb), 0.3);
-  background: var(--primary-50);
+  background: var(--surface-2);
 }
 
 .tool-icon {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: var(--radius-sm);
   background: var(--surface-2);
   color: var(--primary-700);

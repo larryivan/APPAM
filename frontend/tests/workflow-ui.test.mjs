@@ -19,6 +19,8 @@ test('workflow UI catalog exposes the two guided analyses', () => {
 
 test('technical parameter and status identifiers have user-facing labels', () => {
   assert.equal(parameterLabel('enable_checkm2'), 'MAG quality assessment')
+  assert.equal(parameterLabel('enable_visualization'), 'Generate figures and report')
+  assert.equal(parameterLabel('maxquant_mode'), 'MaxQuant run mode')
   assert.equal(parameterLabel('max_missed_cleavages'), 'Max Missed Cleavages')
   assert.equal(runStatusLabel('failed'), 'Needs attention')
 })
