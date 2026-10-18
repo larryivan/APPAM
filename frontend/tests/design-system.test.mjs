@@ -75,3 +75,23 @@ test('scroll regions use one quiet global scrollbar policy', async () => {
   const parameterListRule = pipelineTool.match(/\.param-list\s*\{([^}]*)\}/)?.[1] || ''
   assert.doesNotMatch(parameterListRule, /overflow-y|max-height/)
 })
+
+test('system monitor stays live without controls and follows its window size', async () => {
+  const [monitor, shell] = await Promise.all([
+    source('components/SystemPerformance.vue'),
+    source('components/FloatingSystemMonitor.vue'),
+  ])
+
+  // Always real time: no live badge, pause or refresh controls, and a notice
+  // only when updates stop arriving.
+  assert.doesNotMatch(shell, /<span>Live<\/span>/)
+  assert.doesNotMatch(monitor, /Pause|Refresh now/)
+  assert.match(monitor, /v-if="error" class="stale-notice" role="status"/)
+  assert.match(monitor, /componentActive && !document\.hidden/)
+  // The window is resized by dragging, which never fires a window resize event.
+  assert.match(monitor, /new ResizeObserver/)
+  assert.match(monitor, /container-type: inline-size/)
+  // Colour is reserved for usage that needs attention, not used per card.
+  assert.doesNotMatch(monitor, /border-left: 4px/)
+  assert.match(monitor, /\.tone-critical \.meter span \{\s*background: var\(--error-500\)/)
+})

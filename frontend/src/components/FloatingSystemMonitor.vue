@@ -22,10 +22,6 @@
       >
         <div class="header-info">
           <h3>System monitor</h3>
-          <div class="status-indicator">
-            <span class="status-dot"></span>
-            <span>Live</span>
-          </div>
         </div>
         <div class="header-actions">
           <button type="button" @click="toggleFullscreen" class="control-btn" title="Toggle fullscreen">
@@ -438,25 +434,10 @@ onUnmounted(() => {
   font-family: var(--font-family-display);
 }
 
-.status-indicator {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: var(--gray-500);
-}
-
 .header-info {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--success-500);
 }
 
 .header-actions {
@@ -638,10 +619,6 @@ onUnmounted(() => {
 
   .header-info h3 {
     font-size: 16px;
-  }
-
-  .status-indicator {
-    font-size: 14px;
   }
 }
 

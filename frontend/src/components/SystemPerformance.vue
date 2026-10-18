@@ -1,966 +1,754 @@
 <template>
   <div class="system-performance">
-    <div class="performance-header">
-      <div class="header-controls">
-        <button @click="refreshData" class="btn btn-secondary refresh-btn" :class="{ loading: loading }">
-          <Icon name="rotate-ccw" :size="16" :spin="loading" />
-          Refresh
-        </button>
-
-        <div class="update-indicator">
-          <span class="update-dot" :class="{ active: isRealtime }"></span>
-          <span class="update-text">{{ isRealtime ? 'Real-time Update' : 'Paused' }}</span>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="loading && !systemInfo" class="loading-state">
-      <div class="loading-spinner"></div>
-      <p>Loading system information...</p>
-    </div>
-
-    <div v-else-if="error" class="error-state">
-      <div class="error-icon"><Icon name="triangle-alert" :size="32" :stroke-width="1.5" /></div>
+    <div v-if="!systemInfo && error" class="performance-state is-error">
+      <Icon name="triangle-alert" :size="20" />
       <p>{{ error }}</p>
-      <button @click="refreshData" class="btn btn-primary retry-btn">Retry</button>
+      <button type="button" class="btn btn-secondary btn-sm" @click="fetchSystemInfo">Try again</button>
     </div>
 
-    <div v-else-if="systemInfo" class="performance-content">
-      <!-- System Status Overview -->
-      <div class="status-overview">
-        <div class="status-card cpu" :class="getStatusClass(systemInfo.cpu?.usage_percent)">
-          <div class="status-icon"><Icon name="cpu" :size="20" /></div>
-          <div class="status-info">
-            <div class="status-value">{{ systemInfo.cpu?.usage_percent?.toFixed(1) || '0' }}%</div>
-            <div class="status-label">CPU Usage</div>
-          </div>
-          <div class="status-details">
-            <div class="detail-item">
-              <span>{{ systemInfo.cpu?.logical_cores || 0 }} cores</span>
-            </div>
-            <div class="detail-item" v-if="systemInfo.cpu?.frequency?.current">
-              <span>{{ (systemInfo.cpu.frequency.current / 1000).toFixed(1) }} GHz</span>
-            </div>
-          </div>
-        </div>
+    <div v-else-if="!systemInfo" class="performance-state">
+      <Icon name="rotate-ccw" :size="20" spin />
+      <p>Reading system status…</p>
+    </div>
 
-        <div class="status-card memory" :class="getStatusClass(systemInfo.memory?.usage_percent)">
-          <div class="status-icon"><Icon name="memory-stick" :size="20" /></div>
-          <div class="status-info">
-            <div class="status-value">{{ systemInfo.memory?.usage_percent?.toFixed(1) || '0' }}%</div>
-            <div class="status-label">Memory Usage</div>
-          </div>
-          <div class="status-details">
-            <div class="detail-item">
-              <span>{{ formatBytes(systemInfo.memory?.used || 0) }} / {{ formatBytes(systemInfo.memory?.total || 0) }}</span>
-            </div>
-            <div class="detail-item">
-              <span>Available: {{ formatBytes(systemInfo.memory?.available || 0) }}</span>
-            </div>
-          </div>
-        </div>
+    <div v-else class="performance-content">
+      <!-- Updates are continuous; only say something when they stop arriving. -->
+      <p v-if="error" class="stale-notice" role="status" aria-live="polite">
+        <Icon name="triangle-alert" :size="14" />
+        Couldn't refresh. Showing values from {{ formatClock(lastUpdated) }}.
+      </p>
 
-        <div class="status-card disk" :class="getDiskStatusClass()">
-          <div class="status-icon"><Icon name="hard-drive" :size="20" /></div>
-          <div class="status-info">
-            <div class="status-value">{{ getTotalDiskUsage().toFixed(1) }}%</div>
-            <div class="status-label">Disk Usage</div>
+      <section class="metric-grid" aria-label="Current usage">
+        <article v-for="metric in metrics" :key="metric.key" class="metric" :class="`tone-${metric.tone}`">
+          <header class="metric-label">
+            <Icon :name="metric.icon" :size="14" />
+            <span>{{ metric.label }}</span>
+            <em v-if="metric.tone !== 'normal'">{{ metric.tone === 'critical' ? 'Critical' : 'High' }}</em>
+          </header>
+          <strong class="metric-value">{{ metric.value }}<small v-if="metric.unit">{{ metric.unit }}</small></strong>
+          <div
+            class="meter"
+            role="meter"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            :aria-valuenow="Math.round(metric.percent ?? 0)"
+            :aria-label="`${metric.label} usage`"
+          >
+            <span :style="{ width: meterWidth(metric.percent) }"></span>
           </div>
-          <div class="status-details">
-            <div class="detail-item">
-              <span>{{ formatBytes(getTotalDiskUsed()) }} / {{ formatBytes(getTotalDiskSpace()) }}</span>
-            </div>
-            <div class="detail-item">
-              <span>Available: {{ formatBytes(getTotalDiskFree()) }}</span>
-            </div>
-          </div>
-        </div>
+          <p class="metric-detail">{{ metric.detail }}</p>
+        </article>
+      </section>
 
-        <div class="status-card load" :class="getLoadStatusClass()">
-          <div class="status-icon"><Icon name="activity" :size="20" /></div>
-          <div class="status-info">
-            <div class="status-value">{{ (systemInfo.load?.load_1min || 0).toFixed(2) }}</div>
-            <div class="status-label">System Load</div>
+      <div class="chart-grid">
+        <section class="panel">
+          <header class="panel-header">
+            <h4>CPU and memory</h4>
+            <ul class="chart-keys">
+              <li v-for="series in UTILISATION_SERIES" :key="series.key">
+                <i :style="{ background: `var(${series.color})` }"></i>{{ series.label }}
+              </li>
+            </ul>
+          </header>
+          <div class="chart-frame">
+            <div ref="utilisationChart" class="chart"></div>
+            <p v-if="history.length < 2" class="chart-empty">Collecting samples…</p>
           </div>
-          <div class="status-details">
-            <div class="detail-item" v-if="systemInfo.load?.load_5min !== null">
-              <span>5min: {{ (systemInfo.load?.load_5min || 0).toFixed(2) }}</span>
-            </div>
-            <div class="detail-item" v-if="systemInfo.load?.load_15min !== null">
-              <span>15min: {{ (systemInfo.load?.load_15min || 0).toFixed(2) }}</span>
-            </div>
+        </section>
+
+        <section v-if="hasLoadAverage" class="panel">
+          <header class="panel-header">
+            <h4>Load average</h4>
+            <ul class="chart-keys">
+              <li v-for="series in LOAD_SERIES" :key="series.key">
+                <i :style="{ background: `var(${series.color})` }"></i>{{ series.label }}
+              </li>
+            </ul>
+          </header>
+          <div class="chart-frame">
+            <div ref="loadChart" class="chart"></div>
+            <p v-if="history.length < 2" class="chart-empty">Collecting samples…</p>
           </div>
-        </div>
+        </section>
       </div>
 
-      <!-- Charts Area -->
-      <div class="charts-container">
-        <!-- CPU Usage History Chart -->
-        <div class="chart-card">
-          <div class="chart-header">
-            <h4>CPU Usage Trend</h4>
-            <div class="chart-controls">
-              <button @click="clearCpuHistory" class="btn btn-ghost clear-btn">Clear History</button>
+      <section class="panel">
+        <header class="panel-header">
+          <h4>Storage</h4>
+          <span class="panel-meta">{{ disks.length }} {{ disks.length === 1 ? 'volume' : 'volumes' }}</span>
+        </header>
+        <ul v-if="disks.length" class="volume-list">
+          <li v-for="disk in disks" :key="disk.mountpoint" class="volume" :class="`tone-${toneFor(disk.usage_percent)}`">
+            <div class="volume-name">
+              <strong :title="(disk.mountpoints || [disk.mountpoint]).join('\n')">{{ disk.mountpoint }}</strong>
+              <span>{{ [disk.device, disk.file_system].filter(Boolean).join(' · ') }}</span>
             </div>
-          </div>
-          <div ref="cpuChart" class="chart-container"></div>
-        </div>
-
-        <!-- Memory Usage -->
-        <div class="chart-card">
-          <div class="chart-header">
-            <h4>Memory usage distribution</h4>
-          </div>
-          <div ref="memoryChart" class="chart-container"></div>
-        </div>
-
-        <!-- Disk Usage -->
-        <div class="chart-card">
-          <div class="chart-header">
-            <h4>Disk space usage</h4>
-          </div>
-          <div ref="diskChart" class="chart-container"></div>
-        </div>
-
-        <!-- System Load -->
-        <div class="chart-card">
-          <div class="chart-header">
-            <h4>System load trend</h4>
-            <div class="chart-controls">
-              <button @click="clearLoadHistory" class="btn btn-ghost clear-btn">Clear History</button>
+            <div
+              class="meter"
+              role="meter"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              :aria-valuenow="Math.round(disk.usage_percent)"
+              :aria-label="`${disk.mountpoint} usage`"
+            >
+              <span :style="{ width: meterWidth(disk.usage_percent) }"></span>
             </div>
-          </div>
-          <div ref="loadChart" class="chart-container"></div>
-        </div>
-      </div>
+            <div class="volume-usage">
+              <span>{{ formatPair(disk.used, disk.total) }}</span>
+              <strong>{{ formatPercent(disk.usage_percent) }}%</strong>
+            </div>
+          </li>
+        </ul>
+        <p v-else class="panel-empty">No writable volumes were reported.</p>
+      </section>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import echarts from '../lib/echarts'
 
-// Reactive data
-const loading = ref(false)
-const error = ref(null)
-const isRealtime = ref(true)
+const POLL_INTERVAL_MS = 5000
+// Five minutes of history at one sample every five seconds.
+const MAX_HISTORY_POINTS = 60
+
+const UTILISATION_SERIES = [
+  { key: 'cpu', label: 'CPU', color: '--accent-500', area: true },
+  { key: 'memory', label: 'Memory', color: '--gray-500' },
+]
+const LOAD_SERIES = [
+  { key: 'load1', label: '1 min', color: '--accent-500', area: true },
+  { key: 'load5', label: '5 min', color: '--gray-500' },
+  { key: 'load15', label: '15 min', color: '--gray-300' },
+]
+
 const systemInfo = ref(null)
+const error = ref(null)
+const lastUpdated = ref(null)
+const history = ref([])
 
-// Chart references
-const cpuChart = ref(null)
-const memoryChart = ref(null)
-const diskChart = ref(null)
+const utilisationChart = ref(null)
 const loadChart = ref(null)
-
-// ECharts instances
-let cpuChartInstance = null
-let memoryChartInstance = null
-let diskChartInstance = null
+let utilisationChartInstance = null
 let loadChartInstance = null
-
-// Historical data
-const cpuHistory = ref([])
-const loadHistory = ref([])
-const maxHistoryPoints = 20
-
-let chartTheme = null
-
-// Timer
+let resizeObserver = null
 let updateInterval = null
 let componentActive = false
-const pendingTimeouts = new Set()
+let requestInFlight = false
 
-const scheduleTimeout = (callback, delay) => {
-  const timeoutId = setTimeout(() => {
-    pendingTimeouts.delete(timeoutId)
-    if (componentActive) callback()
-  }, delay)
-  pendingTimeouts.add(timeoutId)
-  return timeoutId
-}
-
-const clearPendingTimeouts = () => {
-  pendingTimeouts.forEach((timeoutId) => clearTimeout(timeoutId))
-  pendingTimeouts.clear()
-}
-
-// Methods
 const fetchSystemInfo = async () => {
+  if (requestInFlight) return
+  requestInFlight = true
+
   try {
-    loading.value = true
-    error.value = null
-
-    // Get system information
     const response = await fetch('/api/system/info')
-
-    if (!response.ok) {
-      throw new Error('Failed to get system information')
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || data.message || 'System status is unavailable')
     }
-
-    const data = await response.json()
     if (!componentActive) return
 
-    if (data.success) {
-      systemInfo.value = data.data
-
-      // Add to history records
-      const now = new Date()
-      const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-
-      // CPU history
-      cpuHistory.value.push({
-        time: timeStr,
-        value: data.data.cpu?.usage_percent || 0
-      })
-      if (cpuHistory.value.length > maxHistoryPoints) {
-        cpuHistory.value.shift()
-      }
-
-      // Load history
-      if (data.data.load?.load_1min !== null) {
-        loadHistory.value.push({
-          time: timeStr,
-          load_1min: data.data.load.load_1min || 0,
-          load_5min: data.data.load.load_5min || 0,
-          load_15min: data.data.load.load_15min || 0
-        })
-        if (loadHistory.value.length > maxHistoryPoints) {
-          loadHistory.value.shift()
-        }
-      }
-
-      // Update charts
-      nextTick(() => {
-        if (componentActive) updateCharts()
-      })
-    } else {
-      throw new Error(data.message || 'Failed to get system information')
-    }
-
+    systemInfo.value = data.data
+    error.value = null
+    lastUpdated.value = new Date()
+    recordSample(data.data)
   } catch (err) {
-    if (componentActive) {
-      console.error('Failed to get system information:', err)
-      error.value = err.message
-    }
+    if (componentActive) error.value = err.message
   } finally {
-    if (componentActive) loading.value = false
+    requestInFlight = false
   }
 }
 
-const refreshData = () => {
-  fetchSystemInfo()
+const recordSample = (info) => {
+  const load = info.load || {}
+  history.value = [
+    ...history.value,
+    {
+      time: formatClock(lastUpdated.value),
+      cpu: info.cpu?.usage_percent ?? 0,
+      memory: info.memory?.usage_percent ?? 0,
+      load1: load.load_1min ?? null,
+      load5: load.load_5min ?? null,
+      load15: load.load_15min ?? null,
+    },
+  ].slice(-MAX_HISTORY_POINTS)
 }
 
-const getThemeValue = (name, fallback) => {
-  if (typeof window === 'undefined') return fallback
+// Derived state
+
+const cores = computed(() => systemInfo.value?.cpu?.logical_cores || 0)
+const disks = computed(() => systemInfo.value?.disk || [])
+const hasLoadAverage = computed(() => systemInfo.value?.load?.load_5min != null)
+
+const metrics = computed(() => {
+  const info = systemInfo.value
+  if (!info) return []
+  const cpu = info.cpu || {}
+  const memory = info.memory || {}
+  const load = info.load || {}
+
+  const storage = disks.value.reduce(
+    (sum, disk) => ({ used: sum.used + disk.used, total: sum.total + disk.total, free: sum.free + disk.free }),
+    { used: 0, total: 0, free: 0 },
+  )
+  const storagePercent = storage.used + storage.free > 0 ? (storage.used / (storage.used + storage.free)) * 100 : null
+  const perCoreLoad = cores.value && load.load_1min != null ? load.load_1min / cores.value : null
+
+  return [
+    {
+      key: 'cpu',
+      label: 'CPU',
+      icon: 'cpu',
+      value: formatPercent(cpu.usage_percent),
+      unit: '%',
+      percent: cpu.usage_percent,
+      detail: [
+        cores.value ? `${cores.value} cores` : '',
+        cpu.frequency?.current ? `${(cpu.frequency.current / 1000).toFixed(1)} GHz` : '',
+      ].filter(Boolean).join(' · ') || '—',
+    },
+    {
+      key: 'memory',
+      label: 'Memory',
+      icon: 'memory-stick',
+      value: formatPercent(memory.usage_percent),
+      unit: '%',
+      percent: memory.usage_percent,
+      detail: memory.total ? `${formatPair(memory.used, memory.total)} used` : '—',
+    },
+    {
+      key: 'storage',
+      label: 'Storage',
+      icon: 'hard-drive',
+      value: formatPercent(storagePercent),
+      unit: storagePercent == null ? '' : '%',
+      percent: storagePercent,
+      detail: storage.total ? `${formatBytes(storage.free)} free` : '—',
+    },
+    {
+      key: 'load',
+      label: 'Load · 1 min',
+      icon: 'activity',
+      value: load.load_1min != null ? load.load_1min.toFixed(2) : '—',
+      unit: '',
+      percent: perCoreLoad == null ? null : perCoreLoad * 100,
+      detail: perCoreLoad == null ? '—' : `${perCoreLoad.toFixed(2)} per core`,
+    },
+  ].map((metric) => ({ ...metric, tone: toneFor(metric.percent) }))
+})
+
+// Charts
+
+const cssValue = (name, fallback) => {
   const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
   return value || fallback
 }
 
-const getChartTheme = () => {
-  const accentRgb = getThemeValue('--accent-rgb', '37, 99, 235')
+const chartTheme = () => ({
+  text: cssValue('--gray-500', '#677079'),
+  ink: cssValue('--gray-800', '#232930'),
+  axis: cssValue('--border-color', '#dfe2e6'),
+  grid: cssValue('--border-color-light', '#eaecef'),
+  surface: cssValue('--surface-1', '#ffffff'),
+  font: cssValue('--font-family-base', 'Inter, sans-serif'),
+  accentRgb: cssValue('--accent-rgb', '47, 98, 196'),
+})
+
+const lineChartOption = ({ seriesList, yAxis, valueFormatter, extraSeries = {} }) => {
+  const theme = chartTheme()
   return {
-    accentRgb,
-    primary: getThemeValue('--accent-500', '#2f62c4'),
-    primary700: getThemeValue('--accent-700', '#1f458d'),
-    success: getThemeValue('--success-500', '#16a34a'),
-    warning: getThemeValue('--warning-500', '#f59e0b'),
-    error: getThemeValue('--error-500', '#ef4444'),
-    gray400: getThemeValue('--gray-400', '#9aa6b2'),
-    gray500: getThemeValue('--gray-500', '#6b7280'),
-    gray600: getThemeValue('--gray-600', '#4b5563'),
-    surface2: getThemeValue('--surface-2', '#f1f5f9'),
-    surface3: getThemeValue('--surface-3', '#e9eef5')
+    animation: false,
+    textStyle: { fontFamily: theme.font },
+    grid: { left: 4, right: 12, top: 12, bottom: 4, containLabel: true },
+    tooltip: {
+      trigger: 'axis',
+      valueFormatter,
+      backgroundColor: theme.surface,
+      borderColor: theme.axis,
+      textStyle: { color: theme.ink, fontSize: 12 },
+      axisPointer: { lineStyle: { color: theme.axis } },
+    },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: history.value.map((sample) => sample.time),
+      axisLabel: { color: theme.text, fontSize: 11, hideOverlap: true },
+      axisLine: { lineStyle: { color: theme.axis } },
+      axisTick: { show: false },
+    },
+    yAxis: {
+      type: 'value',
+      min: 0,
+      splitNumber: 2,
+      axisLabel: { color: theme.text, fontSize: 11 },
+      splitLine: { lineStyle: { color: theme.grid } },
+      ...yAxis,
+    },
+    series: seriesList.map((series, index) => {
+      const color = cssValue(series.color, theme.text)
+      return {
+        name: series.label,
+        type: 'line',
+        data: history.value.map((sample) => sample[series.key]),
+        smooth: 0.3,
+        showSymbol: false,
+        symbolSize: 5,
+        lineStyle: { color, width: 1.75 },
+        itemStyle: { color },
+        areaStyle: series.area
+          ? {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: `rgba(${theme.accentRgb}, 0.14)` },
+                { offset: 1, color: `rgba(${theme.accentRgb}, 0)` },
+              ]),
+            }
+          : undefined,
+        ...(index === 0 ? extraSeries : {}),
+      }
+    }),
   }
 }
-
-const ensureChartTheme = () => {
-  if (!chartTheme) {
-    chartTheme = getChartTheme()
-  }
-  return chartTheme
-}
-
-const initCharts = () => {
-  if (!componentActive) return
-  try {
-    if (cpuChart.value && !cpuChartInstance) {
-      cpuChartInstance = echarts.init(cpuChart.value)
-    }
-
-    if (memoryChart.value && !memoryChartInstance) {
-      memoryChartInstance = echarts.init(memoryChart.value)
-    }
-
-    if (diskChart.value && !diskChartInstance) {
-      diskChartInstance = echarts.init(diskChart.value)
-    }
-
-    if (loadChart.value && !loadChartInstance) {
-      loadChartInstance = echarts.init(loadChart.value)
-    }
-  } catch (error) {
-    console.error('Error initializing charts:', error)
-  }
-
-  // Listen for window resize
-  window.addEventListener('resize', handleResize)
-}
-
-const retryInitCharts = (retryCount = 0) => {
-  if (!componentActive || retryCount >= 3) return
-
-  scheduleTimeout(() => {
-    const allInitialized = cpuChartInstance && memoryChartInstance && diskChartInstance && loadChartInstance
-
-    if (!allInitialized) {
-      initCharts()
-      retryInitCharts(retryCount + 1)
-    }
-  }, 1000)
-}
-
-
 
 const updateCharts = () => {
   if (!componentActive) return
-  updateCpuChart()
-  updateMemoryChart()
-  updateDiskChart()
-  updateLoadChart()
-}
+  ensureCharts()
 
-const updateCpuChart = () => {
-  if (!cpuChartInstance || cpuHistory.value.length === 0) return
+  utilisationChartInstance?.setOption(lineChartOption({
+    seriesList: UTILISATION_SERIES,
+    yAxis: { max: 100, interval: 50, axisLabel: { color: chartTheme().text, fontSize: 11, formatter: '{value}%' } },
+    valueFormatter: (value) => (value == null ? '—' : `${Number(value).toFixed(1)}%`),
+  }), true)
 
-  const theme = ensureChartTheme()
-  const areaColor = new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-    { offset: 0, color: `rgba(${theme.accentRgb}, 0.32)` },
-    { offset: 1, color: `rgba(${theme.accentRgb}, 0.06)` }
-  ])
-
-  const option = {
-    tooltip: {
-      trigger: 'axis',
-      formatter: '{a}: {c}%'
-    },
-    xAxis: {
-      type: 'category',
-      data: cpuHistory.value.map(item => item.time),
-      axisLabel: { fontSize: 11, color: theme.gray500 },
-      axisLine: { lineStyle: { color: theme.surface3 } },
-      axisTick: { show: false }
-    },
-    yAxis: {
-      type: 'value',
-      min: 0,
-      max: 100,
-      axisLabel: { formatter: '{value}%', fontSize: 11, color: theme.gray500 },
-      splitLine: { lineStyle: { color: theme.surface2 } }
-    },
-    series: [{
-      name: 'CPU Usage',
-      type: 'line',
-      data: cpuHistory.value.map(item => item.value),
-      smooth: true,
-      areaStyle: {
-        color: areaColor
-      },
-      lineStyle: { color: theme.primary, width: 2 },
-      itemStyle: { color: theme.primary }
-    }],
-    grid: { left: '5%', right: '4%', bottom: '6%', top: '12%', containLabel: true }
-  }
-
-  cpuChartInstance.setOption(option)
-}
-
-const updateMemoryChart = () => {
-  if (!memoryChartInstance || !systemInfo.value?.memory) return
-
-  const theme = ensureChartTheme()
-  const memory = systemInfo.value.memory
-  const used = memory.used || 0
-  const available = memory.available || 0
-
-  const option = {
-    tooltip: {
-      trigger: 'item',
-      formatter: '{a}: {b}<br/>{c} ({d}%)'
-    },
-    series: [{
-      name: 'Memory',
-      type: 'pie',
-      radius: ['40%', '70%'],
-      center: ['50%', '55%'],
-      data: [
-        {
-          value: used,
-          name: `Used (${formatBytes(used)})`,
-          itemStyle: { color: theme.error }
+  if (loadChartInstance && cores.value) {
+    const theme = chartTheme()
+    loadChartInstance.setOption(lineChartOption({
+      seriesList: LOAD_SERIES,
+      // Keep the core count in view: load above it means work is queueing.
+      yAxis: { max: ({ max }) => Math.ceil(Math.max(max, cores.value) * 1.15) },
+      valueFormatter: (value) => (value == null ? '—' : Number(value).toFixed(2)),
+      extraSeries: {
+        markLine: {
+          silent: true,
+          symbol: 'none',
+          lineStyle: { color: theme.text, type: 'dashed', width: 1, opacity: 0.6 },
+          label: { formatter: `${cores.value} cores`, position: 'insideEndTop', color: theme.text, fontSize: 11 },
+          data: [{ yAxis: cores.value }],
         },
-        {
-          value: available,
-          name: `Available (${formatBytes(available)})`,
-          itemStyle: { color: theme.success }
-        }
-      ],
-      label: {
-        show: true,
-        formatter: '{b}: {d}%',
-        fontSize: 12,
-        color: theme.gray600
       },
-      emphasis: {
-        itemStyle: {
-          shadowBlur: 10,
-          shadowOffsetX: 0,
-          shadowColor: 'rgba(0, 0, 0, 0.5)'
-        }
-      }
-    }]
-  }
-
-  memoryChartInstance.setOption(option)
-}
-
-const updateDiskChart = () => {
-  if (!diskChartInstance || !systemInfo.value?.disk) return
-
-  const theme = ensureChartTheme()
-  const disks = systemInfo.value.disk
-
-  const option = {
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'shadow' },
-      formatter: function(params) {
-        const data = params[0]
-        const disk = disks[data.dataIndex]
-        return `${disk.device}<br/>Used: ${formatBytes(disk.used)}<br/>Total: ${formatBytes(disk.total)}<br/>Usage: ${data.value.toFixed(1)}%`
-      }
-    },
-    xAxis: {
-      type: 'category',
-      data: disks.map(disk => disk.device),
-      axisLabel: { fontSize: 11, rotate: 35, color: theme.gray500 },
-      axisLine: { lineStyle: { color: theme.surface3 } },
-      axisTick: { show: false }
-    },
-    yAxis: {
-      type: 'value',
-      min: 0,
-      max: 100,
-      axisLabel: { formatter: '{value}%', fontSize: 11, color: theme.gray500 },
-      splitLine: { lineStyle: { color: theme.surface2 } }
-    },
-    series: [{
-      name: 'Usage',
-      type: 'bar',
-      data: disks.map(disk => ({
-        value: disk.usage_percent,
-        itemStyle: {
-          color: disk.usage_percent > 90 ? theme.error :
-                 disk.usage_percent > 70 ? theme.warning : theme.success
-        }
-      })),
-      barWidth: '56%',
-      itemStyle: { borderRadius: [6, 6, 0, 0] }
-    }],
-    grid: { left: '5%', right: '4%', bottom: '18%', top: '12%', containLabel: true }
-  }
-
-  diskChartInstance.setOption(option)
-}
-
-const updateLoadChart = () => {
-  if (!loadChartInstance || loadHistory.value.length === 0) return
-
-  const theme = ensureChartTheme()
-  const times = loadHistory.value.map(item => item.time)
-  const load1 = loadHistory.value.map(item => item.load_1min)
-  const load5 = loadHistory.value.map(item => item.load_5min)
-  const load15 = loadHistory.value.map(item => item.load_15min)
-
-  const option = {
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'cross' }
-    },
-    legend: {
-      data: ['1 minute', '5 minutes', '15 minutes'],
-      bottom: 5,
-      textStyle: { fontSize: 11, color: theme.gray500 }
-    },
-    xAxis: {
-      type: 'category',
-      data: times,
-      axisLabel: { fontSize: 11, color: theme.gray500 },
-      axisLine: { lineStyle: { color: theme.surface3 } },
-      axisTick: { show: false }
-    },
-    yAxis: {
-      type: 'value',
-      axisLabel: { fontSize: 11, color: theme.gray500 },
-      splitLine: { lineStyle: { color: theme.surface2 } }
-    },
-    series: [
-      {
-        name: '1 minute',
-        type: 'line',
-        data: load1,
-        smooth: true,
-        lineStyle: { color: theme.primary, width: 2 },
-        itemStyle: { color: theme.primary }
-      },
-      {
-        name: '5 minutes',
-        type: 'line',
-        data: load5,
-        smooth: true,
-        lineStyle: { color: theme.success, width: 2 },
-        itemStyle: { color: theme.success }
-      },
-      {
-        name: '15 minutes',
-        type: 'line',
-        data: load15,
-        smooth: true,
-        lineStyle: { color: theme.warning, width: 2 },
-        itemStyle: { color: theme.warning }
-      }
-    ],
-    grid: { left: '5%', right: '4%', bottom: '18%', top: '12%', containLabel: true }
-  }
-
-  loadChartInstance.setOption(option)
-}
-
-const handleResize = () => {
-  cpuChartInstance?.resize()
-  memoryChartInstance?.resize()
-  diskChartInstance?.resize()
-  loadChartInstance?.resize()
-}
-
-const clearCpuHistory = () => {
-  cpuHistory.value = []
-  if (cpuChartInstance) {
-    cpuChartInstance.clear()
+    }), true)
   }
 }
 
-const clearLoadHistory = () => {
-  loadHistory.value = []
-  if (loadChartInstance) {
-    loadChartInstance.clear()
+const ensureCharts = () => {
+  if (utilisationChart.value && !utilisationChartInstance) {
+    utilisationChartInstance = echarts.init(utilisationChart.value)
+    resizeObserver?.observe(utilisationChart.value)
+  }
+  if (loadChart.value && !loadChartInstance) {
+    loadChartInstance = echarts.init(loadChart.value)
+    resizeObserver?.observe(loadChart.value)
   }
 }
 
-// Utility functions
-const formatBytes = (bytes) => {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+watch(history, () => nextTick(updateCharts))
+
+// Formatting
+
+const formatClock = (date) => date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+
+const formatPercent = (value) => (value == null || Number.isNaN(value) ? '—' : Number(value).toFixed(1))
+
+const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+
+const byteUnit = (bytes) => (bytes > 0 ? Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), BYTE_UNITS.length - 1) : 0)
+
+const scaledBytes = (bytes, unit) => {
+  const value = bytes / 1024 ** unit
+  return value >= 100 || unit === 0 ? Math.round(value).toString() : String(parseFloat(value.toFixed(1)))
 }
 
-const getStatusClass = (percentage) => {
-  if (percentage > 90) return 'critical'
-  if (percentage > 70) return 'warning'
+const formatBytes = (bytes = 0) => {
+  const unit = byteUnit(bytes)
+  return `${scaledBytes(bytes, unit)} ${BYTE_UNITS[unit]}`
+}
+
+// "1.1 of 1.8 TB" reads faster than "1.1 TB / 1.8 TB"; keep both units when they differ.
+const formatPair = (used = 0, total = 0) => {
+  const unit = byteUnit(total)
+  if (byteUnit(used) === unit || used === 0) return `${scaledBytes(used, unit)} of ${formatBytes(total)}`
+  return `${formatBytes(used)} of ${formatBytes(total)}`
+}
+
+const toneFor = (percent) => {
+  if (percent == null) return 'normal'
+  if (percent >= 90) return 'critical'
+  if (percent >= 70) return 'elevated'
   return 'normal'
 }
 
-const getDiskStatusClass = () => {
-  const usage = getTotalDiskUsage()
-  return getStatusClass(usage)
-}
-
-const getLoadStatusClass = () => {
-  const load = systemInfo.value?.load?.load_1min || 0
-  const cores = systemInfo.value?.cpu?.logical_cores || 1
-  const loadPercentage = (load / cores) * 100
-  return getStatusClass(loadPercentage)
-}
-
-const getTotalDiskSpace = () => {
-  if (!systemInfo.value?.disk) return 0
-  return systemInfo.value.disk.reduce((total, disk) => total + disk.total, 0)
-}
-
-const getTotalDiskUsed = () => {
-  if (!systemInfo.value?.disk) return 0
-  return systemInfo.value.disk.reduce((total, disk) => total + disk.used, 0)
-}
-
-const getTotalDiskFree = () => {
-  if (!systemInfo.value?.disk) return 0
-  return systemInfo.value.disk.reduce((total, disk) => total + disk.free, 0)
-}
-
-const getTotalDiskUsage = () => {
-  const total = getTotalDiskSpace()
-  const used = getTotalDiskUsed()
-  return total > 0 ? (used / total) * 100 : 0
-}
-
-const startRealTimeUpdate = () => {
-  if (updateInterval) {
-    clearInterval(updateInterval)
-  }
-
-  updateInterval = setInterval(() => {
-    if (componentActive && isRealtime.value) {
-      fetchSystemInfo()
-    }
-  }, 5000) // Update every 5 seconds
-}
-
-const stopRealTimeUpdate = () => {
-  if (updateInterval) {
-    clearInterval(updateInterval)
-    updateInterval = null
-  }
-}
+const meterWidth = (percent) => `${Math.min(100, Math.max(0, percent ?? 0))}%`
 
 // Lifecycle
+
+const poll = () => {
+  if (componentActive && !document.hidden) fetchSystemInfo()
+}
+
 onMounted(() => {
   componentActive = true
-  // Ensure DOM is fully rendered before initializing charts
-  nextTick(() => {
-    if (!componentActive) return
-    initCharts()
-
-    // Check if all charts are successfully initialized, retry if not
-    scheduleTimeout(() => {
-      const allInitialized = cpuChartInstance && memoryChartInstance && diskChartInstance && loadChartInstance
-      if (!allInitialized) {
-        retryInitCharts()
-      }
-    }, 500)
-
-    // Then fetch data
-    scheduleTimeout(() => {
-      fetchSystemInfo()
-      startRealTimeUpdate()
-    }, 100)
-  })
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => {
+      utilisationChartInstance?.resize()
+      loadChartInstance?.resize()
+    })
+  }
+  fetchSystemInfo()
+  updateInterval = setInterval(poll, POLL_INTERVAL_MS)
 })
 
 onUnmounted(() => {
   componentActive = false
-  clearPendingTimeouts()
-  stopRealTimeUpdate()
-  window.removeEventListener('resize', handleResize)
-
-  // Destroy chart instances
-  cpuChartInstance?.dispose()
-  memoryChartInstance?.dispose()
-  diskChartInstance?.dispose()
+  clearInterval(updateInterval)
+  updateInterval = null
+  resizeObserver?.disconnect()
+  resizeObserver = null
+  utilisationChartInstance?.dispose()
   loadChartInstance?.dispose()
-  cpuChartInstance = null
-  memoryChartInstance = null
-  diskChartInstance = null
+  utilisationChartInstance = null
   loadChartInstance = null
 })
 </script>
 
 <style scoped>
 .system-performance {
-  background: var(--surface-1);
-  padding: 16px;
+  container-type: inline-size;
   height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: var(--surface-0);
 }
 
-.performance-header {
+.performance-state {
+  flex: 1;
   display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: var(--border-width) solid var(--border-color-light);
-  gap: var(--spacing-4);
-  flex-shrink: 0;
-}
-
-.header-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-4);
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.refresh-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 0 10px;
-  border-radius: var(--radius-base);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-}
-
-.update-indicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--text-xs);
-  color: var(--gray-600);
-  background: var(--surface-2);
-  border: var(--border-width) solid var(--border-color-light);
-  min-height: 28px;
-  padding: 0 9px;
-  border-radius: var(--radius-full);
-}
-
-.update-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--gray-300);
-  transition: all var(--transition-base);
-}
-
-.update-dot.active {
-  background: var(--success-500);
-  animation: pulse 2s infinite;
-}
-
-.loading-state,
-.error-state {
-  text-align: center;
-  padding: var(--spacing-8) var(--spacing-6);
-  color: var(--gray-500);
-  background: var(--surface-2);
-  border-radius: var(--radius-lg);
-  border: var(--border-width) solid var(--border-color-light);
-}
-
-.error-state {
-  color: var(--error-600);
-  background: var(--error-50);
-  border-color: rgba(239, 68, 68, 0.2);
-}
-
-.loading-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid var(--border-color-light);
-  border-top: 3px solid var(--primary-500);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 16px;
-}
-
-.error-icon {
-  font-size: 3rem;
-  margin-bottom: 16px;
-  color: var(--error-500);
-}
-
-.retry-btn {
-  margin-top: var(--spacing-4);
-}
-
-/* Status Overview */
-.status-overview {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: var(--spacing-4);
-  margin-bottom: var(--spacing-5);
-}
-
-.status-card {
-  background: var(--surface-1);
-  border: var(--border-width) solid var(--border-color-light);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-4);
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: var(--spacing-4);
-  transition: border-color var(--transition-fast), background var(--transition-fast);
-  position: relative;
-  overflow: hidden;
-}
-
-.status-card:hover {
-  background: var(--surface-2);
-  border-color: var(--border-color-dark);
-}
-
-.status-card.normal {
-  border-left: 4px solid var(--success-500);
-}
-
-.status-card.warning {
-  border-left: 4px solid var(--warning-500);
-  background: var(--warning-50);
-}
-
-.status-card.critical {
-  border-left: 4px solid var(--error-500);
-  background: var(--error-50);
-}
-
-.status-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: var(--radius-base);
-  border: var(--border-width) solid var(--border-color-light);
-  background: var(--surface-1);
-  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: 1.4rem;
-  flex-shrink: 0;
-}
-
-.status-card.cpu .status-icon {
-  color: var(--primary-600);
-}
-
-.status-card.memory .status-icon {
-  color: var(--success-600);
-}
-
-.status-card.disk .status-icon {
-  color: var(--warning-600);
-}
-
-.status-card.load .status-icon {
-  color: var(--primary-700);
-}
-
-.status-info {
-  flex: 1;
-}
-
-.status-value {
-  font-size: 20px;
-  font-weight: var(--font-bold);
-  color: var(--gray-900);
-  margin-bottom: var(--spacing-1);
-}
-
-.status-label {
-  font-size: var(--text-xs);
+  gap: var(--spacing-3);
+  padding: var(--spacing-8);
   color: var(--gray-500);
-  font-weight: var(--font-medium);
-  letter-spacing: 0;
+  font-size: var(--text-sm);
+  text-align: center;
 }
 
-.status-details {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  align-items: flex-end;
-  text-align: right;
-}
-
-.detail-item {
-  font-size: var(--text-xs);
-  color: var(--gray-500);
-  font-family: var(--font-family-mono);
-}
-
-/* Chart Container */
-.charts-container {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: var(--spacing-5);
-}
-
-.chart-card {
-  background: var(--surface-1);
-  border: var(--border-width) solid var(--border-color-light);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-4);
-  display: flex;
-  flex-direction: column;
-  min-height: 320px;
-}
-
-.chart-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-3);
-}
-
-.chart-header h4 {
+.performance-state p {
   margin: 0;
-  color: var(--gray-800);
-  font-size: var(--text-base);
-  font-weight: var(--font-semibold);
 }
 
-.chart-controls {
-  display: flex;
-  gap: 8px;
-}
-
-.clear-btn {
-  padding: var(--spacing-1) var(--spacing-3);
-  font-size: var(--text-xs);
-}
-
-.chart-container {
-  width: 100%;
-  flex: 1;
-  min-height: 220px;
-  height: 240px;
-}
-
-/* Animations */
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .system-performance {
-    padding: var(--spacing-4);
-  }
-
-  .performance-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--spacing-4);
-  }
-
-  .status-overview {
-    grid-template-columns: 1fr;
-  }
-
-  .charts-container {
-    grid-template-columns: 1fr;
-  }
-
-  .chart-container {
-    height: 240px;
-  }
+.performance-state.is-error {
+  color: var(--error-600);
 }
 
 .performance-content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-5);
-  min-height: 0;
+  gap: 12px;
+  padding: 16px;
+}
+
+.stale-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 12px;
+  border: var(--border-width) solid rgb(187 70 70 / 0.2);
+  border-radius: var(--radius-base);
+  background: var(--error-50);
+  color: var(--error-600);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Current usage */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px 16px 16px;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-base);
+  background: var(--surface-1);
+}
+
+.metric-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--gray-500);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+}
+
+.metric-label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric-label em {
+  margin-left: auto;
+  font-style: normal;
+  font-weight: var(--font-semibold);
+}
+
+.metric-value {
+  color: var(--gray-900);
+  font-size: 1.625rem;
+  font-weight: var(--font-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-value small {
+  margin-left: 2px;
+  color: var(--gray-400);
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
+}
+
+.metric-detail {
+  margin: 0;
+  overflow: hidden;
+  color: var(--gray-500);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Meters: ink while healthy, colour only when something needs attention. */
+.meter {
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--gray-100);
+}
+
+.meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--gray-700);
+  transition: width var(--transition-slow);
+}
+
+.tone-elevated .metric-label em,
+.tone-elevated .volume-usage strong {
+  color: var(--warning-600);
+}
+
+.tone-elevated .meter span {
+  background: var(--warning-500);
+}
+
+.tone-critical .metric-label em,
+.tone-critical .volume-usage strong {
+  color: var(--error-600);
+}
+
+.tone-critical .meter span {
+  background: var(--error-500);
+}
+
+/* Panels */
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 12px;
+}
+
+.panel {
+  min-width: 0;
+  padding: 14px 16px 12px;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-base);
+  background: var(--surface-1);
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-3);
+  margin-bottom: 8px;
+}
+
+.panel-header h4 {
+  margin: 0;
+  color: var(--gray-800);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+}
+
+.panel-meta {
+  color: var(--gray-500);
+  font-size: var(--text-xs);
+}
+
+.chart-keys {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--gray-500);
+  font-size: var(--text-xs);
+}
+
+.chart-keys li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chart-keys i {
+  width: 10px;
+  height: 2px;
+  border-radius: var(--radius-full);
+}
+
+.chart-frame {
+  position: relative;
+}
+
+.chart {
+  width: 100%;
+  height: clamp(170px, 24vh, 260px);
+}
+
+.chart-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  color: var(--gray-400);
+  font-size: var(--text-xs);
+  pointer-events: none;
+}
+
+/* Storage */
+.volume-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.volume {
+  display: grid;
+  grid-template-columns: minmax(0, 240px) minmax(80px, 1fr) auto;
+  align-items: center;
+  gap: var(--spacing-4);
+  padding: 10px 0;
+}
+
+.volume + .volume {
+  border-top: var(--border-width) solid var(--border-color-light);
+}
+
+.volume-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.volume-name strong,
+.volume-name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.volume-name strong {
+  color: var(--gray-800);
+  font-family: var(--font-family-mono);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+}
+
+.volume-name span {
+  color: var(--gray-400);
+  font-size: 11px;
+}
+
+.volume-usage {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  color: var(--gray-500);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.volume-usage strong {
+  min-width: 3.5em;
+  color: var(--gray-800);
+  font-weight: var(--font-semibold);
+  text-align: right;
+}
+
+.panel-empty {
+  margin: 0;
+  padding: 8px 0 4px;
+  color: var(--gray-500);
+  font-size: var(--text-xs);
+}
+
+/* Sized by the monitor window, which the user can drag narrower than the page. */
+@container (max-width: 640px) {
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 420px) {
+  .performance-content {
+    padding: 12px;
+  }
+
+  .volume {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .volume .meter {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meter span {
+    transition: none;
+  }
 }
 </style>
