@@ -243,9 +243,15 @@ def copy_items(project_id, items, destination):
     """Copy items to destination directory."""
     try:
         copied_items = []
+        project_root = get_project_path(project_id)
         for item_rel_path in items:
             source_path = get_project_path(project_id, item_rel_path)
-            item_name = os.path.basename(item_rel_path)
+            # Derive the name from the resolved path: a trailing slash makes
+            # basename() of the raw value empty, which would target the
+            # destination directory itself instead of a child of it.
+            item_name = os.path.basename(source_path)
+            if source_path == project_root or not item_name:
+                raise ValueError(f'Cannot copy the project root: {item_rel_path}')
             dest_path = get_project_path(project_id, os.path.join(destination, item_name))
             
             # Handle name conflicts
@@ -272,9 +278,12 @@ def cut_items(project_id, items, destination):
     """Cut (move) items to destination directory."""
     try:
         moved_items = []
+        project_root = get_project_path(project_id)
         for item_rel_path in items:
             source_path = get_project_path(project_id, item_rel_path)
-            item_name = os.path.basename(item_rel_path)
+            item_name = os.path.basename(source_path)
+            if source_path == project_root or not item_name:
+                raise ValueError(f'Cannot move the project root: {item_rel_path}')
             dest_path = get_project_path(project_id, os.path.join(destination, item_name))
             
             # Handle name conflicts
