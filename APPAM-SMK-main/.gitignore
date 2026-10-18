@@ -28,6 +28,7 @@ runs/
 
 # data
 data/
+!tests/data/
 raw_data/
 fastq/
 raw/
