@@ -12,6 +12,29 @@ def _allowed_origins():
     return []
 
 
+def _trust_proxy_headers() -> bool:
+    return os.getenv('APPAM_TRUST_PROXY_HEADERS', 'false').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def _socket_origin_allowed(origin, environ):
+    """Apply the HTTP API's origin rule to Socket.IO: same origin, or listed.
+
+    Given a list, Engine.IO accepts only the listed origins, so a deployment
+    that sets APPAM_ALLOWED_ORIGINS without its own address would lose its
+    terminal websockets. The Engine.IO middleware sees the raw WSGI environ,
+    so forwarded headers are read here when the proxy is trusted.
+    """
+    origin = (origin or '').rstrip('/')
+    scheme = environ.get('wsgi.url_scheme', 'http')
+    host = environ.get('HTTP_HOST', '')
+    request_origins = {f'{scheme}://{host}'}
+    if _trust_proxy_headers():
+        forwarded_scheme = environ.get('HTTP_X_FORWARDED_PROTO', scheme).split(',')[0].strip()
+        forwarded_host = environ.get('HTTP_X_FORWARDED_HOST', host).split(',')[0].strip()
+        request_origins.add(f'{forwarded_scheme}://{forwarded_host}')
+    return origin in request_origins or origin in _allowed_origins()
+
+
 def _secret_key() -> str:
     configured = os.getenv('FLASK_SECRET_KEY', '').strip()
     if configured:
@@ -34,7 +57,7 @@ def _max_request_bytes() -> int:
 
 # Initialize extensions
 socketio = SocketIO(
-    cors_allowed_origins=_allowed_origins() or None,
+    cors_allowed_origins=_socket_origin_allowed,
     async_mode=os.getenv('SOCKETIO_ASYNC_MODE', 'threading')
 )
 cors = CORS()
@@ -42,7 +65,7 @@ cors = CORS()
 def create_app():
     """Create and configure an instance of the Flask application."""
     app = Flask(__name__)
-    if os.getenv('APPAM_TRUST_PROXY_HEADERS', 'false').strip().lower() in {'1', 'true', 'yes', 'on'}:
+    if _trust_proxy_headers():
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
     app.config['SECRET_KEY'] = _secret_key()
     app.config['SESSION_COOKIE_HTTPONLY'] = True
