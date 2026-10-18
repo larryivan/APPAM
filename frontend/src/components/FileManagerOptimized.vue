@@ -263,9 +263,10 @@
       </div>
 
       <!-- Virtual Scrolling Container -->
-      <div class="virtual-scroll-container" ref="scrollContainer">
+      <div class="virtual-scroll-container" ref="scrollContainer" @scroll.passive="onListScroll">
         <!-- Enhanced list view -->
         <div class="file-list" :class="{ mobile: isMobile }">
+          <div v-if="topSpacer" class="virtual-spacer" :style="{ height: topSpacer + 'px' }"></div>
           <div 
             v-for="item in visibleItems" 
             :key="item.name" 
@@ -325,6 +326,7 @@
               </button>
             </div>
           </div>
+          <div v-if="bottomSpacer" class="virtual-spacer" :style="{ height: bottomSpacer + 'px' }"></div>
         </div>
 
       </div>
@@ -616,7 +618,7 @@ const scrollContainer = ref(null)
 // Virtual scrolling disabled, keeping variable definition for future re-enabling
 // const visibleStartIndex = ref(0)
 // const visibleEndIndex = ref(50)
-const itemHeight = ref(50)
+const itemHeight = ref(44)  // must match .file-row min-height
 
 // Scroll position preservation
 const savedScrollPosition = ref(0)
@@ -705,11 +707,47 @@ const filteredItems = computed(() => {
   return filtered
 })
 
-const visibleItems = computed(() => {
-  // Return all filtered items directly, disable virtual scrolling
-  // For most project directories, the file count won't be too large, directly showing all items is more stable
-  return filteredItems.value
+// Assembly, binning and GTDB-Tk outputs routinely hold thousands of files, so
+// the list is windowed. Below the threshold every row is rendered exactly as
+// before, which keeps small directories behaviourally identical.
+const VIRTUAL_THRESHOLD = 150
+const VIRTUAL_OVERSCAN = 12
+
+const scrollTop = ref(0)
+const viewportHeight = ref(720)
+
+const isVirtualised = computed(() => filteredItems.value.length > VIRTUAL_THRESHOLD)
+
+const virtualRange = computed(() => {
+  const total = filteredItems.value.length
+  if (!isVirtualised.value) return { start: 0, end: total }
+  const rowHeight = itemHeight.value
+  const first = Math.floor(scrollTop.value / rowHeight)
+  const visibleCount = Math.ceil(viewportHeight.value / rowHeight)
+  const start = Math.max(0, first - VIRTUAL_OVERSCAN)
+  const end = Math.min(total, first + visibleCount + VIRTUAL_OVERSCAN)
+  return { start, end }
 })
+
+const visibleItems = computed(() => {
+  if (!isVirtualised.value) return filteredItems.value
+  const { start, end } = virtualRange.value
+  return filteredItems.value.slice(start, end)
+})
+
+const topSpacer = computed(() =>
+  isVirtualised.value ? virtualRange.value.start * itemHeight.value : 0,
+)
+const bottomSpacer = computed(() => {
+  if (!isVirtualised.value) return 0
+  return (filteredItems.value.length - virtualRange.value.end) * itemHeight.value
+})
+
+function onListScroll(event) {
+  if (!isVirtualised.value) return
+  scrollTop.value = event.target.scrollTop
+  viewportHeight.value = event.target.clientHeight || viewportHeight.value
+}
 
 const breadcrumbs = computed(() => {
   const pathParts = currentPath.value.split('/').filter(p => p !== '')
