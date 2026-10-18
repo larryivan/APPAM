@@ -38,35 +38,40 @@ rule metawrap_binning:
         fi
         """
 
-rule metawrap_bin_refinement:
-    conda: config["tools"]["metawrap_env"]
-    input:
-        metabat2=f"{RESULTS_DIR}/metawrap/binning/{{sample}}/metabat2_bins",
-        maxbin2=f"{RESULTS_DIR}/metawrap/binning/{{sample}}/maxbin2_bins",
-        concoct=f"{RESULTS_DIR}/metawrap/binning/{{sample}}/concoct_bins"
-    output:
-        bins_dir=directory(f"{RESULTS_DIR}/metawrap/bin_refinement/{{sample}}/metawrap_50_10_bins")
-    params:
-        outdir=lambda wc, output: os.path.dirname(output.bins_dir),
-        completeness=config["params"]["bin_completeness"],
-        contamination=config["params"]["bin_contamination"],
-        checkm_db=config["databases"]["checkm_db"]
-    log:
-        f"{LOGS_DIR}/metawrap_refinement/{{sample}}.log" 
-    benchmark: 
-        f"{BENCHMARK_DIR}/metawrap_bin_refinement/{{sample}}.txt"
-    threads: 48
-    resources:
-        mem_mb=128000
-    shell:
-        r"""
-        mkdir -p {params.outdir:q} "$(dirname {log:q})"
-        find {input.metabat2:q} {input.maxbin2:q} {input.concoct:q} -name "bin.BinMembers.txt" -delete
-        checkm data setRoot {params.checkm_db:q}
-        metawrap bin_refinement -o {params.outdir:q} -t {threads} \
-            -c {params.completeness} -x {params.contamination} \
-            -A {input.metabat2:q} -B {input.maxbin2:q} -C {input.concoct:q} &> {log:q}
-        """
+# Only define refinement when it is enabled. With refinement disabled,
+# FINAL_BINS_PATTERN is one of metawrap_binning's own outputs, so an
+# unconditional rule here would declare a second producer for that directory.
+if ENABLE_BIN_REFINEMENT:
+
+    rule metawrap_bin_refinement:
+        conda: config["tools"]["metawrap_env"]
+        input:
+            metabat2=f"{RESULTS_DIR}/metawrap/binning/{{sample}}/metabat2_bins",
+            maxbin2=f"{RESULTS_DIR}/metawrap/binning/{{sample}}/maxbin2_bins",
+            concoct=f"{RESULTS_DIR}/metawrap/binning/{{sample}}/concoct_bins"
+        output:
+            bins_dir=directory(FINAL_BINS_PATTERN)
+        params:
+            outdir=lambda wc, output: os.path.dirname(output.bins_dir),
+            completeness=config["params"]["bin_completeness"],
+            contamination=config["params"]["bin_contamination"],
+            checkm_db=config["databases"]["checkm_db"]
+        log:
+            f"{LOGS_DIR}/metawrap_refinement/{{sample}}.log"
+        benchmark:
+            f"{BENCHMARK_DIR}/metawrap_bin_refinement/{{sample}}.txt"
+        threads: 48
+        resources:
+            mem_mb=128000
+        shell:
+            r"""
+            mkdir -p {params.outdir:q} "$(dirname {log:q})"
+            find {input.metabat2:q} {input.maxbin2:q} {input.concoct:q} -name "bin.BinMembers.txt" -delete
+            checkm data setRoot {params.checkm_db:q}
+            metawrap bin_refinement -o {params.outdir:q} -t {threads} \
+                -c {params.completeness} -x {params.contamination} \
+                -A {input.metabat2:q} -B {input.maxbin2:q} -C {input.concoct:q} &> {log:q}
+            """
 
 rule checkm2:
     conda: config["tools"].get("checkm2_env", "../../../docker/tools/environments/checkm2.yml")

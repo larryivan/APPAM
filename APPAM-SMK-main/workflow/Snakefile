@@ -1,6 +1,4 @@
 # Snakefile
-from pathlib import Path
-
 configfile: "config/config.yaml"
 
 include: "rules/common.smk"
@@ -15,12 +13,17 @@ SAMPLES = list(SAMPLE_ROWS)
 PREPROCESS_METHOD = config["params"].get("preprocess_method", "fastp").lower()
 ENABLE_BIN_REFINEMENT = bool(config["params"].get("enable_bin_refinement", False))
 UNREFINED_BINNER = str(config["params"].get("unrefined_binner", "metabat2")).lower()
+BIN_COMPLETENESS = int(config["params"].get("bin_completeness", 50))
+BIN_CONTAMINATION = int(config["params"].get("bin_contamination", 10))
+ENABLE_VARIANTS = bool(config["params"].get("enable_variants", False))
+ENABLE_VISUALIZATION = bool(config.get("visualization", {}).get("enabled", True))
 
 if UNREFINED_BINNER not in {"metabat2", "maxbin2", "concoct"}:
     raise ValueError("params.unrefined_binner must be metabat2, maxbin2, or concoct")
 
 FINAL_BINS_PATTERN = (
-    f"{RESULTS_DIR}/metawrap/bin_refinement/{{sample}}/metawrap_50_10_bins"
+    f"{RESULTS_DIR}/metawrap/bin_refinement/{{sample}}/"
+    f"metawrap_{BIN_COMPLETENESS}_{BIN_CONTAMINATION}_bins"
     if ENABLE_BIN_REFINEMENT
     else f"{RESULTS_DIR}/metawrap/binning/{{sample}}/{UNREFINED_BINNER}_bins"
 )
@@ -30,9 +33,6 @@ if PREPROCESS_METHOD not in {"adapter_removal", "fastp"}:
         "params.preprocess_method must be either 'adapter_removal' or 'fastp'. "
         f"Got: {PREPROCESS_METHOD}"
     )
-
-for path in (RESULTS_DIR, LOGS_DIR, BENCHMARK_DIR):
-    Path(path).mkdir(parents=True, exist_ok=True)
 
 include: "rules/preprocess.smk"
 include: "rules/assembly.smk"
