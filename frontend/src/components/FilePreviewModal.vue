@@ -1,7 +1,7 @@
 <!-- FilePreviewModal.vue - Enhanced file preview with editing capabilities -->
 <template>
   <div v-if="showModal" class="modal-backdrop app-modal-viewport app-modal-backdrop" @click.self="closeModal">
-    <div class="preview-modal app-modal">
+    <div class="preview-modal app-modal" ref="previewPanel" role="dialog" aria-modal="true" aria-label="File preview" tabindex="-1">
       <div class="preview-header app-modal-header">
         <div class="header-left">
           <h4>{{ fileName }}</h4>
@@ -48,11 +48,9 @@
               @click="closeModal" 
               class="app-modal-close"
               title="Close"
+              aria-label="Close preview"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
+              <Icon name="x" :size="17" />
             </button>
           </div>
         </div>
@@ -88,11 +86,6 @@
             @input="updateEditInfo"
             ref="codeEditor"
           ></textarea>
-          <div class="edit-footer">
-            <span class="editor-shortcuts">
-              Ctrl+S: Save | Ctrl+Z: Undo | Ctrl+Y: Redo | Ctrl+F: Find
-            </span>
-          </div>
         </div>
 
         <!-- Preview Mode -->
@@ -211,7 +204,7 @@
               <div class="warning-content">
                 <div class="warning-icon"><Icon name="triangle-alert" :size="24" /></div>
                 <div class="warning-text">
-                  <h4>Large File Detected</h4>
+                  <h4>Large file detected</h4>
                   <p>This file ({{ formatSize(previewData.file_size) }}) is too large for full preview. Choose an option:</p>
                 </div>
               </div>
@@ -296,11 +289,11 @@
               <div v-if="bioTab === 'statistics'" class="analysis-content">
                 <div class="stats-grid">
                   <div class="stat-card">
-                    <h4>Sequence Count</h4>
+                    <h4>Sequence count</h4>
                     <div class="stat-value">{{ previewData.bio_analysis.sequence_count || 0 }}</div>
                   </div>
                   <div class="stat-card">
-                    <h4>Total Length</h4>
+                    <h4>Total length</h4>
                     <div class="stat-value">{{ formatNumber(previewData.bio_analysis.total_length || 0) }} bp</div>
                   </div>
                   <div class="stat-card">
@@ -308,7 +301,7 @@
                     <div class="stat-value">{{ (previewData.bio_analysis.gc_content || 0).toFixed(2) }}%</div>
                   </div>
                   <div class="stat-card">
-                    <h4>File Format</h4>
+                    <h4>File format</h4>
                     <div class="stat-value">{{ previewData.bio_analysis.sequence_type || 'Unknown' }}</div>
                   </div>
                 </div>
@@ -601,7 +594,7 @@
               <div class="warning-content">
                 <div class="warning-icon"><Icon name="triangle-alert" :size="24" /></div>
                 <div class="warning-text">
-                  <h4>Large File Detected</h4>
+                  <h4>Large file detected</h4>
                   <p>This file ({{ formatSize(previewData.file_size || 0) }}) is too large for full preview. Choose an option:</p>
                 </div>
               </div>
@@ -633,6 +626,8 @@
 import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import { confirmAction, notifyError, notifySuccess } from '@/lib/notify.js'
+import { useOverlay } from '@/lib/overlay.js'
 import echarts from '../lib/echarts'
 
 const props = defineProps({
@@ -722,9 +717,15 @@ const selectedSequence = computed(() => {
 })
 
 // Methods
-const closeModal = () => {
+const closeModal = async () => {
   if (hasChanges.value) {
-    if (confirm('You have unsaved changes. Are you sure you want to close?')) {
+    const discard = await confirmAction({
+      title: 'Discard unsaved changes?',
+      message: 'The edits you made to this file have not been saved.',
+      confirmLabel: 'Discard changes',
+      tone: 'danger',
+    })
+    if (discard) {
       resetModal()
       emit('close')
     }
@@ -733,6 +734,9 @@ const closeModal = () => {
     emit('close')
   }
 }
+
+const previewPanel = ref(null)
+useOverlay(() => props.showModal, { onClose: closeModal, panelRef: previewPanel })
 
 const resetModal = () => {
   editMode.value = false
@@ -783,7 +787,7 @@ const loadFileHead = async () => {
     }
   } catch (error) {
     console.error('Error loading file head:', error)
-    alert(`Failed to load file preview: ${error.message}`)
+    notifyError(error, { message: 'Could not load a preview for this file.' })
   } finally {
     loadingHead.value = false
   }
@@ -804,7 +808,7 @@ const loadFileSample = async () => {
     }
   } catch (error) {
     console.error('Error loading file sample:', error)
-    alert(`Failed to load file sample: ${error.message}`)
+    notifyError(error, { message: 'Could not load a sample from this file.' })
   } finally {
     loadingSample.value = false
   }
@@ -1130,9 +1134,15 @@ const renderHtml = (content) => DOMPurify.sanitize(
   { USE_PROFILES: { html: true } }
 )
 
-const cancelEdit = () => {
+const cancelEdit = async () => {
   if (hasChanges.value) {
-    if (confirm('You have unsaved changes. Are you sure you want to cancel?')) {
+    const discard = await confirmAction({
+      title: 'Discard unsaved changes?',
+      message: 'Editing stops and the file returns to its last saved content.',
+      confirmLabel: 'Discard changes',
+      tone: 'danger',
+    })
+    if (discard) {
       editMode.value = false
       editContent.value = originalContent.value
     }
@@ -1187,10 +1197,10 @@ const toggleWordWrap = () => {
 const copyToClipboard = async () => {
   try {
     await navigator.clipboard.writeText(props.previewData.content)
-    alert('Content copied to clipboard!')
+    notifySuccess('Copied to clipboard.')
   } catch (error) {
     console.error('Failed to copy to clipboard:', error)
-    alert('Failed to copy to clipboard')
+    notifyError('Could not copy to clipboard.')
   }
 }
 
@@ -1218,10 +1228,10 @@ const validateJson = () => {
   try {
     JSON.parse(props.previewData.content)
     jsonError.value = ''
-    alert('JSON is valid!')
+    notifySuccess('JSON is valid.')
   } catch (error) {
     jsonError.value = error.message
-    alert('JSON is invalid: ' + error.message)
+    notifyError(error, { message: 'This file is not valid JSON.' })
   }
 }
 
@@ -1989,13 +1999,13 @@ const saveFile = async () => {
       originalContent.value = editContent.value
       editMode.value = false
       emit('save', { path: props.filePath, content: editContent.value })
-      alert('File saved successfully!')
+      notifySuccess('File saved.')
     } else {
       throw new Error(result.error || 'Failed to save file')
     }
   } catch (error) {
     console.error('Error saving file:', error)
-    alert(`Failed to save file: ${error.message}`)
+    notifyError(error, { message: 'Could not save the file.' })
   }
 }
 // Watchers
@@ -2011,12 +2021,8 @@ watch(() => props.showModal, (newVal) => {
   }
 })
 
-// Handle keyboard events
-const handleKeyDown = (e) => {
-    if (e.key === 'Escape' && props.showModal) {
-      closeModal()
-    }
-}
+// Escape is handled centrally by useOverlay so focus restoration runs too.
+const handleKeyDown = () => {}
 
 onUnmounted(() => {
   // Remove event listeners
@@ -2045,14 +2051,29 @@ onUnmounted(() => {
 
 <style scoped>
 .modal-backdrop {
-  padding: var(--spacing-4);
+  padding: 24px;
 }
 
 .preview-modal {
-  width: 90vw;
-  height: 90vh;
-  max-width: 1200px;
+  width: min(1120px, calc(100vw - 48px));
+  height: min(820px, calc(100vh - 48px));
+  max-width: none;
   overflow: hidden;
+}
+
+.header-left {
+  min-width: 0;
+}
+
+.header-left h4 {
+  margin: 0;
+  max-width: min(540px, 45vw);
+  overflow: hidden;
+  color: var(--gray-900);
+  font-size: 16px;
+  font-weight: var(--font-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .file-info {
@@ -2062,7 +2083,7 @@ onUnmounted(() => {
 }
 
 .file-type, .file-size {
-  background: var(--surface-3);
+  background: var(--surface-2);
   color: var(--gray-600);
   padding: 2px 8px;
   border-radius: var(--radius-sm);
@@ -2072,17 +2093,23 @@ onUnmounted(() => {
 
 .header-actions {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
 }
 
 .action-btn {
-  padding: 8px 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
   border: 1px solid var(--border-color);
   background: var(--surface-1);
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 14px;
-  transition: all 0.2s;
+  color: var(--gray-700);
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .action-btn:hover:not(:disabled) {
@@ -2091,14 +2118,15 @@ onUnmounted(() => {
 }
 
 .action-btn:disabled {
-  opacity: 0.6;
+  background: var(--surface-2);
+  color: var(--gray-400);
   cursor: not-allowed;
 }
 
-.edit-btn { background: rgba(var(--accent-rgb), 0.12); color: var(--primary-500); }
-.save-btn { background: var(--success-50); color: var(--success-500); }
-.cancel-btn { background: var(--error-50); color: var(--error-500); }
-.download-btn { background: var(--warning-50); color: var(--warning-500); }
+.edit-btn { color: var(--primary-700); }
+.save-btn { background: var(--primary-600); border-color: var(--primary-600); color: white; }
+.save-btn:hover:not(:disabled) { background: var(--primary-700); border-color: var(--primary-700); }
+.cancel-btn, .download-btn { color: var(--gray-700); }
 
 .preview-content {
   flex: 1;
@@ -2117,13 +2145,15 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
+  min-height: 48px;
+  padding: 6px 12px;
   background: var(--surface-2);
   border-bottom: 1px solid var(--border-color-light);
 }
 
 .language-select {
-  padding: 6px 12px;
+  height: 34px;
+  padding: 0 32px 0 10px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   font-size: 14px;
@@ -2132,7 +2162,7 @@ onUnmounted(() => {
 .edit-info {
   display: flex;
   gap: 16px;
-  font-size: 14px;
+  font-size: 12px;
   color: var(--gray-600);
 }
 
@@ -2153,18 +2183,10 @@ onUnmounted(() => {
   background: var(--surface-2);
 }
 
-.edit-footer {
-  padding: 8px 16px;
-  background: var(--surface-3);
-  border-top: 1px solid var(--border-color-light);
-  font-size: 12px;
-  color: var(--gray-600);
-}
-
 .preview-container {
   flex: 1;
   overflow: auto;
-  padding: 16px;
+  padding: 14px;
 }
 
 .html-preview,
@@ -2420,7 +2442,7 @@ onUnmounted(() => {
   
   .viz-btn {
     padding: 4px 8px;
-    font-size: 10px;
+    font-size: 11px;
     flex: 1;
     text-align: center;
   }

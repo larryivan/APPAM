@@ -1,90 +1,100 @@
 <template>
   <Teleport to="body">
-    <div class="file-picker-container app-modal-viewport" v-if="isOpen">
+    <div v-if="isOpen" class="file-picker-container app-modal-viewport">
       <div class="file-picker-overlay app-modal-backdrop" @click="close"></div>
-      <div class="file-picker-modal app-modal">
+      <section
+        ref="pickerPanel"
+        class="file-picker-modal app-modal"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="pickerTitleId"
+        tabindex="-1"
+      >
         <header class="picker-header app-modal-header">
-          <h3>{{ selectDirectories ? 'Select Directory' : (multiple ? 'Select Files' : 'Select File') }}</h3>
-          <button @click="close" class="close-btn app-modal-close">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
+          <h3 :id="pickerTitleId">{{ selectDirectories ? 'Select directory' : (multiple ? 'Select files' : 'Select file') }}</h3>
+          <button
+            ref="closeButton"
+            type="button"
+            class="close-btn app-modal-close"
+            title="Close"
+            aria-label="Close file picker"
+            @click="close"
+          >
+            <Icon name="x" :size="17" />
           </button>
         </header>
 
-        <div class="picker-breadcrumbs">
-          <button @click="navigateTo('/')" class="breadcrumb-item">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-            </svg>
-            Project Root
-          </button>
-          <template v-for="(crumb, index) in breadcrumbs" :key="index">
-            <span class="separator">/</span>
-            <button @click="navigateTo(crumb.path)" class="breadcrumb-item">{{ crumb.name }}</button>
-          </template>
-          <button 
-            v-if="currentPath !== '/'" 
-            @click="goUp" 
-            class="up-button" 
-            title="Go to parent directory"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="17 11 12 6 7 11"></polyline>
-              <polyline points="17 18 12 13 7 18"></polyline>
-            </svg>
-            Parent
-          </button>
-          <button 
-            v-if="selectDirectories" 
-            @click="selectCurrentDirectory" 
-            class="select-current-dir-button" 
-            :class="{ 'is-selected': isCurrentDirectorySelected }"
-            :title="isCurrentDirectorySelected ? 'Deselect current directory' : 'Select current directory'"
-          >
-            <svg v-if="!isCurrentDirectorySelected" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-              <polyline points="22 4 12 14.01 9 11.01"></polyline>
-            </svg>
-            <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="20 6 9 17 4 12"></polyline>
-            </svg>
-            {{ isCurrentDirectorySelected ? 'Directory Selected' : 'Select This Directory' }}
-          </button>
+        <div class="picker-breadcrumbs" aria-label="Current folder">
+          <div class="breadcrumb-path">
+            <button
+              type="button"
+              class="breadcrumb-item"
+              :class="{ active: currentPath === '/' }"
+              :aria-current="currentPath === '/' ? 'location' : undefined"
+              @click="navigateTo('/')"
+            >
+              <Icon name="folder" :size="15" />
+              <span>Project Root</span>
+            </button>
+            <template v-for="(crumb, index) in breadcrumbs" :key="crumb.path">
+              <Icon name="chevron-right" :size="14" class="separator" />
+              <button
+                type="button"
+                class="breadcrumb-item"
+                :class="{ active: index === breadcrumbs.length - 1 }"
+                :aria-current="index === breadcrumbs.length - 1 ? 'location' : undefined"
+                @click="navigateTo(crumb.path)"
+              >
+                {{ crumb.name }}
+              </button>
+            </template>
+          </div>
+          <div class="breadcrumb-actions">
+            <button
+              v-if="currentPath !== '/'"
+              type="button"
+              class="up-button"
+              title="Parent folder"
+              aria-label="Go to parent folder"
+              @click="goUp"
+            >
+              <Icon name="folder-up" :size="16" />
+            </button>
+            <button
+              v-if="selectDirectories"
+              type="button"
+              class="select-current-dir-button"
+              :class="{ 'is-selected': isCurrentDirectorySelected }"
+              :title="isCurrentDirectorySelected ? 'Deselect current folder' : 'Select current folder'"
+              @click="selectCurrentDirectory"
+            >
+              <Icon :name="isCurrentDirectorySelected ? 'check' : 'folder'" :size="15" />
+              <span>{{ isCurrentDirectorySelected ? 'Selected' : 'Select folder' }}</span>
+            </button>
+          </div>
         </div>
 
-        <div class="picker-body">
+        <div class="picker-body" :aria-busy="loading">
           <div v-if="loading" class="loading">
-            <div class="spinner"></div>
-            <span>Loading...</span>
+            <Icon name="rotate-ccw" :size="21" spin />
+            <span>Loading files</span>
+          </div>
+
+          <div v-else-if="loadError" class="picker-state error-state" role="alert">
+            <Icon name="triangle-alert" :size="22" />
+            <strong>Files could not be loaded</strong>
+            <button type="button" @click="loadFiles">Try again</button>
           </div>
 
           <div v-else-if="filteredFiles.length === 0" class="empty">
-            <p v-if="files.length === 0">This directory is empty</p>
-            <div v-else>
-              <p v-if="selectDirectories">No subdirectories in this directory</p>
-              <p v-else>No files matching the criteria in this directory</p>
-              <p class="hint" v-if="extensions.length > 0 && !selectDirectories">Supported file types: {{ extensions.join(', ') }}</p>
-              <p class="hint">Current directory: {{ currentPath }}</p>
-              <div class="interaction-hints">
-                <p class="hint"><Icon name="lightbulb" :size="14" /> Double-click directories to navigate deeper</p>
-                <p class="hint" v-if="selectDirectories"><Icon name="folder" :size="14" /> Click directories to select, or use "Select This Directory" button above</p>
-                <p class="hint" v-else><Icon name="file" :size="14" /> Click files to select</p>
-              </div>
-              <details class="debug-info">
-                <summary>Debug Info ({{ files.length }} items)</summary>
-                <ul>
-                  <li v-for="file in files.slice(0, 10)" :key="file.name">
-                    {{ file.name }} - {{ file.is_dir ? 'Directory' : 'File' }} {{ file.extension }}
-                  </li>
-                  <li v-if="files.length > 10">... {{ files.length - 10 }} more items</li>
-                </ul>
-              </details>
-            </div>
+            <Icon :name="files.length === 0 ? 'folder-open' : 'search'" :size="23" />
+            <strong>{{ emptyStateTitle }}</strong>
+            <span v-if="extensions.length > 0 && !selectDirectories" class="hint">
+              Accepted: {{ extensions.join(', ') }}
+            </span>
           </div>
 
-          <div v-else class="file-list">
+          <div v-else class="file-list" role="listbox" :aria-multiselectable="multiple">
             <div 
               v-for="file in filteredFiles" 
               :key="file.name"
@@ -95,31 +105,36 @@
                 'is-selectable': isFileValid(file),
                 'is-navigable': file.is_dir
               }"
+              role="option"
+              :aria-selected="isSelected(file)"
+              tabindex="0"
               @click="handleFileClick(file)"
               @dblclick="handleFileDblClick(file)"
+              @keydown.enter.prevent="handleFileEnter(file)"
             >
               <div class="file-icon">
-                <svg v-if="file.is_dir" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                </svg>
-                <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
-                  <polyline points="13 2 13 9 20 9"></polyline>
-                </svg>
+                <Icon :name="file.is_dir ? 'folder' : 'file'" :size="19" />
               </div>
               <div class="file-info">
                 <div class="file-name">
-                  {{ file.name }}
-                  <span v-if="file.is_dir" class="nav-hint"><Icon name="chevron-down" :size="13" /></span>
-                  <span v-if="isFileValid(file)" class="select-hint"><Icon name="check" :size="13" /></span>
+                  <span>{{ file.name }}</span>
+                  <Icon v-if="isSelected(file)" name="check" :size="13" class="select-hint" />
                 </div>
                 <div class="file-meta">
                   <span v-if="!file.is_dir">{{ formatSize(file.size) }}</span>
                   <span>{{ formatDate(file.mtime) }}</span>
-                  <span v-if="file.is_dir" class="action-hint">Double-click to enter</span>
-                  <span v-if="isFileValid(file)" class="action-hint">Click to select</span>
                 </div>
               </div>
+              <button
+                v-if="file.is_dir"
+                type="button"
+                class="open-folder-button"
+                :title="`Open ${file.name}`"
+                :aria-label="`Open folder ${file.name}`"
+                @click.stop="openDirectory(file)"
+              >
+                <Icon name="chevron-right" :size="16" />
+              </button>
               <input 
                 v-if="multiple && isFileValid(file)"
                 type="checkbox"
@@ -134,27 +149,31 @@
         <footer class="picker-footer app-modal-footer">
           <div class="selected-info">
             <span v-if="selectedFiles.length > 0">
-              Selected {{ selectedFiles.length }} files
+              {{ selectedFiles.length }} selected
             </span>
           </div>
           <div class="picker-actions">
-            <button @click="close" class="btn-cancel">Cancel</button>
+            <button type="button" class="btn-cancel" @click="close">Cancel</button>
             <button 
-              @click="confirm" 
+              type="button"
               class="btn-confirm"
               :disabled="selectedFiles.length === 0"
+              @click="confirmSelection"
             >
               Confirm
             </button>
           </div>
         </footer>
-      </div>
+      </section>
     </div>
   </Teleport>
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { nextOverlayId, useOverlay } from '@/lib/overlay.js';
+
+import Icon from './ui/Icon.vue';
 
 const props = defineProps({
   projectId: {
@@ -183,9 +202,12 @@ const emit = defineEmits(['update:modelValue', 'close']);
 
 const isOpen = ref(true);
 const loading = ref(false);
+const loadError = ref('');
 const currentPath = ref('/');
 const files = ref([]);
 const selectedFiles = ref([]);
+const closeButton = ref(null);
+let loadController = null;
 
 // Initialize with modelValue
 watch(() => props.modelValue, (newVal) => {
@@ -244,27 +266,37 @@ const filteredFiles = computed(() => {
   });
 });
 
+const emptyStateTitle = computed(() => {
+  if (files.value.length === 0) return 'This folder is empty';
+  return props.selectDirectories ? 'No folders here' : 'No matching files';
+});
+
 const loadFiles = async () => {
+  loadController?.abort();
+  const controller = new AbortController();
+  loadController = controller;
   loading.value = true;
+  loadError.value = '';
   try {
-    const response = await fetch(`/api/filemanager/${props.projectId}/list?path=${encodeURIComponent(currentPath.value)}`);
+    const response = await fetch(
+      `/api/filemanager/${props.projectId}/list?path=${encodeURIComponent(currentPath.value)}`,
+      { signal: controller.signal },
+    );
     if (!response.ok) {
-      console.error('Failed to load files:', response.statusText);
-      files.value = [];
-      return;
+      throw new Error('Files could not be loaded');
     }
     const data = await response.json();
-    files.value = data.items || [];
-    
-    // Debug information
-    console.log('Loaded files:', files.value.length, 'Current path:', currentPath.value);
-    console.log('Extensions filter:', props.extensions);
-    console.log('Files:', files.value.map(f => ({ name: f.name, ext: f.extension, is_dir: f.is_dir })));
+    if (!controller.signal.aborted) files.value = data.items || [];
   } catch (error) {
+    if (error?.name === 'AbortError') return;
     console.error('Failed to load files:', error);
     files.value = [];
+    loadError.value = 'Files could not be loaded';
   } finally {
-    loading.value = false;
+    if (loadController === controller) {
+      loadController = null;
+      loading.value = false;
+    }
   }
 };
 
@@ -349,18 +381,29 @@ const handleFileClick = (file) => {
   }
 };
 
+const openDirectory = (file) => {
+  if (!file?.is_dir) return;
+  navigateTo(buildFilePath(file.name));
+};
+
 const handleFileDblClick = (file) => {
   if (file.is_dir) {
-    // In any mode, double-click directories to navigate
-    const newPath = buildFilePath(file.name);
-    navigateTo(newPath);
+    openDirectory(file);
   } else if (!props.selectDirectories && isFileValid(file)) {
     // File selection mode: double-click file to select and confirm
     toggleSelection(file);
     if (!props.multiple) {
-      confirm();
+      confirmSelection();
     }
   }
+};
+
+const handleFileEnter = (file) => {
+  if (file.is_dir) {
+    openDirectory(file);
+    return;
+  }
+  handleFileClick(file);
 };
 
 const formatSize = (bytes) => {
@@ -376,11 +419,17 @@ const formatDate = (timestamp) => {
 };
 
 const close = () => {
+  if (!isOpen.value) return;
+  loadController?.abort();
   isOpen.value = false;
   emit('close');
 };
 
-const confirm = () => {
+const pickerPanel = ref(null);
+const pickerTitleId = nextOverlayId('file-picker-title');
+useOverlay(() => isOpen.value, { onClose: close, panelRef: pickerPanel });
+
+const confirmSelection = () => {
   const paths = selectedFiles.value.map(f => f.path);
   emit('update:modelValue', props.multiple ? paths : paths[0] || '');
   close();
@@ -399,7 +448,7 @@ const selectCurrentDirectory = () => {
     }
   } else {
     selectedFiles.value = [{ path: currentDirPath, name: currentDirName }];
-    confirm(); // Confirm directly in single-select mode
+    confirmSelection(); // Confirm directly in single-select mode
   }
 };
 
@@ -408,13 +457,19 @@ const isCurrentDirectorySelected = computed(() => {
   return selectedFiles.value.some(f => f.path === currentDirPath);
 });
 
-// Load initial files
-loadFiles();
+onMounted(async () => {
+  loadFiles();
+});
+
+onBeforeUnmount(() => {
+  loadController?.abort();
+});
 </script>
 
 <style scoped>
 .file-picker-container {
   z-index: 1300;
+  padding: 20px;
 }
 
 .file-picker-overlay {
@@ -424,367 +479,419 @@ loadFiles();
 
 .file-picker-modal {
   position: relative;
-  width: 90%;
-  max-width: 600px;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
+  z-index: 1;
+  width: min(600px, 100%);
+  max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - 40px);
+  overflow: hidden;
+}
+
+.picker-header {
+  flex: 0 0 auto;
+  padding: 14px 18px;
+  background: var(--surface-1);
 }
 
 .picker-breadcrumbs {
-  padding: 16px;
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--border-color-light);
   display: flex;
+  min-width: 0;
+  min-height: 50px;
+  flex: 0 0 auto;
   align-items: center;
   gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color-light);
+  background: var(--surface-2);
+}
+
+.breadcrumb-path {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 2px;
   overflow-x: auto;
-  min-height: 60px;
+  scrollbar-width: thin;
 }
 
 .breadcrumb-item {
-  display: flex;
+  display: inline-flex;
+  min-height: 32px;
+  flex: 0 0 auto;
   align-items: center;
   gap: 6px;
-  background: var(--surface-1);
-  border: 1px solid var(--border-color);
-  padding: 8px 12px;
-  cursor: pointer;
-  color: var(--gray-700);
-  font-size: 14px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gray-500);
+  font: inherit;
+  font-size: var(--text-xs);
   white-space: nowrap;
-  transition: all 0.2s ease;
-  border-radius: var(--radius-sm);
-  font-weight: 500;
-  box-shadow: var(--shadow-xs);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .breadcrumb-item:hover {
-  background: var(--surface-2);
-  border-color: rgba(var(--accent-rgb), 0.35);
-  color: var(--primary-600);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
+  background: var(--surface-3);
+  color: var(--gray-800);
 }
 
-.breadcrumb-item:first-child {
-  background: var(--gradient-primary);
-  color: white;
-  border-color: transparent;
-}
-
-.breadcrumb-item:first-child:hover {
-  background: var(--primary-700);
-  color: white;
-  border-color: transparent;
+.breadcrumb-item.active {
+  color: var(--gray-900);
+  font-weight: var(--font-semibold);
 }
 
 .separator {
-  color: var(--gray-400);
-  font-weight: 600;
-  font-size: 16px;
-  margin: 0 4px;
+  flex: 0 0 auto;
+  color: var(--gray-300);
 }
 
-.up-button {
-  background: var(--warning-500);
-  color: white;
-  border: 1px solid var(--warning-500);
-  padding: 8px 12px;
-  cursor: pointer;
-  font-size: 14px;
+.breadcrumb-actions {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 6px;
-  transition: all 0.2s ease;
-  border-radius: var(--radius-sm);
-  font-weight: 500;
-  box-shadow: var(--shadow-xs);
 }
 
-.up-button:hover {
-  background: var(--warning-600);
-  border-color: var(--warning-600);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
+.up-button,
+.open-folder-button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gray-500);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
-.up-button svg {
-  width: 16px;
-  height: 16px;
+.up-button:hover,
+.open-folder-button:hover {
+  background: var(--surface-3);
+  color: var(--gray-800);
 }
 
 .select-current-dir-button {
-  background: var(--success-500);
-  color: white;
-  border: 1px solid var(--success-500);
-  padding: 8px 16px;
-  cursor: pointer;
-  font-size: 14px;
-  display: flex;
+  display: inline-flex;
+  min-height: 34px;
   align-items: center;
-  gap: 8px;
-  transition: all 0.2s ease;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
-  box-shadow: var(--shadow-xs);
-  margin-left: auto;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--surface-1);
+  color: var(--gray-700);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .select-current-dir-button:hover {
-  background: var(--success-600);
-  border-color: var(--success-600);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
-}
-
-.select-current-dir-button.is-selected {
-  background: rgba(var(--accent-rgb), 0.16);
   border-color: rgba(var(--accent-rgb), 0.35);
   color: var(--primary-700);
 }
 
-.select-current-dir-button.is-selected:hover {
-  background: rgba(var(--accent-rgb), 0.22);
-  border-color: rgba(var(--accent-rgb), 0.45);
-}
-
-.select-current-dir-button svg {
-  width: 16px;
-  height: 16px;
+.select-current-dir-button.is-selected {
+  border-color: rgba(var(--accent-rgb), 0.3);
+  background: var(--primary-50);
+  color: var(--primary-700);
 }
 
 .picker-body {
-  flex: 1;
+  min-height: 176px;
+  max-height: min(430px, calc(100vh - 210px));
+  max-height: min(430px, calc(100dvh - 210px));
+  flex: 0 1 auto;
   overflow-y: auto;
-  min-height: 300px;
+  background: var(--surface-1);
 }
 
-.loading, .empty {
+.loading,
+.empty,
+.picker-state {
   display: flex;
-  flex-direction: column;
+  min-height: 176px;
   align-items: center;
   justify-content: center;
-  height: 300px;
-  color: var(--gray-600);
+  flex-direction: column;
+  gap: 8px;
+  padding: 24px;
+  color: var(--gray-500);
+  font-size: var(--text-sm);
+  text-align: center;
 }
 
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid var(--border-color-light);
-  border-top-color: var(--primary-500);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin-bottom: 12px;
+.loading :deep(.app-icon) {
+  color: var(--primary-600);
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
+.empty > strong,
+.picker-state > strong {
+  color: var(--gray-700);
+  font-size: var(--text-sm);
 }
 
 .hint {
-  font-size: 14px;
+  max-width: 420px;
   color: var(--gray-400);
-  margin-top: 8px;
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
 }
 
-.interaction-hints {
-  margin-top: 8px;
-  text-align: center;
-  color: var(--gray-400);
-  font-size: 14px;
+.error-state {
+  color: var(--error-600);
 }
 
-.debug-info {
-  margin-top: 16px;
-  padding: 12px;
-  background: var(--surface-2);
-  border-radius: var(--radius-sm);
-  font-size: 12px;
+.error-state button {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--surface-1);
   color: var(--gray-700);
-}
-
-.debug-info summary {
+  font: inherit;
+  font-size: var(--text-xs);
   cursor: pointer;
-  font-weight: 500;
-}
-
-.debug-info ul {
-  margin: 8px 0 0 0;
-  padding-left: 16px;
 }
 
 .file-list {
-  padding: 8px;
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
 }
 
 .file-item {
   display: flex;
+  min-width: 0;
+  min-height: 56px;
   align-items: center;
-  padding: 12px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  gap: 12px;
+  gap: 10px;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  outline: none;
+  color: var(--gray-700);
+  cursor: default;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 
-.file-item:hover {
+.file-item:hover,
+.file-item:focus-visible {
   background: var(--surface-2);
 }
 
-.file-item.is-selected {
-  background: rgba(var(--accent-rgb), 0.12);
-  border: 1px solid rgba(var(--accent-rgb), 0.3);
+.file-item:focus-visible {
+  border-color: rgba(var(--accent-rgb), 0.35);
 }
 
-.file-item.is-directory {
-  color: var(--gray-700);
-}
-
-.file-item.is-selectable {
-  cursor: pointer;
-}
-
-.file-item.is-selectable:hover {
-  background: var(--surface-3);
-}
-
-.file-item.is-directory.is-selectable .file-icon svg {
-  stroke: var(--primary-600);
-  fill: rgba(var(--accent-rgb), 0.12);
-}
-
-.file-item:not(.is-selectable) {
-  opacity: 0.7;
-  cursor: default;
-}
-
+.file-item.is-selectable,
 .file-item.is-navigable {
   cursor: pointer;
 }
 
-.file-item.is-navigable:hover {
-  background: rgba(var(--accent-rgb), 0.12);
-  border-left: 3px solid var(--primary-600);
+.file-item.is-selected {
+  border-color: rgba(var(--accent-rgb), 0.25);
+  background: var(--primary-50);
 }
 
-.file-item.is-navigable .file-icon svg {
-  stroke: var(--primary-600);
-  fill: rgba(var(--accent-rgb), 0.12);
+.file-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--gray-500);
 }
 
-.file-icon svg {
-  width: 24px;
-  height: 24px;
-  stroke: var(--gray-600);
-}
-
-.file-item.is-directory .file-icon svg {
-  stroke: var(--primary-600);
-  fill: rgba(var(--accent-rgb), 0.12);
+.file-item.is-directory .file-icon {
+  background: var(--primary-50);
+  color: var(--primary-600);
 }
 
 .file-info {
-  flex: 1;
   min-width: 0;
+  flex: 1;
 }
 
 .file-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--gray-900);
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  color: var(--gray-800);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+}
+
+.file-name > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.nav-hint {
-  margin-left: 4px;
-  font-size: 12px;
-  color: var(--gray-400);
-}
-
 .select-hint {
-  margin-left: 4px;
-  font-size: 12px;
+  flex: 0 0 auto;
   color: var(--primary-600);
-}
-
-.action-hint {
-  margin-left: 4px;
-  font-size: 12px;
-  color: var(--gray-400);
 }
 
 .file-meta {
   display: flex;
-  gap: 12px;
-  font-size: 12px;
-  color: var(--gray-600);
-  margin-top: 4px;
+  gap: 10px;
+  margin-top: 2px;
+  color: var(--gray-400);
+  font-size: var(--text-xs);
+}
+
+.open-folder-button {
+  flex: 0 0 32px;
 }
 
 .file-checkbox {
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+  accent-color: var(--primary-600);
   cursor: pointer;
 }
 
 .picker-footer {
-  padding: var(--spacing-4) var(--spacing-6);
-  border-top: 1px solid var(--border-color-light);
-  display: flex;
+  min-height: 58px;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--surface-1);
 }
 
 .selected-info {
-  font-size: 14px;
-  color: var(--gray-600);
+  min-width: 0;
+  color: var(--gray-500);
+  font-size: var(--text-xs);
 }
 
 .picker-actions {
   display: flex;
-  gap: 12px;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.btn-cancel,
+.btn-confirm {
+  min-width: 78px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .btn-cancel {
-  background: var(--surface-2);
-  color: var(--gray-700);
   border: 1px solid var(--border-color);
-  padding: 8px 16px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.15s ease;
+  background: var(--surface-1);
+  color: var(--gray-700);
 }
 
 .btn-cancel:hover {
-  background: var(--surface-3);
   border-color: var(--border-color-dark);
+  background: var(--surface-2);
 }
 
 .btn-confirm {
-  background: var(--gradient-primary);
+  border: 1px solid var(--primary-600);
+  background: var(--primary-600);
   color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.15s ease;
 }
 
 .btn-confirm:hover:not(:disabled) {
+  border-color: var(--primary-700);
   background: var(--primary-700);
 }
 
 .btn-confirm:disabled {
-  background: var(--gray-300);
-  color: var(--gray-500);
+  border-color: var(--gray-200);
+  background: var(--gray-200);
+  color: var(--gray-400);
   cursor: not-allowed;
 }
-</style> 
+
+@media (max-width: 640px) {
+  .file-picker-container {
+    padding: 8px;
+  }
+
+  .file-picker-modal {
+    width: 100%;
+    max-height: calc(100vh - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+
+  .picker-header {
+    padding: 12px 14px;
+  }
+
+  .picker-breadcrumbs {
+    align-items: stretch;
+    flex-wrap: wrap;
+    padding: 7px 10px;
+  }
+
+  .breadcrumb-path {
+    flex-basis: calc(100% - 40px);
+  }
+
+  .breadcrumb-actions {
+    margin-left: auto;
+  }
+
+  .select-current-dir-button span {
+    display: none;
+  }
+
+  .select-current-dir-button {
+    width: 34px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .picker-body {
+    min-height: 150px;
+    max-height: calc(100vh - 190px);
+    max-height: calc(100dvh - 190px);
+  }
+
+  .loading,
+  .empty,
+  .picker-state {
+    min-height: 150px;
+  }
+
+  .picker-footer {
+    padding: 9px 12px;
+  }
+
+  .btn-cancel,
+  .btn-confirm {
+    min-width: 72px;
+  }
+}
+
+@media (max-height: 620px) {
+  .picker-body,
+  .loading,
+  .empty,
+  .picker-state {
+    min-height: 140px;
+  }
+}
+</style>

@@ -12,18 +12,23 @@
     <!-- Modern header navigation -->
     <header class="fm-header" :class="{ mobile: isMobile }">
       <div class="breadcrumbs" :class="{ mobile: isMobile }">
+        <button
+          v-if="!isMobile"
+          @click="goUp"
+          :disabled="currentPath === '/'"
+          class="nav-btn"
+          title="Parent directory"
+          aria-label="Parent directory"
+        >
+          <Icon name="folder-up" :size="16" />
+        </button>
         <button @click="navigateTo('/')" class="breadcrumb-home" title="Back to root directory">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-            <polyline points="9 22 9 12 15 12 15 22"></polyline>
-          </svg>
+          <Icon name="home" :size="16" />
         </button>
         <!-- Mobile simplified breadcrumb -->
         <template v-if="isMobile">
           <span v-if="breadcrumbs.length > 0" class="breadcrumb-item">
-            <svg class="breadcrumb-sep" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="9 18 15 12 9 6"></polyline>
-            </svg>
+            <Icon class="breadcrumb-sep" name="chevron-right" :size="15" />
             <button @click="navigateTo(breadcrumbs[breadcrumbs.length - 1].path)" class="breadcrumb-btn">
               {{ breadcrumbs[breadcrumbs.length - 1].name }}
             </button>
@@ -32,19 +37,14 @@
         <!-- Desktop full breadcrumb -->
         <template v-else>
         <span v-for="(crumb, index) in breadcrumbs" :key="index" class="breadcrumb-item">
-          <svg class="breadcrumb-sep" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="9 18 15 12 9 6"></polyline>
-          </svg>
+          <Icon class="breadcrumb-sep" name="chevron-right" :size="15" />
           <button @click="navigateTo(crumb.path)" class="breadcrumb-btn">{{ crumb.name }}</button>
         </span>
         </template>
       </div>
       <div class="header-actions" :class="{ mobile: isMobile }">
         <div class="search-box" :class="{ mobile: isMobile }">
-          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="8"></circle>
-            <path d="m21 21-4.35-4.35"></path>
-          </svg>
+          <Icon class="search-icon" name="search" :size="16" />
           <input 
             v-model="searchQuery" 
             @input="handleSearch" 
@@ -54,130 +54,64 @@
             class="search-input"
             :class="{ focused: isSearchFocused, mobile: isMobile }"
           />
-          <button v-if="searchQuery" @click="searchQuery = ''" class="clear-search" title="Clear search">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
+          <button v-if="searchQuery" type="button" @click="searchQuery = ''" class="clear-search" title="Clear search" aria-label="Clear search">
+            <Icon name="x" :size="14" />
+          </button>
+        </div>
+        <div v-if="!isMobile" class="actions-group">
+          <button @click="$refs.fileInput.click()" class="action-btn primary" title="Upload files">
+            <Icon name="upload" :size="16" />
+            <span>Upload</span>
+          </button>
+          <input type="file" ref="fileInput" @change="handleFileUpload" multiple hidden />
+          <button @click="showNewFolderModal = true" class="action-btn" title="New folder">
+            <Icon name="folder-plus" :size="16" />
+            <span>New</span>
+          </button>
+          <button @click="refreshItems" class="action-btn icon-only" title="Refresh" aria-label="Refresh" :class="{ rotating: isLoading }">
+            <Icon name="rotate-ccw" :size="16" />
+          </button>
+          <button @click="showDownloadManager = true" class="action-btn download-btn" title="Download manager">
+            <Icon name="download" :size="16" />
+            <span>Download</span>
           </button>
         </div>
         <!-- Mobile menu button -->
-        <button v-if="isMobile" @click="showMobileMenu = !showMobileMenu" class="mobile-menu-btn" title="Menu">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="3" y1="6" x2="21" y2="6"></line>
-            <line x1="3" y1="12" x2="21" y2="12"></line>
-            <line x1="3" y1="18" x2="21" y2="18"></line>
-          </svg>
+        <button v-if="isMobile" type="button" @click="showMobileMenu = !showMobileMenu" class="mobile-menu-btn" title="Menu" aria-label="File menu">
+          <Icon name="align-justify" :size="19" />
         </button>
       </div>
     </header>
 
-    <!-- Modern toolbar -->
-    <div class="fm-toolbar" :class="{ mobile: isMobile }">
-      <!-- Desktop layout -->
-      <template v-if="!isMobile">
-      <div class="nav-group">
-        <button @click="goUp" :disabled="currentPath === '/'" class="nav-btn" title="Parent Directory">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="17 11 12 6 7 11"></polyline>
-            <polyline points="17 18 12 13 7 18"></polyline>
-          </svg>
+    <!-- Compact toolbar: mobile only; desktop actions live in the header -->
+    <div v-if="isMobile" class="fm-toolbar mobile">
+      <div class="mobile-nav-group">
+        <button @click="goUp" :disabled="currentPath === '/'" class="nav-btn mobile" title="Parent directory" aria-label="Parent directory">
+          <Icon name="folder-up" :size="18" />
         </button>
-      </div>
-      
-      <div class="actions-group">
-        <button @click="$refs.fileInput.click()" class="action-btn primary" title="Upload Files">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="17 8 12 3 7 8"></polyline>
-            <line x1="12" y1="3" x2="12" y2="15"></line>
-          </svg>
-          <span>Upload</span>
+        <button @click="$refs.fileInput.click()" class="action-btn mobile primary" title="Upload" aria-label="Upload files">
+          <Icon name="upload" :size="18" />
         </button>
         <input type="file" ref="fileInput" @change="handleFileUpload" multiple hidden />
-        <button @click="showNewFolderModal = true" class="action-btn" title="New Folder">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-            <line x1="12" y1="11" x2="12" y2="17"></line>
-            <line x1="9" y1="14" x2="15" y2="14"></line>
-          </svg>
-          <span>New</span>
-        </button>
-        <button @click="refreshItems" class="action-btn" title="Refresh" :class="{ rotating: isLoading }">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="23 4 23 10 17 10"></polyline>
-            <polyline points="1 20 1 14 7 14"></polyline>
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-          </svg>
-        </button>
-        <button @click="showDownloadManager = true" class="action-btn download-btn" title="Download Manager">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="7 10 12 15 17 10"></polyline>
-            <line x1="12" y1="15" x2="12" y2="3"></line>
-          </svg>
-          <span>Download</span>
-        </button>
       </div>
-      </template>
-      
-      <!-- Mobile compact layout -->
-      <template v-else>
-        <div class="mobile-nav-group">
-          <button @click="goUp" :disabled="currentPath === '/'" class="nav-btn mobile" title="Parent Directory">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="17 11 12 6 7 11"></polyline>
-              <polyline points="17 18 12 13 7 18"></polyline>
-            </svg>
-          </button>
-          <button @click="$refs.fileInput.click()" class="action-btn mobile primary" title="Upload">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="17 8 12 3 7 8"></polyline>
-              <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-          </button>
-          <input type="file" ref="fileInput" @change="handleFileUpload" multiple hidden />
-        </div>
-        
-      </template>
-      
+
       <div class="selection-info" v-if="selectedItems.length > 0">
         <span class="count">{{ selectedItems.length }} selected</span>
         <div class="selection-actions">
           <button @click="copySelected" class="mini-btn" title="Copy (Ctrl+C)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-            </svg>
+            <Icon name="copy" :size="14" />
           </button>
           <button @click="cutSelected" class="mini-btn" title="Cut (Ctrl+X)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="6" cy="6" r="3"></circle>
-              <circle cx="6" cy="18" r="3"></circle>
-              <line x1="20" y1="4" x2="8.12" y2="15.88"></line>
-              <line x1="14.47" y1="14.48" x2="20" y2="20"></line>
-              <line x1="8.12" y1="8.12" x2="12" y2="12"></line>
-            </svg>
+            <Icon name="scissors" :size="14" />
           </button>
           <button @click="pasteItems" class="mini-btn" v-if="clipboard.length > 0" :title="`Paste (Ctrl+V) - ${clipboardOperation === 'copy' ? 'Copy' : 'Move'} ${clipboard.length} items`">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
-              <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
-            </svg>
+            <Icon name="clipboard-paste" :size="14" />
           </button>
           <button @click="downloadSelected" class="mini-btn" title="Download selected">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
+            <Icon name="download" :size="14" />
           </button>
           <button @click="deleteSelected" class="mini-btn danger" title="Delete (Delete)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="3 6 5 6 21 6"></polyline>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-            </svg>
+            <Icon name="trash-2" :size="14" />
           </button>
         </div>
       </div>
@@ -188,17 +122,11 @@
           Clipboard: {{ clipboardOperation === 'copy' ? 'Copy' : 'Cut' }} {{ clipboard.length }} items
         </span>
         <button @click="pasteItems" class="mini-btn" title="Paste (Ctrl+V)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
-            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
-          </svg>
+          <Icon name="clipboard-paste" :size="14" />
           Paste
         </button>
-        <button @click="clearClipboard" class="mini-btn" title="Clear clipboard">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
+        <button @click="clearClipboard" class="mini-btn" title="Clear clipboard" aria-label="Clear clipboard">
+          <Icon name="x" :size="14" />
         </button>
       </div>
       
@@ -241,11 +169,7 @@
 
       <!-- Empty folder notice -->
       <div v-if="filteredItems.length === 0 && !isLoading" class="empty-state">
-        <svg class="empty-icon" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
-          <polyline points="13 2 13 9 20 9"></polyline>
-          <line x1="10" y1="15" x2="14" y2="15"></line>
-        </svg>
+        <Icon class="empty-icon" name="folder-open" :size="40" :stroke-width="1.5" />
         <div class="empty-text">
           {{ searchQuery ? 'No matching files found' : 'This folder is empty' }}
         </div>
@@ -253,12 +177,8 @@
           {{ searchQuery ? 'Try other search keywords' : 'Drag files here or click upload button' }}
         </div>
         <button v-if="!searchQuery" @click="$refs.fileInput.click()" class="upload-btn">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="17 8 12 3 7 8"></polyline>
-            <line x1="12" y1="3" x2="12" y2="15"></line>
-          </svg>
-          Upload Files
+          <Icon name="upload" :size="16" />
+          Upload files
         </button>
       </div>
 
@@ -294,10 +214,13 @@
             <div class="col-name">
               <div class="file-icon">
                 <img v-if="item.thumbnail" :src="item.thumbnail" class="thumbnail" />
-                <svg v-else-if="item.is_dir" class="folder-icon" :width="isMobile ? 24 : 20" :height="isMobile ? 24 : 20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                </svg>
-                <div v-else class="icon" v-html="getFileIcon(item.name)"></div>
+                <Icon v-else-if="item.is_dir" class="folder-icon" name="folder" :size="isMobile ? 24 : 20" />
+                <Icon
+                  v-else
+                  :name="getFileIconName(item.name)"
+                  :size="18"
+                  :class="['file-type-icon', getFileIconClass(getFileExtension(item.name).toLowerCase())]"
+                />
               </div>
               <div class="file-info">
                 <span class="name">{{ item.name }}</span>
@@ -318,11 +241,7 @@
             <div v-if="!isMobile" class="col-time">{{ formatDateTime(item.mtime) }}</div>
             <div v-if="isMobile" class="col-actions">
               <button @click.stop="showItemContextMenu(item, $event)" class="mobile-menu-btn" title="Menu">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="1"></circle>
-                  <circle cx="12" cy="5" r="1"></circle>
-                  <circle cx="12" cy="19" r="1"></circle>
-                </svg>
+                <Icon name="more-horizontal" :size="16" />
               </button>
             </div>
           </div>
@@ -336,84 +255,47 @@
     <div v-if="isMobile && showMobileMenu" class="mobile-menu-overlay" @click="showMobileMenu = false">
       <div class="mobile-menu" @click.stop>
         <div class="mobile-menu-header">
-          <h3>File Operations</h3>
-          <button @click="showMobileMenu = false" class="close-btn">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
+          <h3>File operations</h3>
+          <button @click="showMobileMenu = false" class="close-btn" title="Close" aria-label="Close file menu">
+            <Icon name="x" :size="19" />
           </button>
         </div>
         <div class="mobile-menu-content">
           <button @click="showNewFolderModal = true; showMobileMenu = false" class="mobile-menu-item">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-              <line x1="12" y1="11" x2="12" y2="17"></line>
-              <line x1="9" y1="14" x2="15" y2="14"></line>
-            </svg>
-            New Folder
+            <Icon name="folder-plus" :size="19" />
+            New folder
           </button>
           <button @click="refreshItems(); showMobileMenu = false" class="mobile-menu-item">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="23 4 23 10 17 10"></polyline>
-              <polyline points="1 20 1 14 7 14"></polyline>
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-            </svg>
+            <Icon name="rotate-ccw" :size="19" />
             Refresh
           </button>
           <button v-if="filteredItems.length > 0" @click="toggleSelectAllAction(); showMobileMenu = false" class="mobile-menu-item">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-              <polyline points="9 12 12 15 17 10"></polyline>
-            </svg>
+            <Icon name="circle-check" :size="19" />
             {{ isAllSelected ? 'Clear Selection' : 'Select All' }}
           </button>
           <button @click="showDownloadManager = true; showMobileMenu = false" class="mobile-menu-item">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
+            <Icon name="download" :size="19" />
             Download Manager
           </button>
           <div v-if="selectedItems.length > 0" class="mobile-menu-divider"></div>
           <button v-if="selectedItems.length > 0" @click="copySelected(); showMobileMenu = false" class="mobile-menu-item">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-            </svg>
+            <Icon name="copy" :size="19" />
             Copy Selected
           </button>
           <button v-if="selectedItems.length > 0" @click="cutSelected(); showMobileMenu = false" class="mobile-menu-item">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="6" cy="6" r="3"></circle>
-              <circle cx="6" cy="18" r="3"></circle>
-              <line x1="20" y1="4" x2="8.12" y2="15.88"></line>
-              <line x1="14.47" y1="14.48" x2="20" y2="20"></line>
-              <line x1="8.12" y1="8.12" x2="12" y2="12"></line>
-            </svg>
+            <Icon name="scissors" :size="19" />
             Cut Selected
           </button>
           <button v-if="clipboard.length > 0" @click="pasteItems(); showMobileMenu = false" class="mobile-menu-item">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
-              <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
-            </svg>
+            <Icon name="clipboard-paste" :size="19" />
             Paste ({{ clipboard.length }} items)
           </button>
           <button v-if="selectedItems.length > 0" @click="downloadSelected(); showMobileMenu = false" class="mobile-menu-item">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
+            <Icon name="download" :size="19" />
             Download Selected
           </button>
           <button v-if="selectedItems.length > 0" @click="deleteSelected(); showMobileMenu = false" class="mobile-menu-item danger">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="3 6 5 6 21 6"></polyline>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-            </svg>
+            <Icon name="trash-2" :size="19" />
             Delete Selected
           </button>
         </div>
@@ -446,7 +328,7 @@
       </div>
       <hr class="context-divider">
       <div class="context-item" @click="showFileDetails" v-if="selectedItems.length === 1">
-        <span class="icon">ℹ️</span> Details
+        <span class="icon"><Icon name="info" :size="15" /></span> Details
       </div>
     </div>
 
@@ -464,14 +346,11 @@
 
     <!-- Modal dialog -->
     <div v-if="showNewFolderModal" class="modal-overlay app-modal-viewport app-modal-backdrop" @click="showNewFolderModal = false">
-      <div class="modal app-modal" :class="{ mobile: isMobile }" @click.stop>
+      <div class="modal app-modal" :class="{ mobile: isMobile }" @click.stop ref="newFolderPanel" role="dialog" aria-modal="true" aria-label="New folder" tabindex="-1">
         <div class="modal-header app-modal-header">
-          <h3>New Folder</h3>
-          <button @click="showNewFolderModal = false" class="close-btn app-modal-close">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
+          <h3>New folder</h3>
+          <button @click="showNewFolderModal = false" class="close-btn app-modal-close" title="Close" aria-label="Close dialog">
+            <Icon name="x" :size="18" />
           </button>
         </div>
         <div class="modal-body app-modal-body">
@@ -485,21 +364,18 @@
           />
         </div>
         <div class="modal-footer app-modal-footer">
-          <button @click="createNewFolder" class="btn-primary" :class="{ mobile: isMobile }">Create</button>
           <button @click="showNewFolderModal = false" class="btn-cancel" :class="{ mobile: isMobile }">Cancel</button>
+          <button @click="createNewFolder" class="btn-primary" :class="{ mobile: isMobile }">Create</button>
         </div>
       </div>
     </div>
     
     <div v-if="showRenameModal" class="modal-overlay app-modal-viewport app-modal-backdrop" @click="showRenameModal = false">
-      <div class="modal app-modal" :class="{ mobile: isMobile }" @click.stop>
+      <div class="modal app-modal" :class="{ mobile: isMobile }" @click.stop ref="renamePanel" role="dialog" aria-modal="true" aria-label="Rename item" tabindex="-1">
         <div class="modal-header app-modal-header">
           <h3>Rename</h3>
-          <button @click="showRenameModal = false" class="close-btn app-modal-close">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
+          <button @click="showRenameModal = false" class="close-btn app-modal-close" title="Close" aria-label="Close dialog">
+            <Icon name="x" :size="18" />
           </button>
         </div>
         <div class="modal-body app-modal-body">
@@ -513,8 +389,8 @@
           />
         </div>
         <div class="modal-footer app-modal-footer">
-          <button @click="renameItem" class="btn-primary" :class="{ mobile: isMobile }">Confirm</button>
           <button @click="showRenameModal = false" class="btn-cancel" :class="{ mobile: isMobile }">Cancel</button>
+          <button @click="renameItem" class="btn-primary" :class="{ mobile: isMobile }">Confirm</button>
         </div>
       </div>
     </div>
@@ -528,7 +404,7 @@
     <!-- Upload progress -->
     <div v-if="uploadingFiles.length > 0" class="upload-progress-modal">
       <div class="progress-content">
-        <h4>Uploading Files</h4>
+        <h4>Uploading files</h4>
         <div v-for="file in uploadingFiles" :key="file.name" class="upload-item">
           <div class="upload-info">
             <span class="file-name">{{ file.name }}</span>
@@ -560,6 +436,8 @@ import { useRoute } from 'vue-router'
 import DragDropUpload from './DragDropUpload.vue'
 import FilePreviewModal from './FilePreviewModal.vue'
 import DownloadManager from './DownloadManager.vue'
+import { confirmAction, notifyError, notifyInfo } from '@/lib/notify.js'
+import { useOverlay } from '@/lib/overlay.js'
 
 const route = useRoute()
 const projectId = computed(() => route.params.id)
@@ -641,6 +519,11 @@ const restoreScrollPosition = () => {
 const showNewFolderModal = ref(false)
 const newFolderName = ref('')
 const showRenameModal = ref(false)
+
+const newFolderPanel = ref(null)
+const renamePanel = ref(null)
+useOverlay(() => showNewFolderModal.value, { onClose: () => { showNewFolderModal.value = false }, panelRef: newFolderPanel })
+useOverlay(() => showRenameModal.value, { onClose: () => { showRenameModal.value = false }, panelRef: renamePanel })
 const newRenameName = ref('')
 
 // Download Manager
@@ -811,7 +694,7 @@ const fetchItems = async () => {
     }, 100)
   } catch (error) {
     console.error('Error fetching items:', error)
-    alert(`Failed to load directory contents: ${error.message}`)
+    notifyError(error, { message: 'Could not open that folder.' })
   } finally {
     isLoading.value = false
   }
@@ -957,7 +840,6 @@ const copySelected = () => {
     fullPath: `${currentPath.value === '/' ? '' : currentPath.value}/${item.name}`
   }))
   clipboardOperation.value = 'copy'
-  console.log('Files copied:', clipboard.value.map(item => item.fullPath))
 }
 
 const cutSelected = () => {
@@ -967,13 +849,11 @@ const cutSelected = () => {
     fullPath: `${currentPath.value === '/' ? '' : currentPath.value}/${item.name}`
   }))
   clipboardOperation.value = 'cut'
-  console.log('Files cut:', clipboard.value.map(item => item.fullPath))
 }
 
 const clearClipboard = () => {
   clipboard.value = []
   clipboardOperation.value = ''
-  console.log('Clipboard cleared')
 }
 
 const pasteItems = async () => {
@@ -985,8 +865,6 @@ const pasteItems = async () => {
     // Use saved full path as source path
     const items = clipboard.value.map(item => item.fullPath || item.name)
     
-    console.log(`${operation === 'copy' ? 'Copying' : 'Moving'} files:`, items)
-    console.log(`Target directory: ${currentPath.value}`)
     
     const response = await fetch(`/api/filemanager/${projectId.value}/${operation}`, {
       method: 'POST',
@@ -1000,7 +878,6 @@ const pasteItems = async () => {
     }
     
     const result = await response.json()
-    console.log(`${operation === 'copy' ? 'Copy' : 'Move'} successful:`, result)
     
     // Clear clipboard after successful cut operation
     if (operation === 'cut') {
@@ -1011,14 +888,21 @@ const pasteItems = async () => {
     fetchItems()
   } catch (error) {
     console.error('Error pasting items:', error)
-    alert(`Paste failed: ${error.message}`)
+    notifyError(error, { message: 'Could not paste the selected items.' })
   } finally {
     isLoading.value = false
   }
 }
 
 const deleteSelected = async () => {
-  if (!confirm(`Are you sure you want to delete ${selectedItems.value.length} item(s)?`)) return
+  const count = selectedItems.value.length
+  const confirmed = await confirmAction({
+    title: count === 1 ? 'Delete this item?' : `Delete ${count} items?`,
+    message: 'Deleted files are removed from the project workspace and cannot be restored from here.',
+    confirmLabel: 'Delete',
+    tone: 'danger',
+  })
+  if (!confirmed) return
   
   isLoading.value = true
   try {
@@ -1040,7 +924,7 @@ const deleteSelected = async () => {
     fetchItems()
   } catch (error) {
     console.error('Error deleting items:', error)
-    alert(`Failed to delete items: ${error.message}`)
+    notifyError(error, { message: 'Could not delete the selected items.' })
   } finally {
     isLoading.value = false
   }
@@ -1075,7 +959,7 @@ const downloadSelected = async () => {
     window.URL.revokeObjectURL(url)
   } catch (error) {
     console.error('Error downloading items:', error)
-    alert(`Failed to download items: ${error.message}`)
+    notifyError(error, { message: 'Could not prepare the download.' })
   } finally {
     isLoading.value = false
   }
@@ -1103,7 +987,7 @@ const createNewFolder = async () => {
     fetchItems()
   } catch (error) {
     console.error('Error creating folder:', error)
-    alert(`Failed to create folder: ${error.message}`)
+    notifyError(error, { message: 'Could not create the folder.' })
   } finally {
     isLoading.value = false
   }
@@ -1133,7 +1017,7 @@ const renameItem = async () => {
     fetchItems()
   } catch (error) {
     console.error('Error renaming item:', error)
-    alert(`Failed to rename item: ${error.message}`)
+    notifyError(error, { message: 'Could not rename that item.' })
   } finally {
     isLoading.value = false
   }
@@ -1176,7 +1060,7 @@ const previewItem = async (item) => {
     showPreviewModal.value = true
   } catch (error) {
     console.error('Error previewing item:', error)
-    alert(`Failed to preview item: ${error.message}`)
+    notifyError(error, { message: 'Could not open a preview for that file.' })
   } finally {
     isLoading.value = false
   }
@@ -1318,7 +1202,7 @@ const handleUploadComplete = () => {
 
 const handleUploadError = (error) => {
   console.error('Upload error:', error)
-  alert(`Upload failed: ${error.message}`)
+  notifyError(error, { message: 'Upload failed.' })
 }
 
 const handleUploadCancelled = () => {
@@ -1328,7 +1212,6 @@ const handleUploadCancelled = () => {
 }
 
 const handleFileDownloaded = (filename) => {
-  console.log('File downloaded:', filename)
   // Refresh file list to display newly downloaded files
   fetchItems()
   // Can add download completion notification
@@ -1467,12 +1350,15 @@ const handleKeyDown = (event) => {
 }
 
 // Utility functions
-const getFileIcon = (fileName) => {
+const getFileIconName = (fileName) => {
   const ext = getFileExtension(fileName).toLowerCase()
-  const iconClass = getFileIconClass(ext)
-  return `<svg class="file-type-icon ${iconClass}" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    ${getFileIconSvg(ext)}
-  </svg>`
+  if (['txt', 'log', 'md', 'pdf', 'doc', 'docx'].includes(ext)) return 'file-text'
+  if (['xls', 'xlsx', 'csv'].includes(ext)) return 'file-spreadsheet'
+  if (['js', 'ts', 'jsx', 'tsx', 'py', 'java', 'cpp', 'c', 'html', 'css', 'scss'].includes(ext)) return 'file-code'
+  if (['png', 'jpg', 'jpeg', 'gif', 'svg'].includes(ext)) return 'file-image'
+  if (['zip', 'tar', 'gz', 'rar'].includes(ext)) return 'file-archive'
+  if (['fasta', 'fastq', 'vcf', 'gff', 'bed', 'sam', 'bam'].includes(ext)) return 'dna'
+  return 'file'
 }
 
 const getFileIconClass = (ext) => {
@@ -1493,38 +1379,6 @@ const getFileIconClass = (ext) => {
     fasta: 'icon-bio', fastq: 'icon-bio', vcf: 'icon-bio', gff: 'icon-bio', bed: 'icon-bio'
   }
   return classMap[ext] || 'icon-default'
-}
-
-const getFileIconSvg = (ext) => {
-  const iconMap = {
-    // Default file icon
-    default: '<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline>',
-    // Code/Text
-    code: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline>',
-    // Image
-    image: '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>',
-    // Archive
-    archive: '<polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line>',
-    // Bio
-    bio: '<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>'
-  }
-  
-  const typeMap = {
-    // Text/Documents
-    txt: 'code', log: 'code', md: 'code',
-    // Code
-    js: 'code', ts: 'code', py: 'code', java: 'code',
-    html: 'code', css: 'code',
-    // Images
-    png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', svg: 'image',
-    // Archives
-    zip: 'archive', tar: 'archive', gz: 'archive',
-    // Bio
-    fasta: 'bio', fastq: 'bio', vcf: 'bio'
-  }
-  
-  const iconType = typeMap[ext] || 'default'
-  return iconMap[iconType] || iconMap.default
 }
 
 const getFileExtension = (filename) => {
@@ -1639,7 +1493,7 @@ const showFileDetails = () => {
       `Permissions: ${item.permissions?.readable ? 'R' : ''}${item.permissions?.writable ? 'W' : ''}${item.permissions?.executable ? 'X' : ''}`
     ].join('\n')
     
-    alert(details)
+    notifyInfo(item.name, { title: 'File details', detail: details })
   }
   hideContextMenu()
 }
@@ -1711,7 +1565,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  min-height: calc(100vh - 100px);
+  min-height: 420px;
   max-height: 100%;
   background: var(--surface-0);
   font-family: var(--font-family-base);
@@ -1726,23 +1580,25 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--spacing-4) var(--spacing-6);
+  padding: 10px 16px;
   background: var(--surface-1);
   border-bottom: var(--border-width) solid var(--border-color-light);
-  min-height: 64px;
-  box-shadow: var(--shadow-xs);
+  min-height: 52px;
 }
 
 .breadcrumbs {
   display: flex;
   align-items: center;
-  gap: var(--spacing-2);
+  gap: 2px;
+  min-width: 0;
 }
 
 .breadcrumb-home {
   background: none;
   border: none;
-  padding: var(--spacing-2);
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border-radius: var(--radius-base);
   cursor: pointer;
   color: var(--gray-500);
@@ -1759,14 +1615,14 @@ onUnmounted(() => {
 
 .breadcrumb-sep {
   color: var(--gray-300);
-  margin: 0 var(--spacing-1);
-  opacity: 0.5;
+  margin: 0 1px;
 }
 
 .breadcrumb-btn {
   background: none;
   border: none;
-  padding: var(--spacing-2) var(--spacing-3);
+  min-height: 30px;
+  padding: 0 7px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--primary-600);
@@ -1785,14 +1641,14 @@ onUnmounted(() => {
 }
 
 .download-btn {
-  background: var(--success-500) !important;
-  color: white !important;
-  border-color: var(--success-500) !important;
+  background: var(--surface-1) !important;
+  color: var(--gray-700) !important;
+  border-color: var(--border-color) !important;
 }
 
 .download-btn:hover {
-  background: var(--success-600) !important;
-  border-color: var(--success-600) !important;
+  background: var(--surface-2) !important;
+  border-color: var(--border-color-dark) !important;
 }
 
 .header-actions {
@@ -1809,20 +1665,20 @@ onUnmounted(() => {
 
 .search-input {
   width: 280px;
-  padding: var(--spacing-3) var(--spacing-10) var(--spacing-3) var(--spacing-10);
+  height: var(--control-height);
+  padding: 0 34px;
   border: var(--border-width) solid var(--border-color);
   border-radius: var(--radius-base);
   font-size: var(--text-sm);
-  background: var(--surface-2);
-  transition: all var(--transition-base);
+  background: var(--surface-1);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .search-input:focus {
   outline: none;
   border-color: var(--primary-500);
   background: var(--surface-1);
-  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.16);
-  width: 320px;
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.14);
 }
 
 .search-input.focused {
@@ -1866,7 +1722,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-3) var(--spacing-6);
+  min-height: 48px;
+  padding: 6px 16px;
   background: var(--surface-1);
   border-bottom: var(--border-width) solid var(--border-color-light);
   gap: var(--spacing-4);
@@ -1876,15 +1733,17 @@ onUnmounted(() => {
 .nav-group {
   display: flex;
   gap: var(--spacing-1);
-  background: var(--surface-2);
-  padding: var(--spacing-1);
-  border-radius: var(--radius-base);
+  background: transparent;
+  padding: 0;
 }
 
 .nav-btn {
   background: transparent;
   border: none;
-  padding: var(--spacing-2);
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--gray-500);
@@ -1895,9 +1754,8 @@ onUnmounted(() => {
 }
 
 .nav-btn:hover:not(:disabled) {
-  background: var(--surface-1);
+  background: var(--surface-2);
   color: var(--gray-900);
-  box-shadow: var(--shadow-xs);
 }
 
 .nav-btn:disabled {
@@ -1913,13 +1771,14 @@ onUnmounted(() => {
 .action-btn {
   background: var(--surface-1);
   border: 1px solid var(--border-color);
-  padding: 8px 14px;
+  min-height: 34px;
+  padding: 0 11px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--gray-700);
   font-size: 14px;
   font-weight: 500;
-  transition: all 0.2s;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1928,18 +1787,17 @@ onUnmounted(() => {
 .action-btn:hover {
   background: var(--surface-2);
   border-color: var(--border-color-dark);
-  transform: translateY(-1px);
 }
 
 .action-btn.primary {
-  background: var(--gradient-primary);
-  border-color: transparent;
+  background: var(--primary-600);
+  border-color: var(--primary-600);
   color: white;
 }
 
 .action-btn.primary:hover {
   background: var(--primary-700);
-  box-shadow: 0 10px 18px rgba(var(--accent-rgb), 0.2);
+  border-color: var(--primary-700);
 }
 
 .action-btn.rotating svg {
@@ -1955,10 +1813,11 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 6px 12px;
+  min-height: 34px;
+  padding: 4px 8px;
   background: rgba(var(--accent-rgb), 0.12);
   border: 1px solid rgba(var(--accent-rgb), 0.25);
-  border-radius: 8px;
+  border-radius: var(--radius-base);
   font-size: 13px;
   color: var(--primary-700);
   font-weight: 500;
@@ -1974,10 +1833,11 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 6px 12px;
+  min-height: 34px;
+  padding: 4px 8px;
   background: var(--warning-50);
   border: 1px solid rgba(245, 158, 11, 0.3);
-  border-radius: 8px;
+  border-radius: var(--radius-base);
   font-size: 13px;
   color: var(--warning-600);
   font-weight: 500;
@@ -1986,11 +1846,13 @@ onUnmounted(() => {
 .mini-btn {
   background: var(--surface-1);
   border: 1px solid rgba(var(--accent-rgb), 0.2);
-  padding: 6px 8px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0 6px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--primary-600);
-  transition: all 0.2s;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1999,7 +1861,6 @@ onUnmounted(() => {
 .mini-btn:hover {
   background: var(--surface-2);
   border-color: rgba(var(--accent-rgb), 0.3);
-  transform: translateY(-1px);
 }
 
 .mini-btn.danger {
@@ -2024,29 +1885,7 @@ onUnmounted(() => {
   height: 100%;
   overflow-y: auto;
   scroll-behavior: smooth;
-  padding-bottom: 20px;
-}
-
-/* Custom scrollbar */
-.virtual-scroll-container::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
-}
-
-.virtual-scroll-container::-webkit-scrollbar-track {
-  background: var(--surface-2);
-  border-radius: var(--radius-sm);
-  margin: 4px 0;
-}
-
-.virtual-scroll-container::-webkit-scrollbar-thumb {
-  background: var(--gray-300);
-  border-radius: var(--radius-sm);
-  border: 2px solid var(--surface-2);
-}
-
-.virtual-scroll-container::-webkit-scrollbar-thumb:hover {
-  background: var(--gray-400);
+  padding-bottom: 12px;
 }
 
 /* List header */
@@ -2054,19 +1893,17 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: 40px minmax(180px, 2fr) 100px 100px 140px;
   gap: 12px;
-  padding: 14px 20px;
+  min-height: 40px;
+  padding: 0 16px;
   background: var(--surface-2);
   border-bottom: 1px solid var(--border-color-light);
   font-size: 12px;
   font-weight: 600;
   color: var(--gray-600);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0;
   position: sticky;
   top: 0;
   z-index: 10;
-  border-top-left-radius: 12px;
-  border-top-right-radius: 12px;
 }
 
 .list-header > div {
@@ -2083,18 +1920,19 @@ onUnmounted(() => {
 
 /* File list */
 .file-list {
-  padding: 4px 0 40px 0;
+  padding: 0 0 24px;
 }
 
 .file-row {
   display: grid;
   grid-template-columns: 40px minmax(180px, 2fr) 100px 100px 140px;
   gap: 12px;
-  padding: 10px 20px;
+  min-height: 44px;
+  padding: 7px 16px;
   align-items: center;
   cursor: pointer;
-  transition: all 0.15s;
-  margin: 0 10px;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  margin: 0;
   border-radius: 0;
   border-bottom: 1px solid var(--border-color-light);
 }
@@ -2105,18 +1943,11 @@ onUnmounted(() => {
 
 .file-row:hover {
   background: var(--surface-2);
-  margin: 0 8px;
-  padding: 10px 22px;
-  border-radius: var(--radius-sm);
-  border-bottom-color: transparent;
 }
 
 .file-row.selected {
   background: rgba(var(--accent-rgb), 0.12);
-  border: 1px solid rgba(var(--accent-rgb), 0.3);
-  margin: 0 8px;
-  padding: 9px 21px;
-  border-radius: var(--radius-sm);
+  box-shadow: inset 3px 0 0 var(--primary-500);
 }
 
 .col-name {
@@ -2146,15 +1977,17 @@ onUnmounted(() => {
   color: var(--primary-600);
 }
 
-.file-type-icon.icon-text { color: #6b7280; }
-.file-type-icon.icon-code { color: #8b5cf6; }
-.file-type-icon.icon-web { color: #f59e0b; }
-.file-type-icon.icon-image { color: #10b981; }
-.file-type-icon.icon-archive { color: #6366f1; }
-.file-type-icon.icon-bio { color: #06b6d4; }
-.file-type-icon.icon-pdf { color: #ef4444; }
-.file-type-icon.icon-doc { color: var(--primary-600); }
-.file-type-icon.icon-excel { color: #10b981; }
+/* Icons stay the type cue, but muted: a file list is scanned by name, and a
+   saturated rainbow down the left edge competes with the row content. */
+.file-type-icon.icon-text { color: var(--gray-500); }
+.file-type-icon.icon-code { color: #7c6aa8; }
+.file-type-icon.icon-web { color: #a9761f; }
+.file-type-icon.icon-image { color: #3f8c6e; }
+.file-type-icon.icon-archive { color: #6f74a8; }
+.file-type-icon.icon-bio { color: #3d7f92; }
+.file-type-icon.icon-pdf { color: var(--error-500); }
+.file-type-icon.icon-doc { color: var(--gray-600); }
+.file-type-icon.icon-excel { color: #3f8c6e; }
 .file-type-icon.icon-default { color: var(--gray-400); }
 
 .name {
@@ -2172,7 +2005,7 @@ onUnmounted(() => {
 }
 
 .extension {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--gray-400);
   font-weight: 400;
 }
@@ -2189,49 +2022,25 @@ onUnmounted(() => {
 
 .type-badge {
   display: inline-block;
-  padding: 3px 8px;
+  padding: 2px 7px;
   border-radius: var(--radius-sm);
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  transition: all 0.2s;
+  font-size: 11px;
+  font-weight: var(--font-medium);
+  letter-spacing: 0;
 }
 
-.type-folder { 
-  background: #dbeafe; 
-  color: #1d4ed8; 
-  border: 1px solid #bfdbfe;
-}
-.type-bio { 
-  background: #d1fae5; 
-  color: #065f46; 
-  border: 1px solid #a7f3d0;
-}
-.type-image { 
-  background: #fef3c7; 
-  color: #92400e; 
-  border: 1px solid #fde68a;
-}
-.type-document { 
-  background: #e0e7ff; 
-  color: #3730a3; 
-  border: 1px solid #c7d2fe;
-}
-.type-archive { 
-  background: #f3e8ff; 
-  color: #6b21a8; 
-  border: 1px solid #e9d5ff;
-}
-.type-code { 
-  background: #fce7f3; 
-  color: #be185d; 
-  border: 1px solid #fbcfe8;
-}
-.type-default { 
-  background: #f3f4f6; 
-  color: #374151; 
-  border: 1px solid #e5e7eb;
+/* One quiet badge for every type. The file icon already signals the kind of
+   file at a glance, so a second, coloured signal in the same row is noise. */
+.type-folder,
+.type-bio,
+.type-image,
+.type-document,
+.type-archive,
+.type-code,
+.type-default {
+  background: var(--surface-2);
+  color: var(--gray-600);
+  border: 1px solid var(--border-color-light);
 }
 
 /* Visual effects for cut files */
@@ -2242,7 +2051,7 @@ onUnmounted(() => {
 }
 
 .time {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--gray-400);
 }
 
@@ -2252,18 +2061,18 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 400px;
-  gap: 16px;
-  padding: 40px;
+  min-height: 300px;
+  gap: 10px;
+  padding: 32px;
 }
 
 .empty-icon {
   color: var(--gray-300);
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .empty-text {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--gray-900);
   text-align: center;
@@ -2277,10 +2086,11 @@ onUnmounted(() => {
 }
 
 .upload-btn {
-  background: var(--gradient-primary);
+  min-height: 36px;
+  background: var(--primary-600);
   color: white;
   border: none;
-  padding: 10px 20px;
+  padding: 0 12px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 14px;
@@ -2294,8 +2104,6 @@ onUnmounted(() => {
 
 .upload-btn:hover {
   background: var(--primary-700);
-  transform: translateY(-1px);
-  box-shadow: 0 10px 18px rgba(var(--accent-rgb), 0.2);
 }
 
 /* Right-click menu */
@@ -2308,7 +2116,6 @@ onUnmounted(() => {
   z-index: 1000;
   min-width: 180px;
   padding: 6px;
-  backdrop-filter: blur(10px);
 }
 
 .context-item {
@@ -2395,7 +2202,8 @@ onUnmounted(() => {
 
 .modal-input {
   width: 100%;
-  padding: 12px 16px;
+  height: var(--control-height);
+  padding: 0 11px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   font-size: 15px;
@@ -2408,13 +2216,14 @@ onUnmounted(() => {
   outline: none;
   border-color: var(--primary-500);
   background: var(--surface-1);
-  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.16);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.14);
 }
 
 .modal-input.mobile {
-  padding: 16px 18px;
+  height: 44px;
+  padding: 0 12px;
   font-size: 16px; /* Prevent iOS zoom */
-  border-radius: 12px;
+  border-radius: var(--radius-base);
 }
 
 .modal-hint {
@@ -2424,10 +2233,11 @@ onUnmounted(() => {
 }
 
 .btn-primary {
-  background: var(--gradient-primary);
+  min-height: 36px;
+  background: var(--primary-600);
   color: white;
   border: none;
-  padding: 10px 20px;
+  padding: 0 14px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 14px;
@@ -2437,14 +2247,12 @@ onUnmounted(() => {
 
 .btn-primary:hover {
   background: var(--primary-700);
-  transform: translateY(-1px);
-  box-shadow: 0 10px 18px rgba(var(--accent-rgb), 0.2);
 }
 
 .btn-primary.mobile {
-  padding: 14px 24px;
+  padding: 0 16px;
   font-size: 16px;
-  border-radius: 12px;
+  border-radius: var(--radius-base);
   min-height: 48px;
 }
 
@@ -2452,7 +2260,8 @@ onUnmounted(() => {
   background: var(--surface-1);
   color: var(--gray-700);
   border: 1px solid var(--border-color);
-  padding: 10px 20px;
+  min-height: 36px;
+  padding: 0 14px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 14px;
@@ -2466,9 +2275,9 @@ onUnmounted(() => {
 }
 
 .btn-cancel.mobile {
-  padding: 14px 24px;
+  padding: 0 16px;
   font-size: 16px;
-  border-radius: 12px;
+  border-radius: var(--radius-base);
   min-height: 48px;
 }
 
@@ -2637,7 +2446,7 @@ onUnmounted(() => {
 
 .mobile-menu {
   background: var(--surface-1);
-  border-radius: 12px 12px 0 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   width: 100%;
   max-height: 70vh;
   overflow-y: auto;
@@ -2781,7 +2590,7 @@ onUnmounted(() => {
   padding: 10px;
   min-width: 44px;
   min-height: 44px;
-  border-radius: 8px;
+  border-radius: var(--radius-base);
 }
 
 .action-btn.mobile span {
@@ -2833,14 +2642,14 @@ onUnmounted(() => {
   right: 20px;
   top: auto;
   transform: none;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 8px;
-  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  box-shadow: var(--shadow-lg);
 }
 
 .context-menu.mobile .context-item {
   padding: 16px 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-base);
   font-size: 16px;
   min-height: 52px;
 }

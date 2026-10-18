@@ -252,72 +252,71 @@ const formatSize = (bytes) => {
 
 <style scoped>
 .drag-drop-upload {
-  border: 2px dashed #d1d5db;
-  border-radius: 12px;
-  padding: 40px 20px;
+  border: 1px dashed var(--border-color-dark);
+  border-radius: var(--radius-lg);
+  padding: 28px 20px;
   text-align: center;
-  background: #f9fafb;
-  transition: all 0.3s ease;
-  min-height: 200px;
+  background: var(--surface-1);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+  min-height: 160px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .drag-drop-upload.drag-over {
-  border-color: #3b82f6;
-  background: #eff6ff;
-  transform: scale(1.02);
+  border-color: var(--primary-500);
+  background: var(--primary-50);
 }
 
 .drag-drop-upload.uploading {
-  background: white;
-  border-color: #10b981;
+  background: var(--surface-1);
+  border-color: var(--success-500);
 }
 
 .upload-content {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
 }
 
 .upload-icon {
-  font-size: 48px;
-  opacity: 0.7;
+  color: var(--gray-400);
 }
 
 .upload-text {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 .primary-text {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 600;
-  color: #374151;
+  color: var(--gray-800);
   margin: 0;
 }
 
 .secondary-text {
   font-size: 14px;
-  color: #6b7280;
+  color: var(--gray-500);
   margin: 0;
 }
 
 .browse-btn {
   background: none;
   border: none;
-  color: #3b82f6;
+  color: var(--primary-600);
   cursor: pointer;
-  text-decoration: underline;
+  text-decoration: none;
   font-size: 14px;
   padding: 0;
 }
 
 .browse-btn:hover {
-  color: #2563eb;
+  color: var(--primary-700);
+  text-decoration: underline;
 }
 
 .upload-progress {
@@ -331,16 +330,16 @@ const formatSize = (bytes) => {
 
 .overall-progress h4 {
   margin: 0 0 12px 0;
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 600;
-  color: #111827;
+  color: var(--gray-900);
 }
 
 .progress-bar {
   width: 100%;
-  height: 12px;
-  background: #f3f4f6;
-  border-radius: 6px;
+  height: 8px;
+  background: var(--surface-3);
+  border-radius: 4px;
   overflow: hidden;
   margin-bottom: 8px;
 }
@@ -360,7 +359,7 @@ const formatSize = (bytes) => {
 .progress-text {
   font-size: 14px;
   font-weight: 500;
-  color: #374151;
+  color: var(--gray-700);
 }
 
 .file-list {
@@ -374,9 +373,9 @@ const formatSize = (bytes) => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-base);
   margin-bottom: 8px;
   transition: all 0.2s ease;
 }
@@ -404,7 +403,7 @@ const formatSize = (bytes) => {
 
 .file-name {
   font-weight: 500;
-  color: #111827;
+  color: var(--gray-900);
   flex: 1;
   text-align: left;
   overflow: hidden;
@@ -414,7 +413,7 @@ const formatSize = (bytes) => {
 
 .file-size {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--gray-500);
   min-width: 60px;
 }
 
@@ -442,8 +441,8 @@ const formatSize = (bytes) => {
   display: inline-block;
   width: 12px;
   height: 12px;
-  border: 2px solid #f3f4f6;
-  border-top: 2px solid #3b82f6;
+  border: 2px solid var(--surface-3);
+  border-top: 2px solid var(--primary-500);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -460,19 +459,20 @@ const formatSize = (bytes) => {
 }
 
 .cancel-btn {
-  padding: 8px 20px;
-  background: #f3f4f6;
-  color: #374151;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  background: var(--surface-1);
+  color: var(--gray-700);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-base);
   cursor: pointer;
   font-size: 14px;
   transition: all 0.2s ease;
 }
 
 .cancel-btn:hover {
-  background: #e5e7eb;
-  border-color: #9ca3af;
+  background: var(--surface-2);
+  border-color: var(--border-color-dark);
 }
 
 /* Responsive design */

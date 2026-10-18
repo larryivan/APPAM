@@ -3,49 +3,28 @@
     <!-- 头部控制栏 -->
     <div class="download-header">
       <div class="header-left">
-        <svg class="download-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-          <polyline points="7 10 12 15 17 10"></polyline>
-          <line x1="12" y1="15" x2="12" y2="3"></line>
-        </svg>
+        <Icon class="download-icon" name="download" :size="18" />
         <span class="header-title">Download Manager</span>
         <span class="download-count" v-if="downloadTasks.length">{{ activeDownloads }}/{{ downloadTasks.length }}</span>
       </div>
       <div class="header-controls">
         <button @click="showAddUrlModal = true" class="control-btn add-btn" title="Add Download">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
+          <Icon name="plus" :size="16" />
         </button>
         <button @click="pauseAll" class="control-btn" title="Pause All" v-if="activeDownloads > 0">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="6" y="4" width="4" height="16"></rect>
-            <rect x="14" y="4" width="4" height="16"></rect>
-          </svg>
+          <Icon name="pause" :size="16" />
         </button>
         <button @click="resumeAll" class="control-btn" title="Resume All" v-if="pausedDownloads > 0">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="5 3 19 12 5 21 5 3"></polygon>
-          </svg>
+          <Icon name="play" :size="16" />
         </button>
         <button @click="clearCompleted" class="control-btn" title="Clear Finished" v-if="finishedDownloads > 0">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-          </svg>
+          <Icon name="trash-2" :size="16" />
         </button>
         <button @click="toggleMinimize" class="control-btn" :title="isMinimized ? 'Expand' : 'Minimize'">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline v-if="isMinimized" points="18 15 12 9 6 15"></polyline>
-            <polyline v-else points="6 9 12 15 18 9"></polyline>
-          </svg>
+          <Icon :name="isMinimized ? 'chevron-down' : 'chevron-up'" :size="16" />
         </button>
-        <button @click="$emit('close')" class="control-btn close-btn" title="Close">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
+        <button @click="$emit('close')" class="control-btn close-btn" title="Close" aria-label="Close download manager">
+          <Icon name="x" :size="16" />
         </button>
       </div>
     </div>
@@ -53,11 +32,7 @@
     <!-- 下载列表 -->
     <div class="download-content" v-if="!isMinimized">
       <div v-if="downloadTasks.length === 0" class="empty-downloads">
-        <svg class="empty-icon" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-          <polyline points="7 10 12 15 17 10"></polyline>
-          <line x1="12" y1="15" x2="12" y2="3"></line>
-        </svg>
+        <Icon class="empty-icon" name="download" :size="36" :stroke-width="1.5" />
         <div class="empty-text">No download tasks</div>
         <div class="empty-subtext">Click the + button to add URL downloads</div>
       </div>
@@ -72,10 +47,7 @@
           <!-- 文件信息 -->
           <div class="download-info">
             <div class="file-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
-                <polyline points="13 2 13 9 20 9"></polyline>
-              </svg>
+              <Icon name="file" :size="21" />
             </div>
             <div class="file-details">
               <div class="file-name" :title="task.filename">{{ task.filename }}</div>
@@ -111,10 +83,7 @@
               class="action-btn pause-btn"
               title="Pause"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="6" y="4" width="4" height="16"></rect>
-                <rect x="14" y="4" width="4" height="16"></rect>
-              </svg>
+              <Icon name="pause" :size="14" />
             </button>
 
             <!-- 暂停中 -->
@@ -124,9 +93,7 @@
               class="action-btn resume-btn"
               title="Resume"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="5 3 19 12 5 21 5 3"></polygon>
-              </svg>
+              <Icon name="play" :size="14" />
             </button>
 
             <!-- 错误状态 -->
@@ -136,11 +103,7 @@
               class="action-btn retry-btn"
               title="Retry"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="23 4 23 10 17 10"></polyline>
-                <polyline points="1 20 1 14 7 14"></polyline>
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-              </svg>
+              <Icon name="rotate-ccw" :size="14" />
             </button>
 
             <!-- 完成状态 -->
@@ -150,11 +113,7 @@
               class="action-btn open-btn"
               title="Open File"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                <polyline points="15 3 21 3 21 9"></polyline>
-                <line x1="10" y1="14" x2="21" y2="3"></line>
-              </svg>
+              <Icon name="external-link" :size="14" />
             </button>
 
             <!-- 删除按钮 -->
@@ -163,10 +122,7 @@
               class="action-btn remove-btn"
               title="Delete"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              </svg>
+              <Icon name="trash-2" :size="14" />
             </button>
           </div>
         </div>
@@ -175,14 +131,11 @@
 
     <!-- 添加URL模态框 -->
     <div v-if="showAddUrlModal" class="modal-overlay app-modal-viewport app-modal-backdrop" @click="showAddUrlModal = false">
-      <div class="app-modal download-modal" @click.stop>
+      <div class="app-modal download-modal" @click.stop ref="addUrlPanel" role="dialog" aria-modal="true" aria-label="Add download URL" tabindex="-1">
         <div class="modal-header app-modal-header">
-          <h3>Add Download Link</h3>
-          <button @click="showAddUrlModal = false" class="close-btn app-modal-close">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
+          <h3>Add download link</h3>
+          <button @click="showAddUrlModal = false" class="close-btn app-modal-close" title="Close" aria-label="Close dialog">
+            <Icon name="x" :size="18" />
           </button>
         </div>
         <div class="modal-body app-modal-body">
@@ -226,6 +179,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useOverlay } from '@/lib/overlay.js'
 
 const props = defineProps({
   projectId: {
@@ -244,6 +198,9 @@ const emit = defineEmits(['close', 'file-downloaded'])
 const downloadTasks = ref([])
 const isMinimized = ref(false)
 const showAddUrlModal = ref(false)
+
+const addUrlPanel = ref(null)
+useOverlay(() => showAddUrlModal.value, { onClose: () => { showAddUrlModal.value = false }, panelRef: addUrlPanel })
 const newDownloadUrl = ref('')
 const newDownloadFilename = ref('')
 const enableConcurrentDownload = ref(true)
@@ -574,19 +531,19 @@ onUnmounted(() => {
   position: fixed;
   bottom: 100px;
   right: 24px;
-  width: 480px;
-  max-height: 600px;
+  width: 440px;
+  max-height: min(600px, calc(100vh - 140px));
   background: var(--surface-1);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
   z-index: 1000;
-  transition: all 0.3s ease;
+  transition: max-height var(--transition-base);
 }
 
 .download-manager.minimized {
-  max-height: 60px;
+  max-height: 48px;
 }
 
 /* 头部 */
@@ -594,8 +551,9 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  background: var(--surface-2);
+  min-height: 46px;
+  padding: 7px 10px 7px 12px;
+  background: var(--surface-1);
   border-bottom: 1px solid var(--border-color-light);
 }
 
@@ -615,10 +573,10 @@ onUnmounted(() => {
 }
 
 .download-count {
-  background: var(--gradient-primary);
-  color: white;
-  padding: 2px 8px;
-  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--gray-600);
+  padding: 2px 6px;
+  border-radius: var(--radius-full);
   font-size: 12px;
   font-weight: 500;
 }
@@ -631,7 +589,9 @@ onUnmounted(() => {
 .control-btn {
   background: none;
   border: none;
-  padding: 6px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--gray-600);
@@ -647,7 +607,7 @@ onUnmounted(() => {
 }
 
 .add-btn {
-  background: var(--gradient-primary);
+  background: var(--primary-600);
   color: white;
 }
 
@@ -670,8 +630,8 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 40px 20px;
-  gap: 12px;
+  padding: 36px 20px;
+  gap: 8px;
 }
 
 .empty-icon {
@@ -697,16 +657,14 @@ onUnmounted(() => {
 .download-item {
   background: var(--surface-1);
   border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-base);
   padding: 12px;
   margin-bottom: 8px;
-  transition: all 0.2s;
-  box-shadow: var(--shadow-xs);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
 .download-item:hover {
   border-color: var(--border-color-dark);
-  box-shadow: var(--shadow-sm);
 }
 
 .download-item.error {
@@ -814,7 +772,9 @@ onUnmounted(() => {
 .action-btn {
   background: none;
   border: 1px solid var(--border-color);
-  padding: 6px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--gray-600);
@@ -857,7 +817,7 @@ onUnmounted(() => {
 }
 
 .input-group {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .input-group label {
@@ -869,7 +829,8 @@ onUnmounted(() => {
 
 .url-input, .filename-input {
   width: 100%;
-  padding: 12px 16px;
+  height: var(--control-height);
+  padding: 0 11px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   font-size: 14px;
@@ -881,7 +842,7 @@ onUnmounted(() => {
 .url-input:focus, .filename-input:focus {
   outline: none;
   border-color: var(--primary-500);
-  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.16);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.14);
 }
 
 .download-options {
@@ -912,10 +873,11 @@ onUnmounted(() => {
 }
 
 .btn-primary {
-  background: var(--gradient-primary);
+  min-height: 36px;
+  background: var(--primary-600);
   color: white;
   border: none;
-  padding: 10px 20px;
+  padding: 0 14px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 14px;
@@ -928,7 +890,8 @@ onUnmounted(() => {
 }
 
 .btn-primary:disabled {
-  opacity: 0.5;
+  background: var(--gray-300);
+  color: var(--gray-500);
   cursor: not-allowed;
 }
 
@@ -936,7 +899,8 @@ onUnmounted(() => {
   background: var(--surface-1);
   color: var(--gray-700);
   border: 1px solid var(--border-color);
-  padding: 10px 20px;
+  min-height: 36px;
+  padding: 0 14px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 14px;
@@ -946,24 +910,6 @@ onUnmounted(() => {
 
 .btn-cancel:hover {
   background: var(--surface-2);
-}
-
-/* 自定义滚动条 */
-.download-content::-webkit-scrollbar {
-  width: 6px;
-}
-
-.download-content::-webkit-scrollbar-track {
-  background: var(--surface-2);
-}
-
-.download-content::-webkit-scrollbar-thumb {
-  background: var(--gray-300);
-  border-radius: 3px;
-}
-
-.download-content::-webkit-scrollbar-thumb:hover {
-  background: var(--gray-400);
 }
 
 /* 响应式设计 */
