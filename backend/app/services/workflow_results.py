@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import csv
+from collections import Counter
 import json
 import os
 import html
@@ -210,8 +211,77 @@ def _mag_id(report: Path, bin_name) -> str | None:
     return f'{report.parent.name}/{str(bin_name).strip().rstrip(".")}'
 
 
+def _median(values: list[float]) -> float | None:
+    ordered = sorted(values)
+    if not ordered:
+        return None
+    middle = len(ordered) // 2
+    return ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / 2
+
+
+def _overview_metrics(results_dir: Path) -> list[dict]:
+    """The numbers a researcher looks for first, taken from this run's outputs.
+
+    The per-module file counts in summary['counts'] answer an operator's
+    question (did every module write its output?); these answer the scientific
+    one. Quality labels are the completeness/contamination proxy recorded in
+    MAG_summary.tsv, not a full MIMAG assessment.
+    """
+    metrics = []
+    mag_rows = _read_tsv_rows(results_dir / 'summaries' / 'MAG_summary.tsv', limit=1_000_000)
+    if mag_rows:
+        samples = {row.get('Sample_ID') for row in mag_rows if row.get('Sample_ID')}
+        quality = Counter(row.get('Quality') for row in mag_rows)
+        completeness = [v for v in (_numeric(row.get('Completeness')) for row in mag_rows) if v is not None]
+        contamination = [v for v in (_numeric(row.get('Contamination')) for row in mag_rows) if v is not None]
+        genera = {row.get('Genus') for row in mag_rows if row.get('Genus')}
+        for name, value, unit in (
+            ('samples', len(samples), None),
+            ('mags_recovered', len(mag_rows), None),
+            ('high_quality_mags', quality.get('High-quality', 0), None),
+            ('medium_quality_mags', quality.get('Medium-quality', 0), None),
+            ('median_completeness', _median(completeness), '%'),
+            ('median_contamination', _median(contamination), '%'),
+            ('genera', len(genera), None),
+        ):
+            if value is not None:
+                metrics.append(_metric('overview', name, value=round(value, 2), text=str(value), unit=unit))
+
+    # Damage support is only meaningful against the thresholds this run used.
+    # Without them the figure would be a guess, so it is left out.
+    settings = {}
+    report_data = results_dir / 'visualization' / 'report-data.json'
+    if report_data.is_file():
+        try:
+            settings = json.loads(report_data.read_text(encoding='utf-8')).get('settings') or {}
+        except (OSError, ValueError):
+            settings = {}
+    qvalue_max = _numeric(settings.get('PyDamage maximum q-value'))
+    accuracy_min = _numeric(settings.get('PyDamage minimum predicted accuracy'))
+    if qvalue_max is not None and accuracy_min is not None:
+        total = supported = 0
+        for report in sorted(results_dir.glob('pydamage/*/pydamage_results.csv')):
+            with report.open('r', encoding='utf-8', errors='replace', newline='') as handle:
+                for row in csv.DictReader(handle):
+                    qvalue = _numeric(row.get('qvalue'))
+                    accuracy = _numeric(row.get('predicted_accuracy'))
+                    if qvalue is None or accuracy is None:
+                        continue
+                    total += 1
+                    supported += qvalue <= qvalue_max and accuracy >= accuracy_min
+        if total:
+            metrics.append(_metric(
+                'overview', 'damage_supported_contigs', value=round(100 * supported / total, 1),
+                text=f'{supported}/{total}', unit='%',
+                payload={'supported': supported, 'total': total,
+                         'qvalue_max': qvalue_max, 'accuracy_min': accuracy_min},
+            ))
+    return metrics
+
+
 def build_appam_smk_metrics(results_dir: Path, summary: dict | None = None) -> list[dict]:
-    metrics = _metrics_from_summary(summary or build_appam_smk_summary(results_dir))
+    metrics = _overview_metrics(results_dir)
+    metrics += _metrics_from_summary(summary or build_appam_smk_summary(results_dir))
 
     for report in sorted(results_dir.glob('checkm2/*/quality_report.tsv')):
         for row in _read_tsv_rows(report):

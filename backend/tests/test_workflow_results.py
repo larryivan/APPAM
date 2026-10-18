@@ -45,6 +45,39 @@ class MagMetricIdentityTests(unittest.TestCase):
         completeness = {m['sample_id']: m['value'] for m in self.metrics('checkm2', 'completeness')}
         self.assertEqual(completeness, {'DC01/bin.1': 94.2, 'DC02/bin.1': 61.0})
 
+    def test_overview_reports_mags_and_quality_from_the_summary_table(self):
+        write(self.results / 'summaries' / 'MAG_summary.tsv',
+              'Sample_ID\tBin_ID\tCompleteness\tContamination\tQuality\tGenus\n'
+              'DC01\tbin.1\t94.2\t1.5\tHigh-quality\tTannerella\n'
+              'DC01\tbin.2\t70.0\t4.0\tMedium-quality\tTreponema_B\n'
+              'DC02\tbin.1\t61.0\t9.0\tMedium-quality\tTannerella\n')
+        overview = {m['name']: m['value'] for m in build_appam_smk_metrics(self.results, summary={})
+                    if m['group'] == 'overview'}
+        self.assertEqual(overview['samples'], 2)
+        self.assertEqual(overview['mags_recovered'], 3)
+        self.assertEqual(overview['high_quality_mags'], 1)
+        self.assertEqual(overview['medium_quality_mags'], 2)
+        self.assertEqual(overview['median_completeness'], 70.0)
+        self.assertEqual(overview['genera'], 2)
+
+    def test_damage_support_uses_the_run_thresholds_or_is_omitted(self):
+        write(self.results / 'pydamage' / 'DC01' / 'pydamage_results.csv',
+              'reference,qvalue,predicted_accuracy\nc1,0.01,0.9\nc2,0.04,0.4\nc3,0.20,0.9\nc4,0.001,0.7\n')
+
+        def damage():
+            return [m for m in build_appam_smk_metrics(self.results, summary={})
+                    if m['name'] == 'damage_supported_contigs']
+
+        # No recorded thresholds: no number rather than a number built on a guess.
+        self.assertEqual(damage(), [])
+
+        write(self.results / 'visualization' / 'report-data.json',
+              '{"settings": {"PyDamage maximum q-value": 0.05, "PyDamage minimum predicted accuracy": 0.5}}')
+        [metric] = damage()
+        self.assertEqual(metric['value'], 50.0)  # c1 and c4 pass; c2 fails accuracy, c3 fails q
+        self.assertEqual(metric['payload']['supported'], 2)
+        self.assertEqual(metric['payload']['total'], 4)
+
     def test_every_mag_metric_names_its_sample(self):
         for group, name in (('gunc', 'clade_separation_score'), ('gtdbtk', 'classification')):
             identifiers = sorted(m['sample_id'] for m in self.metrics(group, name))

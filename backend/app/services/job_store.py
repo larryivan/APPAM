@@ -965,7 +965,10 @@ def list_workflow_metrics(run_id: str, limit: int = 500, conn=None) -> List[Dict
             SELECT *
             FROM workflow_metrics
             WHERE run_id = ?
-            ORDER BY metric_group ASC, sample_id ASC, metric_name ASC, id ASC
+            -- Run-level overview first: per-MAG rows scale with the number of
+            -- genomes and would otherwise push the headline past the LIMIT.
+            ORDER BY CASE metric_group WHEN 'overview' THEN 0 ELSE 1 END,
+                     metric_group ASC, sample_id ASC, metric_name ASC, id ASC
             LIMIT ?
             ''',
             (run_id, limit)
