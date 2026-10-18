@@ -11,14 +11,15 @@
 <script setup>
 import { computed } from 'vue'
 import {
-  Activity, AlignJustify, ArrowDown, ArrowUp, Box, ChartBar, ChartLine, Check,
-  ChevronDown, Circle, CircleCheck, CircleX, ClipboardList, ClipboardPaste,
-  Copy, Cpu, Dna, Download, Eye, File, FileArchive, FileCode, FileMusic,
+  Activity, AlignJustify, ArrowDown, ArrowLeft, ArrowUp, BookOpen, Box, ChartBar, ChartLine, ChartNoAxesCombined, ChartPie, ChartScatter, Check,
+  ChevronDown, ChevronRight, ChevronUp, Circle, CircleCheck, CircleX, ClipboardList, ClipboardPaste,
+  Copy, Cpu, Dna, Download, ExternalLink, Eye, EyeOff, File, FileArchive, FileCode, FileImage, FileMusic,
   FilePen, FileSpreadsheet, FileText, FileVideo, Folder, FolderOpen, FolderUp,
-  Globe, HardDrive, Keyboard, LayoutDashboard, LayoutGrid, Lightbulb, List, MapPin,
-  Maximize2, MemoryStick, MessageCircle, Minimize2, MoreHorizontal, Pencil, Plus, RotateCcw, Save,
-  Scissors, Search, Table, Target, Trash2, TriangleAlert, Users, WandSparkles,
-  SquareTerminal, Wrench, WrapText, X, Zap, ZoomIn, ZoomOut,
+  FolderPlus, Globe, HardDrive, Home, Image, Images, Info, Keyboard, LayoutDashboard, LayoutGrid, Lightbulb, List, LogIn, LogOut, MapPin,
+  KeyRound, Maximize2, MemoryStick, MessageCircle, Minimize2, Minus, MoreHorizontal, PanelLeftClose,
+  PanelLeftOpen, Pause, Pencil, Play, Plus, RotateCcw, Save,
+  Scissors, Search, ShieldCheck, SlidersHorizontal, Table, Target, Trash2, TriangleAlert, UserRound, Users, WandSparkles,
+  SquareTerminal, Upload, Wrench, WrapText, X, Zap, ZoomIn, ZoomOut,
 } from '@lucide/vue'
 
 /**
@@ -28,14 +29,15 @@ import {
  * 替代散落的 emoji 与 inline SVG,不改动任何业务逻辑。
  */
 const registry = {
-  Activity, AlignJustify, ArrowDown, ArrowUp, Box, ChartBar, ChartLine, Check,
-  ChevronDown, Circle, CircleCheck, CircleX, ClipboardList, ClipboardPaste,
-  Copy, Cpu, Dna, Download, Eye, File, FileArchive, FileCode, FileMusic,
+  Activity, AlignJustify, ArrowDown, ArrowLeft, ArrowUp, BookOpen, Box, ChartBar, ChartLine, ChartNoAxesCombined, ChartPie, ChartScatter, Check,
+  ChevronDown, ChevronRight, ChevronUp, Circle, CircleCheck, CircleX, ClipboardList, ClipboardPaste,
+  Copy, Cpu, Dna, Download, ExternalLink, Eye, EyeOff, File, FileArchive, FileCode, FileImage, FileMusic,
   FilePen, FileSpreadsheet, FileText, FileVideo, Folder, FolderOpen, FolderUp,
-  Globe, HardDrive, Keyboard, LayoutDashboard, LayoutGrid, Lightbulb, List, MapPin,
-  Maximize2, MemoryStick, MessageCircle, Minimize2, MoreHorizontal, Pencil, Plus, RotateCcw, Save,
-  Scissors, Search, Table, Target, Trash2, TriangleAlert, Users, WandSparkles,
-  SquareTerminal, Wrench, WrapText, X, Zap, ZoomIn, ZoomOut,
+  FolderPlus, Globe, HardDrive, Home, Image, Images, Info, Keyboard, LayoutDashboard, LayoutGrid, Lightbulb, List, LogIn, LogOut, MapPin,
+  KeyRound, Maximize2, MemoryStick, MessageCircle, Minimize2, Minus, MoreHorizontal, PanelLeftClose,
+  PanelLeftOpen, Pause, Pencil, Play, Plus, RotateCcw, Save,
+  Scissors, Search, ShieldCheck, SlidersHorizontal, Table, Target, Trash2, TriangleAlert, UserRound, Users, WandSparkles,
+  SquareTerminal, Upload, Wrench, WrapText, X, Zap, ZoomIn, ZoomOut,
 }
 
 const props = defineProps({
@@ -48,7 +50,13 @@ const props = defineProps({
 const toPascal = (s) =>
   String(s).replace(/(^|-|_)([a-z0-9])/g, (_, __, c) => c.toUpperCase())
 
-const iconComponent = computed(() => registry[toPascal(props.name)] || Circle)
+const iconComponent = computed(() => {
+  const resolved = registry[toPascal(props.name)]
+  if (!resolved && import.meta.env.DEV) {
+    console.warn(`[Icon] "${props.name}" is not registered; falling back to Circle.`)
+  }
+  return resolved || Circle
+})
 </script>
 
 <style scoped>

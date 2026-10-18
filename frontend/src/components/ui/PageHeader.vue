@@ -36,28 +36,28 @@ defineProps({
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--spacing-4);
-  padding-bottom: var(--spacing-4);
+  padding-bottom: 14px;
   border-bottom: var(--border-width) solid var(--border-color-light);
-  margin-bottom: var(--spacing-5);
+  margin-bottom: 18px;
 }
 
 .page-header__eyebrow {
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-  letter-spacing: 0.06em;
+  color: var(--gray-500);
+  font-size: 11px;
+  font-weight: var(--font-medium);
+  letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
-  color: var(--primary-600);
 }
 
 .page-header__title {
-  margin: var(--spacing-1) 0 0;
-  font-size: var(--text-2xl);
+  margin: 2px 0 0;
+  font-size: 22px;
   font-weight: var(--font-semibold);
   color: var(--gray-900);
 }
 
 .page-header__desc {
-  margin: var(--spacing-1) 0 0;
+  margin: 3px 0 0;
   font-size: var(--text-sm);
   color: var(--gray-500);
   max-width: 60ch;
@@ -68,8 +68,8 @@ defineProps({
   flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-2) var(--spacing-3);
-  margin-top: var(--spacing-3);
-  font-size: var(--text-sm);
+  margin-top: 8px;
+  font-size: var(--text-xs);
   color: var(--gray-500);
 }
 

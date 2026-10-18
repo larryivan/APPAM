@@ -4,12 +4,14 @@
     <main class="main-content">
       <router-view />
     </main>
+    <FeedbackHost />
   </div>
 </template>
 
 <script setup>
 import { onMounted } from 'vue'
 import Topbar from './components/Topbar.vue'
+import FeedbackHost from './components/ui/FeedbackHost.vue'
 import { loadCurrentUser } from './lib/auth'
 
 onMounted(() => {
@@ -19,69 +21,79 @@ onMounted(() => {
 
 <style>
 /* Global Styles */
-@import url('https://fonts.googleapis.com/css2?family=Gabarito:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 @import './styles/account-ui.css';
 
 :root {
-  /* 主要色彩系统 */
-  --primary-50: #eef4ff;
-  --primary-100: #dbe7ff;
-  --primary-200: #bfd3ff;
-  --primary-300: #93b4ff;
-  --primary-400: #5f8cff;
-  --primary-500: #2563eb;
-  --primary-600: #1d4ed8;
-  --primary-700: #1e40af;
-  --primary-800: #1e3a8a;
-  --primary-900: #172554;
+  /* ------------------------------------------------------------------
+     Ink & paper.
+     Neutrals carry the whole interface. Ink is the only strong value and
+     it belongs to primary actions and headings. The accent is a single
+     restrained blue reserved for focus, links and the current selection,
+     so colour always means something.
+     ------------------------------------------------------------------ */
 
-  --accent-500: var(--primary-500);
-  --accent-600: var(--primary-600);
-  --accent-700: var(--primary-700);
-  --accent-rgb: 37, 99, 235;
-  --primary-color: var(--primary-500);
-  --secondary-color: #0ea5e9;
-  
-  /* 渐变色系统 —— 扁平化:全部退化为纯色,保留变量名以兼容旧引用 */
+  /* Ink — primary actions, headings, strong emphasis */
+  --primary-50: #f2f4f6;
+  --primary-100: #e5e8ec;
+  --primary-200: #cbd1d8;
+  --primary-300: #a3acb6;
+  --primary-400: #6b757f;
+  --primary-500: #333b44;
+  --primary-600: #212930;
+  --primary-700: #171d23;
+  --primary-800: #11161b;
+  --primary-900: #0b0f13;
+
+  /* Accent — focus, links, current selection. Used sparingly. */
+  --accent-50: #eef3fb;
+  --accent-100: #dce7f7;
+  --accent-200: #bcd0ee;
+  --accent-500: #2f62c4;
+  --accent-600: #2653ab;
+  --accent-700: #1f458d;
+  --accent-rgb: 47, 98, 196;
+  --primary-color: var(--primary-600);
+  --secondary-color: #0f6b73;
+
+  /* Retained for compatibility with older rules; flat, never gradients. */
   --gradient-primary: var(--primary-600);
   --gradient-secondary: var(--primary-500);
-  --gradient-accent: #0f766e;
-  
-  /* 中性色系统 */
-  --gray-50: #f7f8fb;
-  --gray-100: #eef2f7;
-  --gray-200: #e5eaf1;
-  --gray-300: #d5dde8;
-  --gray-400: #9aa6b2;
-  --gray-500: #6b7280;
-  --gray-600: #4b5563;
-  --gray-700: #374151;
-  --gray-800: #1f2937;
-  --gray-900: #0f172a;
+  --gradient-accent: var(--accent-600);
 
-  /* 表面色 */
-  --surface-0: #f6f7fb;
+  /* Neutrals — a low-chroma ramp with even perceptual steps */
+  --gray-50: #f7f8f9;
+  --gray-100: #eef0f2;
+  --gray-200: #e2e5e8;
+  --gray-300: #ccd1d6;
+  --gray-400: #8d969e;
+  --gray-500: #677079;
+  --gray-600: #4c545c;
+  --gray-700: #363d44;
+  --gray-800: #232930;
+  --gray-900: #12161a;
+
+  /* Surfaces — paper over a slightly recessed ground */
+  --surface-0: #f6f7f8;
   --surface-1: #ffffff;
-  --surface-2: #f1f5f9;
-  --surface-3: #e9eef5;
-  
-  /* 语义色彩 */
-  --success-50: #ecfdf3;
-  --success-500: #16a34a;
-  --success-600: #15803d;
-  --warning-50: #fff7ed;
-  --warning-500: #f59e0b;
-  --warning-600: #d97706;
-  --error-50: #fef2f2;
-  --error-500: #ef4444;
-  --error-600: #dc2626;
-  
-  /* 字体系统 */
-  --font-family-base: 'IBM Plex Sans', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
-  --font-family-display: 'Gabarito', 'IBM Plex Sans', 'Segoe UI', sans-serif;
-  --font-family-mono: 'IBM Plex Mono', 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-  
-  /* 字体大小 */
+  --surface-2: #f1f3f4;
+  --surface-3: #e8eaed;
+
+  /* Semantic — desaturated to sit beside the neutrals without shouting */
+  --success-50: #eef6f1;
+  --success-500: #1f7a52;
+  --success-600: #176141;
+  --warning-50: #fdf6e9;
+  --warning-500: #a9700f;
+  --warning-600: #8a5a0a;
+  --error-50: #fdf1f1;
+  --error-500: #bb4646;
+  --error-600: #9c3636;
+
+  /* Type */
+  --font-family-base: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-family-display: var(--font-family-base);
+  --font-family-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+
   --text-xs: 0.75rem;     /* 12px */
   --text-sm: 0.875rem;    /* 14px */
   --text-base: 1rem;      /* 16px */
@@ -90,66 +102,81 @@ onMounted(() => {
   --text-2xl: 1.5rem;     /* 24px */
   --text-3xl: 1.875rem;   /* 30px */
   --text-4xl: 2.25rem;    /* 36px */
-  
-  /* 字体权重 */
+
   --font-normal: 400;
   --font-medium: 500;
   --font-semibold: 600;
   --font-bold: 700;
-  
-  /* 行高 */
+
   --leading-tight: 1.25;
   --leading-normal: 1.5;
   --leading-relaxed: 1.625;
-  
-  /* 间距系统 */
-  --spacing-1: 0.25rem;   /* 4px */
-  --spacing-2: 0.5rem;    /* 8px */
-  --spacing-3: 0.75rem;   /* 12px */
-  --spacing-4: 1rem;      /* 16px */
-  --spacing-5: 1.25rem;   /* 20px */
-  --spacing-6: 1.5rem;    /* 24px */
-  --spacing-8: 2rem;      /* 32px */
-  --spacing-10: 2.5rem;   /* 40px */
-  --spacing-12: 3rem;     /* 48px */
-  --spacing-16: 4rem;     /* 64px */
+
+  /* Tracking — display sizes tighten, micro-labels open up */
+  --tracking-tight: -0.018em;
+  --tracking-snug: -0.008em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.06em;
+
+  /* Spacing */
+  --spacing-1: 0.25rem;
+  --spacing-2: 0.5rem;
+  --spacing-3: 0.75rem;
+  --spacing-4: 1rem;
+  --spacing-5: 1.25rem;
+  --spacing-6: 1.5rem;
+  --spacing-8: 2rem;
+  --spacing-10: 2.5rem;
+  --spacing-12: 3rem;
+  --spacing-16: 4rem;
   --spacing-xs: var(--spacing-1);
   --spacing-sm: var(--spacing-2);
   --spacing-md: var(--spacing-3);
   --spacing-lg: var(--spacing-4);
   --spacing-xl: var(--spacing-6);
   --spacing-2xl: var(--spacing-8);
-  
-  /* 圆角系统 */
+
+  /* Radius — 6 / 8 / 12, so nothing looks accidental. Cards stay at 8px by
+     an earlier deliberate decision; only true overlays get the larger step. */
   --radius-none: 0;
-  --radius-sm: 0.5rem;    /* 8px */
-  --radius-base: 0.625rem;  /* 10px */
-  --radius-md: 0.875rem;  /* 14px */
-  --radius-lg: 1.125rem;  /* 18px */
-  --radius-xl: 1.75rem;   /* 28px */
+  --radius-sm: 0.375rem;  /* 6px  — controls, chips */
+  --radius-base: 0.5rem;  /* 8px  — inputs, cards */
+  --radius-md: 0.5rem;    /* 8px  — panels */
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;   /* 12px — overlays */
   --radius-full: 9999px;
-  
-  /* 阴影系统 —— 扁平化:大幅降低强度,趋向发丝投影 */
-  --shadow-xs: 0 1px 2px rgb(15 23 42 / 0.03);
-  --shadow-sm: 0 1px 3px rgb(15 23 42 / 0.05);
-  --shadow-base: 0 2px 6px rgb(15 23 42 / 0.06);
-  --shadow-md: 0 4px 12px rgb(15 23 42 / 0.08);
-  --shadow-lg: 0 8px 24px rgb(15 23 42 / 0.10);
-  --shadow-xl: 0 12px 32px rgb(15 23 42 / 0.12);
-  
-  /* 边框系统 */
+
+  /* Elevation — structure comes from hairlines; shadow only lifts overlays */
+  --shadow-xs: 0 1px 1px rgb(18 22 26 / 0.03);
+  --shadow-sm: 0 1px 2px rgb(18 22 26 / 0.04), 0 1px 3px rgb(18 22 26 / 0.03);
+  --shadow-base: 0 2px 4px rgb(18 22 26 / 0.04), 0 4px 12px rgb(18 22 26 / 0.05);
+  --shadow-md: 0 4px 8px rgb(18 22 26 / 0.05), 0 12px 28px rgb(18 22 26 / 0.07);
+  --shadow-lg: 0 8px 16px rgb(18 22 26 / 0.06), 0 24px 56px rgb(18 22 26 / 0.10);
+  --shadow-xl: 0 16px 32px rgb(18 22 26 / 0.08), 0 40px 88px rgb(18 22 26 / 0.14);
+
+  /* Borders — the hairline is the primary structural device */
   --border-width: 1px;
   --border-width-2: 2px;
-  --border-color: rgb(15 23 42 / 0.12);
-  --border-color-light: rgb(15 23 42 / 0.08);
-  --border-color-dark: rgb(15 23 42 / 0.16);
-  
-  /* 过渡动画 */
-  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
-  
-  /* Z-index层级 */
+  --border-color: #dfe2e6;
+  --border-color-light: #eaecef;
+  --border-color-dark: #ccd1d6;
+
+  /* Focus — one ring, everywhere */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --focus-ring-color: rgb(var(--accent-rgb) / 0.55);
+
+  /* Motion — quick, with a decelerating curve; honours reduced motion */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 260ms;
+  --transition-fast: var(--duration-fast) var(--ease-standard);
+  --transition-base: var(--duration-base) var(--ease-standard);
+  --transition-slow: var(--duration-slow) var(--ease-standard);
+
+  /* Z-index */
   --z-dropdown: 1000;
   --z-sticky: 1020;
   --z-fixed: 1030;
@@ -158,23 +185,26 @@ onMounted(() => {
   --z-popover: 1060;
   --z-tooltip: 1070;
   --z-toast: 1080;
-  
-  /* 布局尺寸 */
-  --header-height: 60px;
+
+  /* Layout */
+  --header-height: 68px;
   --sidebar-width: 280px;
   --sidebar-width-collapsed: 64px;
-  
-  /* 响应式断点 (for reference) */
+  --content-width: 1160px;
+  --control-height: 36px;
+
+  /* Breakpoints. CSS cannot read variables inside @media, so these are the
+     canonical values to type by hand. Do not introduce new ones. */
   --bp-sm: 640px;
   --bp-md: 768px;
   --bp-lg: 1024px;
   --bp-xl: 1280px;
   --bp-2xl: 1536px;
 
-  --dark-bg: #0b1220;
-  --dark-bg-secondary: #101a2f;
-  --text-light: #e2e8f0;
-  --text-muted: #94a3b8;
+  --dark-bg: #10141a;
+  --dark-bg-secondary: #171d24;
+  --text-light: #e6e9ec;
+  --text-muted: #98a1a9;
 }
 
 /* 基础重置和全局样式 */
@@ -189,13 +219,14 @@ html {
   -moz-osx-font-smoothing: grayscale;
   height: 100%;
   overflow: hidden; /* 禁用全局滚动，让组件自己管理 */
+  color-scheme: light;
 }
 
 body {
   margin: 0;
   background-color: var(--surface-0);
   color: var(--gray-900);
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
   font-weight: var(--font-normal);
   height: 100%;
   overflow: hidden; /* 禁用body滚动 */
@@ -209,30 +240,121 @@ body.modal-open {
   overscroll-behavior: contain;
 }
 
-h1, h2, h3, .display-text {
+h1, h2, h3, h4, .display-text {
   font-family: var(--font-family-display);
-  letter-spacing: -0.02em;
+  letter-spacing: var(--tracking-snug);
+  line-height: var(--leading-tight);
+  color: var(--gray-900);
+  text-wrap: balance;
 }
 
-/* 统一滚动条样式 */
+/* Larger type needs proportionally tighter tracking to stay optically even. */
+h1, .display-text {
+  letter-spacing: var(--tracking-tight);
+}
+
+/* Long-form paragraphs read better without orphaned last words. */
+p {
+  text-wrap: pretty;
+}
+
+/* Numeric columns and metrics must not wobble as values change. */
+.tabular,
+[data-tabular] {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  letter-spacing: 0;
+}
+
+button,
+a,
+summary,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+  border-radius: var(--radius-sm);
+}
+
+::selection {
+  background: var(--accent-100);
+  color: var(--gray-900);
+}
+
+/* Respect the system setting. Motion becomes instant rather than removed, so
+   nothing that relies on a transition ending silently breaks. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 1ms;
+    --duration-base: 1ms;
+    --duration-slow: 1ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Scroll regions stay functional without drawing permanent inner rails. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+*:hover,
+*:focus-within {
+  scrollbar-color: var(--gray-300) transparent;
+}
+
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--surface-2);
-  border-radius: var(--radius-base);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--gray-300);
-  border-radius: var(--radius-base);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  background: transparent;
+  background-clip: padding-box;
   transition: background-color var(--transition-base);
 }
 
+*:hover::-webkit-scrollbar-thumb,
+*:focus-within::-webkit-scrollbar-thumb,
 ::-webkit-scrollbar-thumb:hover {
   background: var(--gray-400);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 /* 通用工具类 */
@@ -284,20 +406,24 @@ h1, h2, h3, .display-text {
   align-items: center;
   justify-content: center;
   gap: var(--spacing-2);
-  padding: var(--spacing-3) var(--spacing-4);
+  min-height: var(--control-height);
+  padding: 0 var(--spacing-3);
   font-size: var(--text-sm);
   font-weight: var(--font-medium);
   line-height: 1;
   border-radius: var(--radius-base);
   border: var(--border-width) solid transparent;
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
   text-decoration: none;
   user-select: none;
 }
 
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 1;
+  background: var(--gray-200);
+  border-color: var(--gray-200);
+  color: var(--gray-400);
   cursor: not-allowed;
 }
 
@@ -342,13 +468,15 @@ h1, h2, h3, .display-text {
 
 /* 尺寸修饰符 */
 .btn-sm {
-  padding: var(--spacing-2) var(--spacing-3);
+  min-height: 30px;
+  padding: 0 var(--spacing-2);
   font-size: var(--text-xs);
 }
 
 .btn-lg {
-  padding: var(--spacing-3) var(--spacing-5);
-  font-size: var(--text-base);
+  min-height: 40px;
+  padding: 0 var(--spacing-4);
+  font-size: var(--text-sm);
 }
 
 /* 纯图标按钮 */
@@ -362,20 +490,21 @@ h1, h2, h3, .display-text {
 .input {
   display: block;
   width: 100%;
-  padding: var(--spacing-3) var(--spacing-4);
+  min-height: var(--control-height);
+  padding: 0 var(--spacing-3);
   font-size: var(--text-sm);
   line-height: var(--leading-tight);
   color: var(--gray-800);
   background: var(--surface-1);
   border: var(--border-width) solid var(--border-color);
   border-radius: var(--radius-base);
-  transition: all var(--transition-base);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .input:focus {
   outline: none;
   border-color: var(--primary-500);
-  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.16);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.12);
 }
 
 .input::placeholder {
@@ -387,12 +516,7 @@ h1, h2, h3, .display-text {
   background: var(--surface-1);
   border: var(--border-width) solid var(--border-color);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-xs);
-  transition: all var(--transition-base);
-}
-
-.card:hover {
-  box-shadow: var(--shadow-base);
+  box-shadow: none;
 }
 
 /* 统一状态标签 (status pill) —— 低饱和底色 + 同色系文字,取代各处大色块 */
@@ -455,7 +579,7 @@ h1, h2, h3, .display-text {
 .app-modal {
   background: var(--surface-1);
   border: var(--border-width) solid var(--border-color-light);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
@@ -466,8 +590,8 @@ h1, h2, h3, .display-text {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-4) var(--spacing-6);
-  background: var(--surface-2);
+  padding: 14px 18px;
+  background: var(--surface-1);
   border-bottom: var(--border-width) solid var(--border-color-light);
 }
 
@@ -487,15 +611,15 @@ h1, h2, h3, .display-text {
   display: flex;
   justify-content: flex-end;
   gap: var(--spacing-3);
-  padding: var(--spacing-4) var(--spacing-6);
-  background: var(--surface-2);
+  padding: 10px 16px;
+  background: var(--surface-1);
   border-top: var(--border-width) solid var(--border-color-light);
 }
 
 .app-modal-close {
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-base);
   border: var(--border-width) solid var(--border-color);
   background: var(--surface-1);
   color: var(--gray-600);
@@ -531,11 +655,20 @@ h1, h2, h3, .display-text {
 }
 
 .main-content {
-  flex: 1;
+  flex: 0 0 calc(100vh - var(--header-height));
   display: flex;
   flex-direction: column;
+  height: calc(100vh - var(--header-height));
+  min-height: 0;
   overflow: hidden;
   margin-top: var(--header-height);
+}
+
+@supports (height: 100dvh) {
+  .main-content {
+    flex-basis: calc(100dvh - var(--header-height));
+    height: calc(100dvh - var(--header-height));
+  }
 }
 
 /* 针对旧版浏览器的兼容 */
