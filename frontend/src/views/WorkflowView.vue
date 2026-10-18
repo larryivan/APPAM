@@ -1616,7 +1616,7 @@ onUnmounted(() => {
 
 <style scoped>
 .workflow-view {
-  min-height: 100%;
+  height: 100%;
   background: var(--surface-0);
   color: var(--gray-900);
   overflow-y: auto;

@@ -665,7 +665,7 @@ html, body {
 .tool-interface-container {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  height: 100%;
   background: var(--surface-0);
   color: var(--gray-900);
   overflow-y: auto;
@@ -910,7 +910,7 @@ html, body {
 
 /* 工具主体 - 响应式Grid布局 */
 .tool-body {
-  flex: 1;
+  flex: 1 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 760px);
   justify-content: center;
