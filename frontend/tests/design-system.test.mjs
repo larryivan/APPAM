@@ -95,3 +95,26 @@ test('system monitor stays live without controls and follows its window size', a
   assert.doesNotMatch(monitor, /border-left: 4px/)
   assert.match(monitor, /\.tone-critical \.meter span \{\s*background: var\(--error-500\)/)
 })
+
+test('floating tool windows stack by last use and keep terminal text selectable', async () => {
+  const [terminal, monitor, layer] = await Promise.all([
+    source('components/FloatingTerminal.vue'),
+    source('components/FloatingSystemMonitor.vue'),
+    source('lib/floatingWindows.js'),
+  ])
+
+  assert.match(layer, /const BASE_Z_INDEX = 1031/)
+  for (const window of [terminal, monitor]) {
+    assert.match(window, /useFloatingWindow\(/)
+    assert.match(window, /@pointerdown="bringToFront"/)
+    assert.doesNotMatch(window, /zIndex: (9999|1000)/)
+  }
+  // Only the title bar drags; mousedown in the terminal body selects text.
+  assert.doesNotMatch(terminal, /class="terminal-window"[\s\S]{0,80}@mousedown/)
+  assert.match(terminal, /class="terminal-header"[^>]*@mousedown="handleHeaderMouseDown"/)
+  // Placement is computed when the window opens, then kept on screen.
+  assert.match(terminal, /placeWindow\(\)\n\s*isOpen\.value = true/)
+  assert.match(terminal, /clampToViewport\(windowPosition\.value, windowSize\.value\)/)
+  // An exited or dropped session can be restarted in place.
+  assert.match(terminal, /if \(data === '\\r'\) restartSession\(\)/)
+})

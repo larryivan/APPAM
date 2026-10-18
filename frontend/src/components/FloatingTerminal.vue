@@ -11,7 +11,7 @@
       v-if="isOpen"
       class="terminal-window"
       :style="windowStyle"
-      @mousedown="startDrag"
+      @pointerdown="bringToFront"
     >
       <!-- 标题栏 -->
       <div class="terminal-header" :class="{ mobile: isMobile }" @mousedown="handleHeaderMouseDown">
@@ -59,8 +59,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, inject, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { clampToViewport, useFloatingWindow } from '@/lib/floatingWindows.js'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
@@ -75,6 +76,8 @@ const props = defineProps({
 
 const route = useRoute()
 const projectId = computed(() => String(route.params.id || ''))
+const project = inject('appamProject', ref(null))
+const { zIndex, bringToFront, release } = useFloatingWindow(`terminal-${props.preset}`)
 
 const getThemeValue = (variableName, fallback) => {
   if (typeof window === 'undefined') return fallback
@@ -89,16 +92,27 @@ const isMobile = ref(false)
 const triggerLabel = computed(() => `${isOpen.value ? 'Hide' : 'Open'} ${props.title.toLowerCase()}`)
 const windowTitle = computed(() => {
   if (isMobile.value) return props.title
-  return `${props.title} - ${projectId.value.slice(0, 8) || 'No project'}`
+  return `${props.title} · ${project.value?.name || projectId.value.slice(0, 8) || 'No project'}`
 })
 
 // 窗口位置和大小
-const windowPosition = ref(props.preset === 'opencode'
-  ? { x: window.innerWidth - 700, y: 80 }
-  : { x: window.innerWidth - 650, y: window.innerHeight - 450 })
-const windowSize = ref(props.preset === 'opencode'
-  ? { width: 640, height: 520 }
-  : { width: 600, height: 400 })
+const windowPosition = ref({ x: 0, y: 0 })
+const windowSize = ref({ width: 0, height: 0 })
+// Room for the tool rail on the right edge of the workspace.
+const RAIL_CLEARANCE = 72
+
+const placeWindow = () => {
+  const preferred = props.preset === 'opencode' ? { width: 680, height: 560 } : { width: 720, height: 440 }
+  const size = {
+    width: Math.min(preferred.width, window.innerWidth - RAIL_CLEARANCE - 16),
+    height: Math.min(preferred.height, window.innerHeight - 96),
+  }
+  windowSize.value = size
+  windowPosition.value = clampToViewport({
+    x: window.innerWidth - size.width - RAIL_CLEARANCE,
+    y: props.preset === 'opencode' ? 80 : window.innerHeight - size.height - 24,
+  }, size)
+}
 
 // 移动端检测
 const detectMobile = () => {
@@ -126,6 +140,11 @@ let socket = null
 let resizeObserver = null
 let fitPending = false
 let fitQueued = false
+// Set once the shell exits or the connection drops; Enter then starts a new one.
+let sessionEnded = false
+const FATAL_TERMINAL_ERRORS = ['Terminal session not found', 'Terminal session ended', 'Failed to start terminal command']
+// Prompt themes such as Powerlevel10k and Starship draw icons from Nerd Fonts.
+const NERD_FONTS = '"JetBrainsMono Nerd Font Mono", "JetBrainsMono Nerd Font", "MesloLGS NF", "Hack Nerd Font Mono", "FiraCode Nerd Font Mono"'
 const sessionKey = ref('')
 const sessionReady = ref(false)
 const createSessionKey = () => `${props.preset}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
@@ -198,7 +217,7 @@ const windowStyle = computed(() => {
       left: '0',
       width: '100vw',
       height: isMobile.value ? '100vh' : '100vh',
-      zIndex: 9999,
+      zIndex: zIndex.value,
       borderRadius: '0'
     }
   }
@@ -210,7 +229,7 @@ const windowStyle = computed(() => {
     left: `${windowPosition.value.x}px`,
     width: `${windowSize.value.width}px`,
     height: `${windowSize.value.height}px`,
-    zIndex: 1000
+    zIndex: zIndex.value
   }
 })
 
@@ -220,8 +239,10 @@ const openTerminal = () => {
   isMobile.value = detectMobile()
   resetSessionKey()
   sessionReady.value = false
+  placeWindow()
   isOpen.value = true
   isFullscreen.value = isMobile.value
+  bringToFront()
 
   nextTick(() => {
     initTerminal()
@@ -253,8 +274,10 @@ const closeTerminal = () => {
   }
 
   detachResizeObserver()
+  release()
   fitPending = false
   fitQueued = false
+  sessionEnded = false
   isOpen.value = false
   isFullscreen.value = false
   sessionReady.value = false
@@ -331,7 +354,7 @@ const initTerminal = () => {
       brightCyan: secondaryColor,
       brightWhite: textLight
     },
-    fontFamily: monoFont,
+    fontFamily: `${NERD_FONTS}, ${monoFont}`,
     fontSize: isMobile.value ? 12 : 14,
     lineHeight: isMobile.value ? 1.4 : 1.2,
     cursorBlink: true,
@@ -355,6 +378,22 @@ const initTerminal = () => {
 
   // 挂载到 DOM
   terminal.open(terminalContainer.value)
+
+  terminal.onData((data) => {
+    if (sessionEnded) {
+      if (data === '\r') restartSession()
+      return
+    }
+    if (sessionReady.value && socket && socket.connected) {
+      socket.emit('terminal_input', { input: data, session_key: sessionKey.value })
+    }
+  })
+
+  terminal.onResize(({ rows, cols }) => {
+    if (sessionReady.value && socket && socket.connected) {
+      socket.emit('terminal_resize', { rows, cols, session_key: sessionKey.value })
+    }
+  })
 
   // 延迟调整大小以确保DOM渲染完成
   setTimeout(() => {
@@ -398,66 +437,37 @@ const connectSocket = () => {
   })
 
   socket.on('terminal_error', (data) => {
-    if (terminal) {
-      terminal.write(`\r\n\x1b[31mError: ${data.error}\x1b[0m\r\n`)
-    }
-    if (data?.error && (
-      data.error.includes('Terminal session not found') ||
-      data.error.includes('Terminal session ended') ||
-      data.error.includes('Failed to start terminal command')
-    )) {
-      sessionReady.value = false
-      socket?.disconnect()
-    }
+    const message = data?.error || 'Terminal error'
+    terminal?.write(`\r\n\x1b[31mError: ${message}\x1b[0m\r\n`)
+    if (FATAL_TERMINAL_ERRORS.some((text) => message.includes(text))) endSession('')
   })
 
-  socket.on('terminal_exit', () => {
-    sessionReady.value = false
-    if (terminal) {
-      terminal.write(`\r\n\x1b[33m${props.title} exited. Close and reopen the panel to start a fresh session.\x1b[0m\r\n`)
-    }
-    socket?.disconnect()
-  })
+  socket.on('terminal_exit', () => endSession(`${props.title} exited.`))
 
   socket.on('disconnect', (reason) => {
     sessionReady.value = false
-    if (terminal && isOpen.value && reason !== 'io client disconnect') {
-      terminal.write(`\r\n\x1b[33m${props.title} disconnected. Reopen the panel to reconnect.\x1b[0m\r\n`)
-    }
-  })
-
-  // 处理终端输入
-  terminal.onData((data) => {
-    if (sessionReady.value && socket && socket.connected) {
-      socket.emit('terminal_input', { input: data, session_key: sessionKey.value })
-    }
-  })
-
-  // 处理终端大小变化
-  terminal.onResize(({ rows, cols }) => {
-    if (sessionReady.value && socket && socket.connected) {
-      socket.emit('terminal_resize', { rows, cols, session_key: sessionKey.value })
-    }
+    if (isOpen.value && reason !== 'io client disconnect') endSession(`${props.title} disconnected.`)
   })
 }
 
-// 拖拽功能
-const startDrag = (e) => {
-  // 移动端或全屏状态下禁用拖拽
-  if (isMobile.value || isFullscreen.value || e.target.closest('.control-btn')) {
-    return
-  }
-
-  isDragging.value = true
-  dragOffset.value = {
-    x: e.clientX - windowPosition.value.x,
-    y: e.clientY - windowPosition.value.y
-  }
-
-  document.addEventListener('mousemove', handleMouseMove)
-  document.addEventListener('mouseup', handleMouseUp)
+const endSession = (message) => {
+  if (sessionEnded) return
+  sessionEnded = true
+  sessionReady.value = false
+  socket?.disconnect()
+  socket = null
+  terminal?.write(`\r\n\x1b[33m${message ? `${message} ` : ''}Press Enter to start a new session.\x1b[0m\r\n`)
 }
 
+const restartSession = () => {
+  sessionEnded = false
+  terminal?.reset()
+  resetSessionKey()
+  connectSocket()
+  scheduleFit(80)
+}
+
+// 拖拽功能：只从标题栏拖动，终端区域留给文本选择
 const handleHeaderMouseDown = (e) => {
   // 移动端或全屏状态下禁用拖拽
   if (isMobile.value || isFullscreen.value || e.target.closest('.control-btn')) {
@@ -573,6 +583,10 @@ const handleResize = () => {
   // 如果从桌面端切换到移动端，自动全屏
   if (!wasMobile && isMobile.value && isOpen.value) {
     isFullscreen.value = true
+  }
+
+  if (isOpen.value && !isFullscreen.value) {
+    windowPosition.value = clampToViewport(windowPosition.value, windowSize.value)
   }
 
   // 调整终端大小
@@ -710,7 +724,6 @@ onUnmounted(() => {
 :deep(.xterm) {
   padding: var(--spacing-3, 12px);
   color: var(--text-light);
-  font-family: var(--font-family-mono);
 }
 
 :deep(.xterm-viewport) {

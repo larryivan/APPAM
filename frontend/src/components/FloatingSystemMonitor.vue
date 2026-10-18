@@ -13,6 +13,7 @@
       ref="windowRef"
       class="monitor-window"
       :style="windowStyle"
+      @pointerdown="bringToFront"
     >
       <!-- Header control bar -->
       <div
@@ -59,6 +60,9 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import SystemPerformance from './SystemPerformance.vue'
+import { useFloatingWindow } from '@/lib/floatingWindows.js'
+
+const { zIndex, bringToFront, release } = useFloatingWindow('system-monitor')
 
 // Window state
 const isVisible = ref(false)
@@ -111,7 +115,7 @@ const windowStyle = computed(() => {
       left: '0',
       width: '100vw',
       height: '100vh',
-      zIndex: 9999,
+      zIndex: zIndex.value,
       transform: 'none'
     }
   }
@@ -123,7 +127,7 @@ const windowStyle = computed(() => {
       left: '0',
       width: '100vw',
       height: '100vh',
-      zIndex: 9999,
+      zIndex: zIndex.value,
       transform: 'none'
     }
   }
@@ -134,13 +138,15 @@ const windowStyle = computed(() => {
     top: `${windowPosition.value.y}px`,
     width: `${windowSize.value.width}px`,
     height: `${windowSize.value.height}px`,
-    zIndex: 9999
+    zIndex: zIndex.value
   }
 })
 
 // 方法
 const toggleWindow = () => {
   isVisible.value = !isVisible.value
+  if (isVisible.value) bringToFront()
+  else release()
 
   // Auto fullscreen on mobile
   if (isVisible.value && isMobile.value) {
@@ -152,11 +158,13 @@ const toggleWindow = () => {
 
 const closeWindow = () => {
   isVisible.value = false
+  release()
   isFullscreen.value = false
   isMinimized.value = false
 }
 
 const minimizeWindow = () => {
+  release()
   isMinimized.value = true
   isVisible.value = false
 }
