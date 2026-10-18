@@ -133,6 +133,13 @@ class AuthPermissionApiTests(unittest.TestCase):
     def test_project_persists_and_validates_analysis_workflow(self):
         self.register(self.client, 'workflow-owner', display_name='Workflow Owner')
 
+        unbound = self.client.post(
+            '/api/projects/',
+            json={'name': 'Open analysis project'},
+        )
+        self.assertEqual(unbound.status_code, 201, unbound.get_data(as_text=True))
+        self.assertIsNone(unbound.get_json()['analysis_workflow'])
+
         created = self.client.post(
             '/api/projects/',
             json={

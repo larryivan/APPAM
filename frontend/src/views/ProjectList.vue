@@ -4,7 +4,7 @@
       <main class="pl-main">
       <PageHeader eyebrow="Workspace" title="Projects">
         <template #meta>
-          <span class="project-count">{{ filteredProjects.length }} projects</span>
+          <span class="project-count">{{ filteredProjects.length }} {{ filteredProjects.length === 1 ? 'project' : 'projects' }}</span>
         </template>
         <template #actions>
           <button @click="showCreateModal = true" class="btn btn-primary">
@@ -42,10 +42,10 @@
       </div>
       <div v-else-if="!pageError && filteredProjects.length === 0" class="empty-state">
         <div class="empty-icon"><Icon name="folder-open" :size="40" :stroke-width="1.5" /></div>
-        <h3>No Projects</h3>
+        <h3>No projects</h3>
         <p v-if="searchQuery">No projects found matching "{{ searchQuery }}"</p>
         <p v-else>Create your first project to get started</p>
-        <button v-if="!searchQuery" @click="showCreateModal = true" class="empty-create-btn">Create Project</button>
+        <button v-if="!searchQuery" @click="showCreateModal = true" class="empty-create-btn">Create project</button>
       </div>
       
       <div v-else class="projects-container">
@@ -63,7 +63,6 @@
               </span>
             </div>
             <div class="project-summary">
-              <span class="workflow-badge">{{ workflowName(project.analysis_workflow) }}</span>
               <span class="project-last-opened">{{ formatRelativeDate(project.last_accessed || project.created_at) }}</span>
             </div>
             <p v-if="project.description" class="project-description">{{ project.description }}</p>
@@ -74,7 +73,7 @@
               <summary title="Project actions" aria-label="Project actions">
                 <Icon name="more-horizontal" :size="18" />
               </summary>
-              <div class="project-menu__items">
+              <div class="project-menu__items" @click="closeCardMenu">
                 <button type="button" @click="openMembersModal(project)"><Icon name="users" :size="15" /> Access</button>
                 <button type="button" @click="openEditModal(project)"><Icon name="pencil" :size="15" /> Edit</button>
                 <button type="button" class="danger" @click="deleteProject(project.id)"><Icon name="trash-2" :size="15" /> Delete</button>
@@ -87,10 +86,12 @@
 
     <!-- 创建项目弹窗 -->
     <div v-if="showCreateModal" class="modal-overlay app-modal-viewport app-modal-backdrop" @click="closeCreateModal">
-      <div class="app-modal project-modal" @click.stop>
+      <div class="app-modal project-modal" @click.stop ref="createPanel" role="dialog" aria-modal="true" :aria-labelledby="createTitleId" tabindex="-1">
         <div class="modal-header app-modal-header">
-          <h3>New project</h3>
-          <button @click="closeCreateModal" class="close-btn app-modal-close">×</button>
+          <h3 :id="createTitleId">New project</h3>
+          <button type="button" class="close-btn app-modal-close" title="Close" aria-label="Close" @click="closeCreateModal">
+            <Icon name="x" :size="17" />
+          </button>
         </div>
         <form @submit.prevent="createProject" class="project-form app-modal-body">
           <div class="form-group">
@@ -101,30 +102,11 @@
             <label for="description">Project Description</label>
             <textarea v-model="newProject.description" id="description" placeholder="Optional"></textarea>
           </div>
-          <div class="form-group">
-            <label>What do you want to analyze?</label>
-            <div class="analysis-picker">
-              <label
-                v-for="option in workflowOptions"
-                :key="option.id"
-                :class="{ active: newProject.analysis_workflow === option.id }"
-              >
-                <input v-model="newProject.analysis_workflow" type="radio" :value="option.id">
-                <span>{{ option.label }}</span>
-                <small>{{ option.inputHint }}</small>
-              </label>
-              <label :class="{ active: newProject.analysis_workflow === '' }">
-                <input v-model="newProject.analysis_workflow" type="radio" value="">
-                <span>Individual tools</span>
-                <small>No default workflow</small>
-              </label>
-            </div>
-          </div>
           <p v-if="createError" class="form-error" role="alert">{{ createError }}</p>
           <div class="form-actions">
             <button type="button" @click="closeCreateModal" class="cancel-btn">Cancel</button>
             <button type="submit" class="submit-btn" :disabled="creatingProject">
-              {{ creatingProject ? 'Creating...' : 'Create and continue' }}
+              {{ creatingProject ? 'Creating...' : 'Create project' }}
             </button>
           </div>
         </form>
@@ -133,10 +115,12 @@
 
     <!-- 编辑项目弹窗 -->
     <div v-if="showEditModal" class="modal-overlay app-modal-viewport app-modal-backdrop" @click="closeEditModal">
-      <div class="app-modal project-modal" @click.stop>
+      <div class="app-modal project-modal" @click.stop ref="editPanel" role="dialog" aria-modal="true" :aria-labelledby="editTitleId" tabindex="-1">
         <div class="modal-header app-modal-header">
-          <h3>Project settings</h3>
-          <button @click="closeEditModal" class="close-btn app-modal-close">×</button>
+          <h3 :id="editTitleId">Project settings</h3>
+          <button type="button" class="close-btn app-modal-close" title="Close" aria-label="Close" @click="closeEditModal">
+            <Icon name="x" :size="17" />
+          </button>
         </div>
         <form @submit.prevent="updateProject" class="project-form app-modal-body">
           <div class="form-group">
@@ -147,32 +131,25 @@
             <label for="edit-description">Project Description</label>
             <textarea v-model="editingProject.description" id="edit-description"></textarea>
           </div>
-          <div class="form-group">
-            <label for="edit-workflow">Default analysis</label>
-            <select v-model="editingProject.analysis_workflow" id="edit-workflow">
-              <option value="">Not selected</option>
-              <option v-for="option in workflowOptions" :key="option.id" :value="option.id">
-                {{ option.label }}
-              </option>
-            </select>
-          </div>
           <p v-if="editError" class="form-error" role="alert">{{ editError }}</p>
           <div class="form-actions">
             <button type="button" @click="closeEditModal" class="cancel-btn">Cancel</button>
-            <button type="submit" class="submit-btn">Save Changes</button>
+            <button type="submit" class="submit-btn">Save changes</button>
           </div>
         </form>
       </div>
     </div>
 
     <div v-if="showMembersModal" class="modal-overlay app-modal-viewport app-modal-backdrop" @click="closeMembersModal">
-      <div class="app-modal members-modal" @click.stop>
+      <div class="app-modal members-modal" @click.stop ref="membersPanel" role="dialog" aria-modal="true" :aria-labelledby="membersTitleId" tabindex="-1">
         <div class="modal-header app-modal-header">
           <div>
-            <h3>Access</h3>
+            <h3 :id="membersTitleId">Access</h3>
             <p class="members-subtitle">{{ membersProject?.name }}</p>
           </div>
-          <button @click="closeMembersModal" class="close-btn app-modal-close">×</button>
+          <button type="button" class="close-btn app-modal-close" title="Close" aria-label="Close" @click="closeMembersModal">
+            <Icon name="x" :size="17" />
+          </button>
         </div>
 
         <div class="members-content app-modal-body">
@@ -239,10 +216,11 @@
 
 <script setup>
 import { ref, onMounted, computed, reactive } from 'vue';
+import { confirmAction } from '@/lib/notify.js'
+import { nextOverlayId, useOverlay } from '@/lib/overlay.js'
 import { useRouter } from 'vue-router';
 import PageHeader from '../components/ui/PageHeader.vue'
 import Icon from '../components/ui/Icon.vue'
-import { WORKFLOW_OPTIONS, workflowLabel } from '../lib/workflowUi.js'
 
 const projects = ref([]);
 const router = useRouter();
@@ -256,13 +234,11 @@ const creatingProject = ref(false);
 const pageError = ref('');
 const createError = ref('');
 const editError = ref('');
-const workflowOptions = WORKFLOW_OPTIONS;
 
 // 项目数据
 const newProject = ref({
   name: '',
-  description: '',
-  analysis_workflow: 'appam-smk'
+  description: ''
 });
 
 const editingProject = ref({});
@@ -277,7 +253,6 @@ const memberForm = reactive({
 
 // 搜索和排序状态
 const searchQuery = ref('');
-const workflowName = (workflowId) => workflowLabel(workflowId, 'Not selected')
 const availableUsers = computed(() => {
   const existing = new Set(projectMembers.value.map((member) => member.user_id))
   return userDirectory.value.filter((user) => !existing.has(user.id))
@@ -353,14 +328,7 @@ const createProject = async () => {
     }
     projects.value.unshift(createdProject);
     closeCreateModal();
-    if (createdProject.analysis_workflow) {
-      router.push({
-        name: 'WorkflowView',
-        params: { id: createdProject.id, workflowId: createdProject.analysis_workflow },
-      });
-    } else {
-      router.push({ name: 'Overview', params: { id: createdProject.id } });
-    }
+    router.push({ name: 'Overview', params: { id: createdProject.id } });
   } catch (error) {
     console.error('Error creating project:', error);
     createError.value = error.message || 'The project could not be created.';
@@ -377,8 +345,7 @@ const updateProject = async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: editingProject.value.name,
-        description: editingProject.value.description,
-        analysis_workflow: editingProject.value.analysis_workflow || '',
+        description: editingProject.value.description
       })
     });
     
@@ -400,10 +367,22 @@ const updateProject = async () => {
   }
 };
 
+// A <details> menu stays open after its buttons are clicked, so it would hang
+// above whatever dialog the action opens.
+function closeCardMenu(event) {
+  event.currentTarget.closest('details')?.removeAttribute('open')
+}
+
 const deleteProject = async (id) => {
   const project = projects.value.find(p => p.id === id);
   if (!project) return;
-  if (!confirm('Are you sure you want to delete this project and all related data?')) return;
+  const confirmed = await confirmAction({
+    title: `Delete "${project.name}"?`,
+    message: 'The project and all of its files, runs and results are removed. This cannot be undone.',
+    confirmLabel: 'Delete project',
+    tone: 'danger',
+  });
+  if (!confirmed) return;
   try {
     const response = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
     if (!response.ok) {
@@ -466,6 +445,19 @@ const closeMembersModal = () => {
   memberForm.role = 'viewer'
 }
 
+const createPanel = ref(null)
+const editPanel = ref(null)
+const membersPanel = ref(null)
+const createTitleId = nextOverlayId('project-create-title')
+const editTitleId = nextOverlayId('project-edit-title')
+const membersTitleId = nextOverlayId('project-members-title')
+
+// The close handlers are declared further down; resolving them only when a
+// dialog actually closes keeps setup clear of the temporal dead zone.
+useOverlay(() => showCreateModal.value, { onClose: () => closeCreateModal(), panelRef: createPanel })
+useOverlay(() => showEditModal.value, { onClose: () => closeEditModal(), panelRef: editPanel })
+useOverlay(() => showMembersModal.value, { onClose: () => closeMembersModal(), panelRef: membersPanel })
+
 const addMember = async () => {
   if (!membersProject.value || !memberForm.user_id) return
   membersError.value = ''
@@ -511,7 +503,13 @@ const changeMemberRole = async (member, role) => {
 
 const removeMember = async (member) => {
   if (!membersProject.value || member.project_role === 'owner') return
-  if (!confirm(`Remove ${member.display_name || member.username} from this project?`)) return
+  const confirmed = await confirmAction({
+    title: `Remove ${member.display_name || member.username}?`,
+    message: 'They lose access to this project immediately. Project data is not affected.',
+    confirmLabel: 'Remove access',
+    tone: 'danger',
+  })
+  if (!confirmed) return
   membersError.value = ''
   try {
     const response = await fetch(`/api/projects/${membersProject.value.id}/members/${member.user_id}`, {
@@ -548,8 +546,7 @@ const closeCreateModal = () => {
   showCreateModal.value = false;
   newProject.value = {
     name: '',
-    description: '',
-    analysis_workflow: 'appam-smk'
+    description: ''
   };
   createError.value = '';
 };
@@ -590,7 +587,7 @@ onMounted(fetchProjects);
 
 .project-list-content {
   width: 100%;
-  max-width: 1200px;
+  max-width: var(--content-width);
   margin: 0 auto;
   padding: var(--spacing-6);
 }
@@ -600,7 +597,7 @@ onMounted(fetchProjects);
   font-size: var(--text-sm);
   background: var(--surface-2);
   padding: var(--spacing-1) var(--spacing-3);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-sm);
   border: var(--border-width) solid var(--border-color-light);
 }
 
@@ -622,15 +619,16 @@ onMounted(fetchProjects);
   position: absolute;
   left: 12px;
   color: var(--gray-400);
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
 }
 
 .search-input {
+  min-height: var(--control-height);
   width: 100%;
-  padding: 10px 12px 10px 36px;
+  padding: 0 34px 0 36px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-base);
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   background: var(--surface-1);
   transition: border-color 0.2s;
 }
@@ -638,7 +636,7 @@ onMounted(fetchProjects);
 .search-input:focus {
   outline: none;
   border-color: var(--primary-500);
-  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.16);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.12);
 }
 
 .clear-btn {
@@ -660,14 +658,13 @@ onMounted(fetchProjects);
 
 .empty-state {
   text-align: center;
-  padding: 60px 20px;
+  padding: 48px 20px;
   color: var(--gray-600);
 }
 
 .empty-icon {
-  font-size: 4rem;
-  margin-bottom: 16px;
-  opacity: 0.5;
+  margin-bottom: 12px;
+  color: var(--gray-400);
 }
 
 .empty-state h3 {
@@ -678,7 +675,7 @@ onMounted(fetchProjects);
 
 .empty-state p {
   margin: 0 0 24px 0;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
 }
 
 .page-notice {
@@ -708,7 +705,8 @@ onMounted(fetchProjects);
   background: var(--gradient-primary);
   color: white;
   border: none;
-  padding: 10px 24px;
+  min-height: var(--control-height);
+  padding: 0 14px;
   border-radius: var(--radius-base);
   cursor: pointer;
   font-weight: 500;
@@ -716,14 +714,14 @@ onMounted(fetchProjects);
 
 .projects-container {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: var(--spacing-3);
 }
 
 .project-card {
   position: relative;
   display: flex;
-  min-height: 190px;
+  min-height: 156px;
   flex-direction: column;
   padding: var(--spacing-5);
   background: var(--surface-1);
@@ -731,12 +729,12 @@ onMounted(fetchProjects);
   border: 1px solid var(--border-color-light);
   transition: all 0.2s ease;
   cursor: pointer;
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
 }
 
 .project-card:hover {
-  border-color: var(--border-color-dark);
-  box-shadow: var(--shadow-sm);
+  border-color: rgba(var(--accent-rgb), 0.32);
+  box-shadow: var(--shadow-xs);
 }
 
 .project-header {
@@ -760,7 +758,7 @@ onMounted(fetchProjects);
 
 .project-info h3 {
   margin: 0 0 10px 0;
-  font-size: 1.3em;
+  font-size: var(--text-lg);
   font-weight: 600;
   color: var(--gray-900);
 }
@@ -773,18 +771,6 @@ onMounted(fetchProjects);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-}
-
-.workflow-badge {
-  display: inline-flex;
-  width: fit-content;
-  margin: 0;
-  padding: 3px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--primary-50);
-  color: var(--primary-700);
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
 }
 
 .project-actions {
@@ -809,12 +795,12 @@ onMounted(fetchProjects);
 .access-badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.3rem 0.7rem;
+  padding: 2px 7px;
   border-radius: var(--radius-full);
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   font-weight: var(--font-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
   white-space: nowrap;
 }
 
@@ -838,8 +824,9 @@ onMounted(fetchProjects);
   background: var(--primary-600);
   color: white;
   border: 1px solid var(--primary-600);
-  padding: 8px 16px;
-  border-radius: var(--radius-sm);
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: var(--radius-base);
   cursor: pointer;
   font-weight: var(--font-semibold);
   transition: background-color 0.2s;
@@ -924,7 +911,7 @@ onMounted(fetchProjects);
 }
 
 .form-group {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .form-group label {
@@ -940,7 +927,8 @@ onMounted(fetchProjects);
   width: 100%;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  padding: 10px 12px;
+  min-height: var(--control-height);
+  padding: 0 11px;
   font-size: 1em;
   transition: border-color 0.2s;
   box-sizing: border-box;
@@ -952,52 +940,13 @@ onMounted(fetchProjects);
 .form-group select:focus {
   outline: none;
   border-color: var(--primary-500);
-  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.16);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.12);
 }
 
 .form-group textarea {
   min-height: 80px;
+  padding-block: 9px;
   resize: vertical;
-}
-
-.analysis-picker {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.analysis-picker label {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  min-height: 76px;
-  margin: 0;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--surface-1);
-  color: var(--gray-600);
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  cursor: pointer;
-  padding: var(--spacing-3);
-}
-
-.analysis-picker label small {
-  color: var(--gray-500);
-  font-size: var(--text-xs);
-  font-weight: var(--font-normal);
-  line-height: 1.35;
-}
-
-.analysis-picker label.active {
-  border-color: rgba(var(--accent-rgb), 0.3);
-  background: rgba(var(--accent-rgb), 0.08);
-  color: var(--primary-700);
-}
-
-.analysis-picker label.active small {
-  color: var(--primary-600);
 }
 
 .form-error {
@@ -1014,12 +963,6 @@ onMounted(fetchProjects);
   opacity: 0.65;
 }
 
-.analysis-picker input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
 .form-hint {
   display: block;
   margin-top: 5px;
@@ -1032,15 +975,16 @@ onMounted(fetchProjects);
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  margin-top: 25px;
+  margin-top: 18px;
 }
 
 .cancel-btn {
   background-color: var(--surface-2);
   color: var(--gray-700);
   border: 1px solid var(--border-color);
-  padding: 10px 20px;
-  border-radius: var(--radius-sm);
+  min-height: var(--control-height);
+  padding: 0 14px;
+  border-radius: var(--radius-base);
   cursor: pointer;
   font-weight: 500;
   transition: background-color 0.2s;
@@ -1054,8 +998,9 @@ onMounted(fetchProjects);
   background: var(--gradient-primary);
   color: white;
   border: none;
-  padding: 10px 20px;
-  border-radius: var(--radius-sm);
+  min-height: var(--control-height);
+  padding: 0 14px;
+  border-radius: var(--radius-base);
   cursor: pointer;
   font-weight: 500;
   transition: background-color 0.2s;
@@ -1150,7 +1095,8 @@ onMounted(fetchProjects);
   width: 100%;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  padding: 10px 12px;
+  min-height: var(--control-height);
+  padding: 0 10px;
   background: var(--surface-1);
   font: inherit;
 }
@@ -1263,9 +1209,6 @@ onMounted(fetchProjects);
     justify-content: space-between;
   }
 
-  .analysis-picker {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 480px) {

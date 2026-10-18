@@ -1,18 +1,12 @@
 <template>
   <div class="account-settings">
     <div class="account-settings__shell">
-      <header class="account-settings__header">
-        <div>
-          <span class="account-settings__label">Account</span>
-          <h1>Profile and Password</h1>
-          <p>Manage how APPAM displays your identity and secure your account credentials.</p>
-        </div>
-        <div class="account-settings__chip">
-          <span>Signed in as</span>
+      <PageHeader eyebrow="Account" title="Profile and password" description="Identity and sign-in credentials">
+        <template #meta>
           <strong>{{ authState.user?.display_name || authState.user?.username || 'User' }}</strong>
-          <small>@{{ authState.user?.username }}</small>
-        </div>
-      </header>
+          <span>@{{ authState.user?.username }}</span>
+        </template>
+      </PageHeader>
 
       <section class="account-settings__grid">
         <article class="account-settings__card">
@@ -81,6 +75,7 @@
 <script setup>
 import { reactive, ref, watch } from 'vue'
 import { authState, updatePassword, updateProfile } from '../lib/auth'
+import PageHeader from '../components/ui/PageHeader.vue'
 
 const profileSubmitting = ref(false)
 const passwordSubmitting = ref(false)

@@ -1,17 +1,20 @@
 <template>
   <div class="documentation-container">
     <div class="doc-layout">
-      <!-- 浮动侧边导航 -->
       <nav class="doc-sidebar" :class="{ 'sidebar-hidden': !sidebarExpanded }">
-        <div class="nav-toggle" @click="toggleSidebar">
-          <span class="nav-icon"><Icon :name="sidebarExpanded ? 'x' : 'list'" :size="18" /></span>
-        </div>
+        <button
+          type="button"
+          class="nav-toggle"
+          :title="sidebarExpanded ? 'Collapse contents' : 'Expand contents'"
+          :aria-label="sidebarExpanded ? 'Collapse contents' : 'Expand contents'"
+          :aria-expanded="sidebarExpanded"
+          @click="toggleSidebar"
+        >
+          <Icon :name="sidebarExpanded ? 'panel-left-close' : 'panel-left-open'" :size="18" />
+        </button>
         <div class="nav-content">
           <div class="nav-header">
             <span>Contents</span>
-            <button class="close-btn" @click="closeSidebar" title="关闭目录">
-              <Icon name="x" :size="16" />
-            </button>
           </div>
           <ul class="nav-list">
             <li v-for="tocItem in tocItems" :key="tocItem.id">
@@ -58,18 +61,12 @@ import DOMPurify from 'dompurify';
 const htmlContent = ref('');
 const loading = ref(true);
 const error = ref('');
-const sidebarExpanded = ref(true); // 默认展开，保持常驻
+const sidebarExpanded = ref(true);
 const tocItems = ref([]);
 const activeSection = ref('');
 
-// 切换侧边栏展开状态
 const toggleSidebar = () => {
   sidebarExpanded.value = !sidebarExpanded.value;
-};
-
-// 关闭侧边栏
-const closeSidebar = () => {
-  sidebarExpanded.value = false;
 };
 
 // 从markdown内容中提取TOC
@@ -133,7 +130,6 @@ const loadMarkdown = async () => {
     const extractedTOC = extractTOC(markdown);
     tocItems.value = extractedTOC;
     
-    console.log('Extracted TOC:', extractedTOC);
     
     // 配置marked选项
     marked.setOptions({
@@ -261,108 +257,75 @@ onUnmounted(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #f8fafc;
+  background: var(--surface-0);
 }
 
 .doc-layout {
   width: 100%;
   height: 100%;
-  position: relative;
-  overflow-y: auto;
-  scroll-behavior: smooth;
+  display: flex;
+  overflow: hidden;
 }
 
-/* 浮动侧边栏样式 */
 .doc-sidebar {
-  position: fixed;
-  top: 50%;
-  left: 20px;
-  transform: translateY(-50%);
-  z-index: 1000;
+  width: 240px;
+  flex: 0 0 240px;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  background: var(--surface-1);
+  border-right: 1px solid var(--border-color-light);
+  transition: width var(--transition-base), flex-basis var(--transition-base);
+  overflow: hidden;
 }
 
 .nav-toggle {
-  width: 48px;
-  height: 48px;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border-radius: 24px;
+  min-height: 32px;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  margin: 10px 12px;
+  background: var(--surface-1);
+  border-radius: var(--radius-base);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  transition: all 0.3s ease;
+  color: var(--gray-600);
+  border: 1px solid var(--border-color);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .nav-toggle:hover {
-  transform: scale(1.05);
-  box-shadow: 0 6px 25px rgba(0, 0, 0, 0.15);
-}
-
-.nav-icon {
-  font-size: 18px;
-  transition: transform 0.3s ease;
+  background: var(--surface-2);
+  color: var(--gray-900);
 }
 
 .nav-content {
-  position: absolute;
-  left: 60px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border-radius: 12px;
-  min-width: 160px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(-50%) translateX(0);
-  transition: all 0.3s ease;
+  min-width: 240px;
+  flex: 1;
+  overflow-y: auto;
 }
 
-/* 侧边栏隐藏状态 */
+.doc-sidebar.sidebar-hidden {
+  width: 56px;
+  flex-basis: 56px;
+}
+
 .doc-sidebar.sidebar-hidden .nav-content {
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(-50%) translateX(-10px);
+  display: none;
 }
 
 .nav-header {
-  padding: 12px 16px;
+  min-height: 38px;
+  padding: 0 12px 0 16px;
   font-size: 12px;
   font-weight: 600;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  border-bottom: 1px solid #f1f5f9;
+  color: var(--gray-500);
+  letter-spacing: 0;
+  border-bottom: 1px solid var(--border-color-light);
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  color: #64748b;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  font-size: 14px;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.close-btn:hover {
-  background-color: #f1f5f9;
-  color: #ef4444;
-  transform: scale(1.1);
 }
 
 .nav-list {
@@ -380,62 +343,60 @@ onUnmounted(() => {
 }
 
 .nav-link {
-  color: #475569;
+  color: var(--gray-600);
   text-decoration: none;
   display: block;
   padding: 8px 12px;
   border-radius: 6px;
-  transition: all 0.2s ease;
-  font-size: 14px;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  font-size: 13px;
   font-weight: 500;
   line-height: 1.2;
 }
 
 .nav-link:hover {
-  background-color: #f1f5f9;
-  color: #1e293b;
-  transform: translateX(2px);
+  background-color: var(--surface-2);
+  color: var(--gray-900);
 }
 
 .nav-link.active {
-  background-color: #3b82f6;
-  color: white;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+  background-color: var(--primary-50);
+  color: var(--primary-700);
 }
 
 /* TOC层级样式 */
 .nav-link.level-2 {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
-  color: #475569;
+  color: var(--gray-600);
   padding: 8px 12px;
   border-radius: 6px;
   transition: all 0.2s ease;
 }
 
 .nav-link.level-2:hover {
-  background-color: #f1f5f9;
-  color: #1e293b;
-  transform: translateX(2px);
+  background-color: var(--surface-2);
+  color: var(--gray-900);
 }
 
 .nav-link.level-2.active {
-  background-color: #3b82f6;
-  color: white;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+  background-color: var(--primary-50);
+  color: var(--primary-700);
 }
 
 
 /* 主内容区样式 */
 .doc-main {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   overflow-y: auto;
-  background: white;
+  background: var(--surface-1);
+  scroll-behavior: smooth;
 }
 
 .content-article {
-  padding: 40px;
-  max-width: 900px;
+  padding: 36px 40px 72px;
+  max-width: 920px;
   margin: 0 auto;
   width: 100%;
 }
@@ -447,14 +408,14 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   padding: 60px;
-  color: #64748b;
+  color: var(--gray-500);
 }
 
 .loading-spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid #e2e8f0;
-  border-top: 3px solid #3b82f6;
+  border: 3px solid var(--border-color-light);
+  border-top: 3px solid var(--primary-500);
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin-bottom: 16px;
@@ -468,16 +429,16 @@ onUnmounted(() => {
 .error-state {
   text-align: center;
   padding: 60px;
-  color: #ef4444;
+  color: var(--error-600);
 }
 
 .retry-btn {
   margin-top: 16px;
   padding: 8px 20px;
-  background: #ef4444;
+  background: var(--primary-600);
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-base);
   cursor: pointer;
 }
 
@@ -493,21 +454,19 @@ onUnmounted(() => {
 
 @media (max-width: 768px) {
   .doc-sidebar {
-    left: 16px;
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 20;
+    box-shadow: var(--shadow-md);
   }
   
   .nav-toggle {
-    width: 44px;
-    height: 44px;
-  }
-  
-  .nav-content {
-    left: 56px;
-    min-width: 140px;
+    width: 32px;
+    height: 32px;
   }
   
   .content-article {
-    padding: 24px 20px;
+    padding: 28px 20px 56px 76px;
   }
   
   .markdown-content {
@@ -537,82 +496,52 @@ onUnmounted(() => {
 }
 
 @media (max-width: 480px) {
-  .doc-sidebar {
-    left: 12px;
-  }
-  
-  .nav-toggle {
-    width: 40px;
-    height: 40px;
-  }
-  
-  .nav-icon {
-    font-size: 16px;
-  }
-  
-  .nav-content {
-    left: 48px;
-    min-width: 120px;
-  }
-  
   .nav-link {
     padding: 6px 10px;
     font-size: 13px;
   }
   
   .content-article {
-    padding: 20px 16px;
+    padding: 24px 16px 48px 72px;
   }
 }
 
 .markdown-content {
   line-height: 1.7;
-  font-size: 16px;
-  color: #374151;
+  font-size: 15px;
+  color: var(--gray-700);
 }
 
 .markdown-content :deep(h1) {
-  font-size: 2.25rem;
+  font-size: 28px;
   font-weight: 700;
   margin: 0 0 32px 0;
-  color: #111827;
-  border-bottom: 3px solid #e5e7eb;
-  padding-bottom: 16px;
+  color: var(--gray-900);
+  border-bottom: 1px solid var(--border-color-light);
+  padding-bottom: 14px;
   scroll-margin-top: 20px;
 }
 
 .markdown-content :deep(h2) {
-  font-size: 1.75rem;
+  font-size: 22px;
   font-weight: 600;
   margin: 48px 0 24px 0;
-  color: #1f2937;
+  color: var(--gray-900);
   scroll-margin-top: 20px;
   position: relative;
 }
 
-.markdown-content :deep(h2):before {
-  content: '';
-  position: absolute;
-  left: -24px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 4px;
-  height: 24px;
-  background: #3b82f6;
-  border-radius: 2px;
-}
-
 .markdown-content :deep(h3) {
-  font-size: 1.375rem;
+  font-size: 18px;
   font-weight: 600;
   margin: 32px 0 16px 0;
-  color: #374151;
+  color: var(--gray-800);
   scroll-margin-top: 20px;
 }
 
 .markdown-content :deep(p) {
   margin-bottom: 20px;
-  color: #4b5563;
+  color: var(--gray-600);
   line-height: 1.75;
 }
 
@@ -624,7 +553,7 @@ onUnmounted(() => {
 
 .markdown-content :deep(li) {
   margin-bottom: 8px;
-  color: #4b5563;
+  color: var(--gray-600);
   line-height: 1.6;
 }
 
@@ -634,32 +563,32 @@ onUnmounted(() => {
 
 .markdown-content :deep(strong) {
   font-weight: 600;
-  color: #1f2937;
+  color: var(--gray-800);
 }
 
 .markdown-content :deep(em) {
   font-style: italic;
-  color: #6b7280;
+  color: var(--gray-500);
 }
 
 .markdown-content :deep(code) {
-  background: #f1f5f9;
+  background: var(--surface-2);
   padding: 2px 6px;
   border-radius: 4px;
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  font-family: var(--font-family-mono);
   font-size: 0.875em;
-  color: #e11d48;
-  border: 1px solid #e2e8f0;
+  color: var(--primary-700);
+  border: 1px solid var(--border-color-light);
 }
 
 .markdown-content :deep(pre) {
-  background: #1e293b;
-  color: #e2e8f0;
+  background: var(--dark-bg);
+  color: var(--text-light);
   padding: 20px 24px;
   border-radius: 8px;
   overflow-x: auto;
   margin: 24px 0;
-  border: 1px solid #334155;
+  border: 1px solid var(--dark-border);
 }
 
 .markdown-content :deep(pre code) {
@@ -667,18 +596,18 @@ onUnmounted(() => {
   padding: 0;
   border: none;
   color: inherit;
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
 .markdown-content :deep(blockquote) {
-  border-left: 4px solid #3b82f6;
+  border-left: 3px solid var(--primary-500);
   padding: 16px 20px;
   margin: 24px 0;
-  background: #f8fafc;
+  background: var(--surface-2);
   border-radius: 0 6px 6px 0;
   font-style: italic;
-  color: #475569;
+  color: var(--gray-600);
 }
 
 .markdown-content :deep(blockquote p) {
@@ -689,32 +618,32 @@ onUnmounted(() => {
   width: 100%;
   border-collapse: collapse;
   margin: 24px 0;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border-color-light);
   border-radius: 8px;
   overflow: hidden;
 }
 
 .markdown-content :deep(th),
 .markdown-content :deep(td) {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border-color-light);
   padding: 12px 16px;
   text-align: left;
 }
 
 .markdown-content :deep(th) {
-  background: #f9fafb;
+  background: var(--surface-2);
   font-weight: 600;
-  color: #374151;
+  color: var(--gray-700);
 }
 
 .markdown-content :deep(td) {
-  color: #4b5563;
+  color: var(--gray-600);
 }
 
 .markdown-content :deep(hr) {
   border: none;
   height: 1px;
-  background: linear-gradient(to right, transparent, #e5e7eb, transparent);
+  background: var(--border-color-light);
   margin: 32px 0;
 }
 
@@ -729,8 +658,7 @@ onUnmounted(() => {
 .markdown-content :deep(h1) + p,
 .markdown-content :deep(h2) + p,
 .markdown-content :deep(h3) + p {
-  color: #6b7280;
-  font-size: 1.05em;
+  color: var(--gray-500);
 }
 
 /* 添加打印样式 */

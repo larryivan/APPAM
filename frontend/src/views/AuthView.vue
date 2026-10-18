@@ -1,13 +1,13 @@
 <template>
   <div class="auth-screen">
     <div class="auth-screen__shell">
-      <section class="auth-screen__copy">
-        <span class="auth-screen__label">APPAM Access</span>
-        <h1>Sign in to continue.</h1>
-        <p>Authentication protects projects, files, and analysis runs.</p>
-      </section>
-
       <section class="auth-screen__card">
+        <header class="auth-screen__header">
+          <span class="auth-screen__label">APPAM</span>
+          <h1>{{ mode === 'login' ? 'Sign in' : 'Create account' }}</h1>
+          <p>{{ mode === 'login' ? 'Continue to your projects and analyses.' : 'Set up your laboratory workspace account.' }}</p>
+        </header>
+
         <div v-if="registrationAllowed" class="auth-screen__tabs">
           <button :class="{ active: mode === 'login' }" type="button" @click="mode = 'login'">Login</button>
           <button :class="{ active: mode === 'register' }" type="button" @click="mode = 'register'">Register</button>
@@ -39,7 +39,7 @@
           <p v-if="errorMessage" class="auth-screen__message auth-screen__message--error">{{ errorMessage }}</p>
 
           <button class="auth-screen__button" type="submit" :disabled="submitting">
-            {{ submitting ? 'Please wait...' : mode === 'login' ? 'Login' : 'Create Account' }}
+            {{ submitting ? 'Please wait...' : mode === 'login' ? 'Sign in' : 'Create account' }}
           </button>
         </form>
       </section>
