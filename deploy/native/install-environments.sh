@@ -113,24 +113,39 @@ done
 if [[ "${WITH_PALEO}" == true ]]; then
   install_environment "${REPO_ROOT}/appam-paleoproteomics-main/docker/environment.yml"
   "${RUNNER}" install -y -n paleoproteomics -c bioconda -c conda-forge openms
-  "${RUNNER}" run -n paleoproteomics python -m pip install \
+
+  if environment_exists timsconvert; then
+    if [[ "${UPDATE}" == true ]]; then
+      "${RUNNER}" install -y -n timsconvert -c conda-forge python=3.11 pip
+    else
+      printf '[skip] environment exists: timsconvert\n'
+    fi
+  else
+    "${RUNNER}" create -y -n timsconvert -c conda-forge python=3.11 pip
+  fi
+  "${RUNNER}" run -n timsconvert python -m pip install \
     --requirement "${REPO_ROOT}/appam-paleoproteomics-main/docker/requirements-pypi.txt"
-  "${RUNNER}" run -n paleoproteomics python -m pip install --no-deps \
+  "${RUNNER}" run -n timsconvert python -m pip install --no-deps \
     'git+https://github.com/gtluu/pyimzML.git@fe24388984aa96a18ef2ed54927ec05d6701cc04' \
     'git+https://github.com/gtluu/pyTDFSDK.git@4808da81d3e37f82da96f392dbb446c3733edacb' \
     'git+https://github.com/gtluu/pyBaf2Sql.git@06bb37fa3168b113c73b22d1d85fb4203bb83fb9' \
     'git+https://github.com/gtluu/timsconvert.git@c8bbfd98251e07e24522220fd4309e37eea4d7a9'
+  "${RUNNER}" run -n timsconvert python \
+    "${REPO_ROOT}/appam-paleoproteomics-main/docker/patch_pytdfsdk.py"
 
-  PALEO_PREFIX="$("${RUNNER}" run -n paleoproteomics python -c 'import sys; print(sys.prefix)')"
-  PYSIDE_QT_LIB="$("${RUNNER}" run -n paleoproteomics python -c 'from pathlib import Path; import PySide6; print(Path(PySide6.__file__).resolve().parent / "Qt" / "lib")')"
+  TIMSCONVERT_PREFIX="$("${RUNNER}" run -n timsconvert python -c 'import sys; print(sys.prefix)')"
   cat >"${HOME}/.local/bin/appam-timsconvert" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-export LD_LIBRARY_PATH="${PYSIDE_QT_LIB}:${PALEO_PREFIX}/lib\${LD_LIBRARY_PATH:+:\${LD_LIBRARY_PATH}}"
-exec "${PALEO_PREFIX}/bin/timsconvert" "\$@"
+unset LD_LIBRARY_PATH
+unset QT_PLUGIN_PATH
+unset QML2_IMPORT_PATH
+export PYTHONNOUSERSITE=1
+exec "${TIMSCONVERT_PREFIX}/bin/timsconvert" "\$@"
 EOF
   chmod 0755 "${HOME}/.local/bin/appam-timsconvert"
   ln -sfn appam-timsconvert "${HOME}/.local/bin/timsconvert"
+  "${HOME}/.local/bin/appam-timsconvert" --help >/dev/null
 fi
 
 printf '\nEnvironment installation finished.\n'

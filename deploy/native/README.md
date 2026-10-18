@@ -12,6 +12,7 @@ cd /srv/appam/APPAM
 ```
 
 Add `--with-paleoproteomics` only when Thermo/Bruker conversion and MaxQuant are needed. MaxQuant itself and ThermoRawFileParser remain separately licensed/vendor-delivered tools and must be placed on the server explicitly.
+The installer keeps `timsconvert`/PySide6 in a separate environment from OpenMS so their Qt runtimes cannot conflict.
 
 ## 2. Generate the runtime environment
 

@@ -75,6 +75,7 @@ MaxQuant and vendor conversion components are not stored in this repository. Con
 Standalone packaging assets are `docker/Dockerfile`, `docker/environment.yml`, and `docker/entrypoint.sh`.
 
 Root Compose deployments mount `APPAM_HOST_MAXQUANT_ROOT` read-only at `/opt/tools/maxquant-current`; the release is not copied into the image. The standalone Docker assets in this directory expect the build context to provide `tools/MaxQuant` and install it at the same generic location.
+Both deployment paths isolate `timsconvert`/PySide6 from the OpenMS environment so the two Qt runtimes cannot override one another.
 
 Example root deployment:
 

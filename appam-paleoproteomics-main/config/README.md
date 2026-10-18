@@ -102,10 +102,12 @@ The workflow declares one existing Conda/Mamba runtime prefix for every rule. Ru
 
 In the Docker image, `entrypoint.sh` activates the `paleoproteomics` conda environment and exports:
 
+- `/usr/local/bin` to `PATH` for the isolated `timsconvert` launcher
 - `/opt/tools/ThermoRawFileParser` to `PATH`
 - `/opt/tools/maxquant-current` to `PATH`
 - `/opt/tools/openms-development/bin` to `PATH`
-- `/opt/tools/openms-development/lib` to `LD_LIBRARY_PATH`
+
+OpenMS libraries are resolved through binary RPATHs. The `timsconvert` launcher clears inherited Qt library variables before starting its dedicated environment.
 
 That is why the default config uses command names for most tools:
 
@@ -120,11 +122,7 @@ MaxQuant is the exception. The workflow needs the DLL path passed to `dotnet`, s
 
 If you run the workflow outside the image, replace these values with paths that match your host environment.
 
-For host deployment, `timsconvert` is recommended to be installed via `conda` so it matches the environment used in `docs/plans/environment.yml`. A typical install command is:
-
-```bash
-conda install -c bioconda -c conda-forge timsconvert
-```
+For host deployment, use `deploy/native/install-environments.sh --with-paleoproteomics`; it creates and verifies the same isolated converter environment.
 
 Output locations in the container:
 

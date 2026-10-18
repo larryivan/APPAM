@@ -130,6 +130,9 @@ def complete_paleoproteomics_manifest() -> dict:
     manifest['resolved_input_table']['role'] = 'paleoproteomics_sample_table'
     manifest['runtime_metadata'] = {
         'runtime_env': {'type': 'conda_environment', 'packages_sha256': DIGEST},
+        'requires_thermo': False,
+        'requires_timsconvert': False,
+        'timsconvert_env': {'required': False},
         'maxquant_cmd_dll': {'exists': True, 'sha256': DIGEST},
     }
     return manifest
@@ -640,6 +643,22 @@ class CommandExecutionContractTests(unittest.TestCase):
         manifest = complete_paleoproteomics_manifest()
         manifest['runtime_metadata']['runtime_env'] = {'type': 'environment_path', 'exists': True}
         self.assertIn('runtime_identity', audit_run_manifest(manifest)['blockers'])
+
+        manifest = complete_paleoproteomics_manifest()
+        manifest['runtime_metadata']['requires_timsconvert'] = True
+        self.assertIn('runtime_identity', audit_run_manifest(manifest)['blockers'])
+        manifest['runtime_metadata']['timsconvert_env'] = {'packages_sha256': DIGEST}
+        manifest['runtime_metadata']['timsconvert_bin'] = {'exists': True, 'sha256': DIGEST}
+        self.assertTrue(audit_run_manifest(manifest)['ok'])
+
+        manifest = complete_paleoproteomics_manifest()
+        manifest['runtime_metadata']['requires_thermo'] = True
+        self.assertIn('runtime_identity', audit_run_manifest(manifest)['blockers'])
+        manifest['runtime_metadata']['thermo_raw_file_parser'] = {
+            'exists': True,
+            'sha256': DIGEST,
+        }
+        self.assertTrue(audit_run_manifest(manifest)['ok'])
 
     def test_publication_audit_warns_rather_than_passes_for_an_unknown_workflow(self):
         manifest = complete_evidence_manifest()

@@ -162,7 +162,7 @@ ADMIN_ONLY_WORKFLOW_PARAMETERS = {
     'rgi_env', 'antismash_env', 'freebayes_env', 'bcftools_env', 'reporting_env',
     'checkm_db', 'checkm1_db', 'checkm2_db',
     'gunc_db', 'gtdbtk_db', 'eggnog_db', 'rgi_db', 'runtime_env', 'dotnet_bin',
-    'maxquant_cmd_dll', 'thermo_raw_file_parser', 'timsconvert_bin',
+    'maxquant_cmd_dll', 'thermo_raw_file_parser', 'timsconvert_bin', 'timsconvert_env',
     'openms_fileconverter',
 }
 
@@ -424,6 +424,7 @@ ADDITIONAL_TOOLS = [
             {'name': 'maxquant_cmd_dll', 'description': 'Override MaxQuantCmd.dll path (optional)', 'type': 'string'},
             {'name': 'thermo_raw_file_parser', 'description': 'Override ThermoRawFileParser binary (optional)', 'type': 'string'},
             {'name': 'timsconvert_bin', 'description': 'Override timsconvert binary (optional)', 'type': 'string'},
+            {'name': 'timsconvert_env', 'description': 'Override isolated timsconvert environment path (optional)', 'type': 'string'},
             {'name': 'openms_fileconverter', 'description': 'Override OpenMS FileConverter binary (optional)', 'type': 'string'},
         ],
     },

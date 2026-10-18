@@ -121,24 +121,20 @@ class WorkflowLayoutTests(unittest.TestCase):
         self.assertTrue(Path("docker/environment.yml").exists())
         self.assertTrue(Path("docker/requirements-pypi.txt").exists())
 
-    def test_docker_runtime_assets_use_relocated_openms_layout(self):
+    def test_docker_runtime_assets_isolate_timsconvert_from_openms(self):
         dockerfile = Path("docker/Dockerfile").read_text(encoding="utf-8")
         entrypoint = Path("docker/entrypoint.sh").read_text(encoding="utf-8")
 
         self.assertIn("patchelf", dockerfile)
         self.assertIn("COPY environment.yml /opt/environment.yml", dockerfile)
         self.assertIn("COPY requirements-pypi.txt /opt/requirements-pypi.txt", dockerfile)
-        self.assertIn("COPY vendor/wheels /opt/vendor/wheels", dockerfile)
+        self.assertIn("COPY patch_pytdfsdk.py /opt/patch_pytdfsdk.py", dockerfile)
         self.assertIn("COPY entrypoint.sh /entrypoint.sh", dockerfile)
         self.assertNotIn("COPY docker/environment.yml /opt/environment.yml", dockerfile)
         self.assertNotIn("COPY docker/requirements-pypi.txt /opt/requirements-pypi.txt", dockerfile)
         self.assertNotIn("COPY docker/entrypoint.sh /entrypoint.sh", dockerfile)
-        self.assertIn("install_local_or_remote()", dockerfile)
-        self.assertIn('install_local_or_remote "pyimzML"', dockerfile)
-        self.assertIn('install_local_or_remote "pyTDFSDK"', dockerfile)
-        self.assertIn('install_local_or_remote "pyBaf2Sql"', dockerfile)
-        self.assertIn('install_local_or_remote "timsconvert"', dockerfile)
-        self.assertIn("/opt/vendor/wheels", dockerfile)
+        self.assertIn("mamba create -y -n timsconvert python=3.11 pip", dockerfile)
+        self.assertIn("/opt/conda/envs/timsconvert/bin/pip install", dockerfile)
         self.assertIn("git+https://github.com/gtluu/pyimzML.git", dockerfile)
         self.assertIn("git+https://github.com/gtluu/pyTDFSDK.git", dockerfile)
         self.assertIn("git+https://github.com/gtluu/pyBaf2Sql.git", dockerfile)
@@ -151,26 +147,18 @@ class WorkflowLayoutTests(unittest.TestCase):
             "patchelf --set-rpath /opt/conda/envs/paleoproteomics/lib:/opt/tools/openms-development/lib",
             dockerfile,
         )
-        self.assertIn("/opt/conda/envs/paleoproteomics/lib/python3.11/site-packages/PySide6/Qt/lib", dockerfile)
-        self.assertIn(
-            "mv /opt/conda/envs/paleoproteomics/bin/timsconvert /opt/conda/envs/paleoproteomics/bin/timsconvert.real",
-            dockerfile,
-        )
-        self.assertIn(
-            'export LD_LIBRARY_PATH=${PYSIDE6_QT_LIB}:/opt/conda/envs/paleoproteomics/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}',
-            dockerfile,
-        )
-        self.assertIn('exec /opt/conda/envs/paleoproteomics/bin/timsconvert.real "$@"', dockerfile)
+        self.assertIn('exec /opt/conda/envs/timsconvert/bin/timsconvert "$@"', dockerfile)
+        self.assertIn("unset LD_LIBRARY_PATH", dockerfile)
+        self.assertIn("unset QT_PLUGIN_PATH", dockerfile)
         self.assertNotIn("ENV PATH=/opt/tools/bin:/opt/conda/envs/paleoproteomics/bin", dockerfile)
         self.assertNotIn("ENV LD_LIBRARY_PATH=/opt/conda/envs/paleoproteomics/lib", dockerfile)
         self.assertNotIn("LD_LIBRARY_PATH=/opt/conda/envs/paleoproteomics/lib", entrypoint)
-        self.assertIn("LD_LIBRARY_PATH=/opt/tools/openms-development/lib", entrypoint)
+        self.assertNotIn("export LD_LIBRARY_PATH=", entrypoint)
         self.assertNotIn("export PATH=/opt/tools/bin:$PATH", entrypoint)
-        self.assertIn("pyTDFSDK/tims.py", dockerfile)
-        self.assertIn("extract_2d_tdf_spectrum", dockerfile)
-        self.assertIn("if scan_begin != 0:", dockerfile)
-        self.assertIn("scan_end = scan_end - scan_begin", dockerfile)
-        self.assertIn("scan_begin = 0", dockerfile)
+        patch_script = Path("docker/patch_pytdfsdk.py").read_text(encoding="utf-8")
+        self.assertIn("pyTDFSDK.tims", patch_script)
+        self.assertIn("if scan_begin != 0:", patch_script)
+        self.assertIn("scan_end = scan_end - scan_begin", patch_script)
 
     def test_docker_environment_includes_qt_runtime_libraries(self):
         environment = Path("docker/environment.yml").read_text(encoding="utf-8")

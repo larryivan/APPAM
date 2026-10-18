@@ -1,3 +1,6 @@
+# Python dependencies for the isolated timsconvert environment.
+# Do not install these into the OpenMS/paleoproteomics environment.
+
 altgraph==0.17.4
 certifi==2024.8.30
 charset-normalizer==3.3.2

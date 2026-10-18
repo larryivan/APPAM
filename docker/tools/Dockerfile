@@ -28,6 +28,13 @@ RUN apt-get update && apt-get install -y \
     libxrender1 \
     libxtst6 \
     libxi6 \
+    libgl1 \
+    libegl1 \
+    libfontconfig1 \
+    libfreetype6 \
+    libxkbcommon0 \
+    libxkbcommon-x11-0 \
+    libdbus-1-3 \
     patchelf \
     && rm -rf /var/lib/apt/lists/*
 
@@ -92,11 +99,27 @@ RUN retry-bash "micromamba create -y -n gtdbtk -f /opt/appam/docker/tools/enviro
 RUN retry-bash "micromamba create -y -n antismash -f /opt/appam/docker/tools/environments/antismash.yml && micromamba clean --all --yes"
 RUN retry-bash "micromamba create -y -n reporting -f /opt/appam/docker/tools/environments/reporting.yml && micromamba clean --all --yes"
 
-RUN retry-bash "micromamba create -y -n paleoproteomics -f /opt/appam/appam-paleoproteomics-main/docker/environment.yml && micromamba run -n paleoproteomics pip install -r /opt/appam/appam-paleoproteomics-main/docker/requirements-pypi.txt && micromamba install -y -n paleoproteomics -c bioconda -c conda-forge openms && micromamba run -n paleoproteomics pip install --no-deps git+https://github.com/gtluu/pyimzML.git@fe24388984aa96a18ef2ed54927ec05d6701cc04 git+https://github.com/gtluu/pyTDFSDK.git@4808da81d3e37f82da96f392dbb446c3733edacb git+https://github.com/gtluu/pyBaf2Sql.git@06bb37fa3168b113c73b22d1d85fb4203bb83fb9 git+https://github.com/gtluu/timsconvert.git@c8bbfd98251e07e24522220fd4309e37eea4d7a9 && micromamba clean --all --yes"
+RUN retry-bash "micromamba create -y -n paleoproteomics -f /opt/appam/appam-paleoproteomics-main/docker/environment.yml && micromamba install -y -n paleoproteomics -c bioconda -c conda-forge openms && micromamba clean --all --yes"
+RUN retry-bash "micromamba create -y -n timsconvert python=3.11 pip && micromamba run -n timsconvert pip install --no-cache-dir -r /opt/appam/appam-paleoproteomics-main/docker/requirements-pypi.txt && micromamba run -n timsconvert pip install --no-cache-dir --no-deps git+https://github.com/gtluu/pyimzML.git@fe24388984aa96a18ef2ed54927ec05d6701cc04 git+https://github.com/gtluu/pyTDFSDK.git@4808da81d3e37f82da96f392dbb446c3733edacb git+https://github.com/gtluu/pyBaf2Sql.git@06bb37fa3168b113c73b22d1d85fb4203bb83fb9 git+https://github.com/gtluu/timsconvert.git@c8bbfd98251e07e24522220fd4309e37eea4d7a9 && micromamba run -n timsconvert python /opt/appam/appam-paleoproteomics-main/docker/patch_pytdfsdk.py && micromamba clean --all --yes"
 
 RUN retry-bash "micromamba create -y -n backend -c conda-forge python=3.12 pip conda && micromamba run -n backend pip install --no-cache-dir -r /opt/appam/backend/requirements.txt && micromamba clean --all --yes"
 
 USER root
+
+RUN printf '%s\n' \
+      '#!/bin/bash' \
+      'set -euo pipefail' \
+      'unset LD_LIBRARY_PATH' \
+      'unset QT_PLUGIN_PATH' \
+      'unset QML2_IMPORT_PATH' \
+      'export PYTHONNOUSERSITE=1' \
+      'exec /opt/conda/envs/timsconvert/bin/timsconvert "$@"' \
+      > /usr/local/bin/timsconvert && \
+    chmod 0755 /usr/local/bin/timsconvert && \
+    env -u LD_LIBRARY_PATH -u QT_PLUGIN_PATH -u QML2_IMPORT_PATH \
+      /opt/conda/envs/timsconvert/bin/python -c \
+      "import PySide6; from PySide6.QtCore import qVersion; from PySide6.QtGui import QGuiApplication; assert PySide6.__version__ == '6.7.2'; assert qVersion().startswith('6.7.')" && \
+    /usr/local/bin/timsconvert --help >/dev/null
 
 RUN mkdir -p /opt/vendor/ThermoRawFileParser /opt/tools /data /workspaces/projects /databases && \
     curl --retry 8 --retry-delay 5 --retry-all-errors -L "${THERMO_RAW_FILE_PARSER_URL}" -o /tmp/ThermoRawFileParser.zip && \
@@ -136,6 +159,7 @@ ENV APPAM_DB_PATH=/data/app_database.db
 ENV APPAM_SMK_ROOT=/opt/appam/APPAM-SMK-main
 ENV APPAM_PALEOPROTEOMICS_ROOT=/opt/appam/appam-paleoproteomics-main
 ENV APPAM_PALEO_ENV=/opt/conda/envs/paleoproteomics
+ENV APPAM_PALEO_TIMSCONVERT_ENV=/opt/conda/envs/timsconvert
 ENV APPAM_SNAKEMAKE_BIN=snakemake
 ENV APPAM_SMK_METAWRAP_ENV=/opt/conda/envs/metawrap
 ENV APPAM_SMK_PREPROCESSING_ENV=/opt/conda/envs/preprocessing

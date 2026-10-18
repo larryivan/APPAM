@@ -12,6 +12,7 @@ COMMON_SCRIPT = REPO_ROOT / 'deploy' / 'native' / 'common.sh'
 RENDER_SCRIPT = REPO_ROOT / 'deploy' / 'native' / 'render-env.sh'
 INSTALL_SCRIPT = REPO_ROOT / 'deploy' / 'native' / 'install-environments.sh'
 TOOL_WRAPPER = REPO_ROOT / 'docker' / 'tools' / 'tool-wrapper.sh'
+TOOLS_DOCKERFILE = REPO_ROOT / 'docker' / 'tools' / 'Dockerfile'
 
 
 class NativeDeploymentTests(unittest.TestCase):
@@ -106,6 +107,7 @@ class NativeDeploymentTests(unittest.TestCase):
                 rendered,
             )
             self.assertIn(f'APPAM_PALEO_TIMSCONVERT_BIN={root / ".local" / "bin" / "appam-timsconvert"}', rendered)
+            self.assertIn(f'APPAM_PALEO_TIMSCONVERT_ENV={root / "conda" / "envs" / "timsconvert"}', rendered)
             self.assertIn(f'APPAM_PALEO_THERMO_RAW_FILE_PARSER={root / ".local" / "bin" / "ThermoRawFileParser"}', rendered)
             self.assertIn(f'APPAM_KRAKENUNIQ_KDB={database_root / "krakenuniq_refseq_bav" / "database.kdb"}', rendered)
             self.assertIn(f'APPAM_SMK_REPORTING_ENV={root / "conda" / "envs" / "reporting"}', rendered)
@@ -131,10 +133,22 @@ class NativeDeploymentTests(unittest.TestCase):
     def test_native_installer_isolates_timsconvert_qt_runtime(self):
         installer = INSTALL_SCRIPT.read_text(encoding='utf-8')
 
-        self.assertIn('PYSIDE_QT_LIB=', installer)
+        self.assertIn('environment_exists timsconvert', installer)
+        self.assertIn('run -n timsconvert python', installer)
+        self.assertIn('patch_pytdfsdk.py', installer)
         self.assertIn('appam-timsconvert', installer)
-        self.assertIn('export LD_LIBRARY_PATH=', installer)
+        self.assertIn('unset LD_LIBRARY_PATH', installer)
+        self.assertIn('unset QT_PLUGIN_PATH', installer)
         self.assertIn('ln -sfn appam-timsconvert', installer)
+
+    def test_tools_image_isolates_timsconvert_from_openms(self):
+        dockerfile = TOOLS_DOCKERFILE.read_text(encoding='utf-8')
+
+        self.assertIn('micromamba create -y -n timsconvert python=3.11 pip', dockerfile)
+        self.assertIn('micromamba run -n timsconvert python /opt/appam/appam-paleoproteomics-main/docker/patch_pytdfsdk.py', dockerfile)
+        self.assertIn('exec /opt/conda/envs/timsconvert/bin/timsconvert "$@"', dockerfile)
+        self.assertIn('unset LD_LIBRARY_PATH', dockerfile)
+        self.assertNotIn('micromamba run -n paleoproteomics pip install -r', dockerfile)
 
     def test_pmdtools_aliases_target_the_environment_binary(self):
         with tempfile.TemporaryDirectory() as temp_dir:

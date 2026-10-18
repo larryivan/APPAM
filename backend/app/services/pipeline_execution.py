@@ -1242,6 +1242,22 @@ def _paleoproteomics_context(project_id: str, job_id: str, params: dict, run_id:
         Path(str(runtime_env_value)).expanduser().resolve(),
         'Paleoproteomics Conda environment',
     )
+    timsconvert_env_value = _required_config_value(
+        runtime_values,
+        'timsconvert_env',
+        'APPAM_PALEO_TIMSCONVERT_ENV',
+    )
+    timsconvert_env = None
+    if requires_timsconvert:
+        if not timsconvert_env_value:
+            raise ValueError(
+                'Bruker .d inputs require timsconvert_env / APPAM_PALEO_TIMSCONVERT_ENV '
+                'so the isolated converter environment can be verified'
+            )
+        timsconvert_env = require_existing_directory(
+            Path(str(timsconvert_env_value)).expanduser().resolve(),
+            'timsconvert Conda environment',
+        )
 
     if not maxquant_cmd_dll:
         raise ValueError('Missing paleoproteomics runtime settings: maxquant_cmd_dll / APPAM_PALEO_MAXQUANT_CMD')
@@ -1323,6 +1339,7 @@ def _paleoproteomics_context(project_id: str, job_id: str, params: dict, run_id:
                 'maxquant_cmd_dll': str(maxquant_cmd_dll),
                 'thermo_raw_file_parser': str(thermo_raw_file_parser),
                 'timsconvert_bin': str(timsconvert_bin),
+                'timsconvert_env': str(timsconvert_env or timsconvert_env_value or ''),
                 'openms_fileconverter': str(openms_fileconverter),
             }
             config_data = _materialize_config(default_config_path, config_overrides)
@@ -1344,14 +1361,27 @@ def _paleoproteomics_context(project_id: str, job_id: str, params: dict, run_id:
         {'name': 'maxquant', 'status': 'ok', 'required': True, 'message': f'MaxQuantCmd.dll: {maxquant_cmd_dll}'},
         {'name': 'ThermoRawFileParser', 'status': 'ok' if requires_thermo else 'skipped', 'required': requires_thermo, 'message': f'ThermoRawFileParser: {thermo_raw_file_parser}' if requires_thermo else 'ThermoRawFileParser not required by this sample table'},
         {'name': 'timsconvert', 'status': 'ok' if requires_timsconvert else 'skipped', 'required': requires_timsconvert, 'message': f'timsconvert: {timsconvert_bin}' if requires_timsconvert else 'timsconvert not required by this sample table'},
+        {'name': 'timsconvert_env', 'status': 'ok' if requires_timsconvert else 'skipped', 'required': requires_timsconvert, 'message': f'Isolated timsconvert environment: {timsconvert_env}' if requires_timsconvert else 'timsconvert environment not required by this sample table'},
         {'name': 'OpenMS FileConverter', 'status': 'ok', 'required': True, 'message': f'FileConverter: {openms_fileconverter}'},
     ]
     runtime_metadata = {
         'runtime_env': conda_environment_fingerprint(str(runtime_env)),
+        'requires_thermo': requires_thermo,
+        'requires_timsconvert': requires_timsconvert,
+        'timsconvert_env': (
+            conda_environment_fingerprint(str(timsconvert_env))
+            if timsconvert_env else {'required': False}
+        ),
         'maxquant_cmd_dll': fingerprint_path(maxquant_cmd_dll, 'sha256'),
         'dotnet_bin': fingerprint_path(dotnet_bin, 'metadata'),
-        'thermo_raw_file_parser': fingerprint_path(thermo_raw_file_parser, 'metadata'),
-        'timsconvert_bin': fingerprint_path(timsconvert_bin, 'metadata'),
+        'thermo_raw_file_parser': fingerprint_path(
+            thermo_raw_file_parser,
+            'sha256' if requires_thermo else 'metadata',
+        ),
+        'timsconvert_bin': fingerprint_path(
+            timsconvert_bin,
+            'sha256' if requires_timsconvert else 'metadata',
+        ),
         'openms_fileconverter': fingerprint_path(openms_fileconverter, 'metadata'),
     }
     source_runtime_verification = _verify_source_runtime(
@@ -1430,6 +1460,7 @@ def _paleoproteomics_context(project_id: str, job_id: str, params: dict, run_id:
             'maxquant_cmd_dll': str(maxquant_cmd_dll),
             'thermo_raw_file_parser': str(thermo_raw_file_parser),
             'timsconvert_bin': str(timsconvert_bin),
+            'timsconvert_env': str(timsconvert_env or timsconvert_env_value or ''),
             'openms_fileconverter': str(openms_fileconverter),
         },
         'runtime_checks': runtime_checks,
@@ -1769,6 +1800,18 @@ def runtime_health_for_workflow(workflow_id: str) -> dict:
             'Paleoproteomics Conda environment',
         )
         checks.append({'name': 'runtime_env', 'status': 'ok', 'message': f'Paleoproteomics environment: {resolved_runtime_env}'})
+        timsconvert_env = _required_config_value({}, 'timsconvert_env', 'APPAM_PALEO_TIMSCONVERT_ENV')
+        if timsconvert_env:
+            try:
+                resolved_timsconvert_env = require_existing_directory(
+                    Path(timsconvert_env).expanduser().resolve(),
+                    'timsconvert Conda environment',
+                )
+                checks.append({'name': 'timsconvert_env', 'status': 'ok', 'required': False, 'message': f'Isolated timsconvert environment: {resolved_timsconvert_env}'})
+            except ValueError as exc:
+                checks.append({'name': 'timsconvert_env', 'status': 'warn', 'required': False, 'message': str(exc)})
+        else:
+            checks.append({'name': 'timsconvert_env', 'status': 'warn', 'required': False, 'message': 'APPAM_PALEO_TIMSCONVERT_ENV is not configured; Bruker .d runs will be blocked.'})
         checks.append({'name': 'dotnet', 'status': 'ok', 'message': f"dotnet: {resolve_executable(_required_config_value({}, 'dotnet_bin', 'APPAM_PALEO_DOTNET_BIN') or 'dotnet', 'dotnet')}"})
         maxquant_value = _required_config_value({}, 'maxquant_cmd_dll', 'APPAM_PALEO_MAXQUANT_CMD')
         if not maxquant_value:

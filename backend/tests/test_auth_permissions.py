@@ -770,6 +770,8 @@ class AuthPermissionApiTests(unittest.TestCase):
         admin_parameter_names = {parameter['name'] for parameter in admin_catalog['parameters']}
         self.assertIn('metawrap_env', admin_parameter_names)
         self.assertIn('reporting_env', admin_parameter_names)
+        admin_paleo = admin_client.get('/api/tools').get_json()['tools_by_key']['workflow-appam-paleoproteomics']
+        self.assertIn('timsconvert_env', {parameter['name'] for parameter in admin_paleo['parameters']})
         self.assertIn('maxquant', admin_client.get('/api/tools').get_json()['tools_by_key'])
 
     def test_admin_worker_status_endpoint_reports_local_executor(self):

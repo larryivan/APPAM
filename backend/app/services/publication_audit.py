@@ -334,10 +334,23 @@ def _appam_smk_runtime_identity(runtime_metadata: dict) -> dict:
 
 def _paleoproteomics_runtime_identity(runtime_metadata: dict) -> dict:
     runtime_env = _mapping(runtime_metadata.get('runtime_env'))
+    timsconvert_env = _mapping(runtime_metadata.get('timsconvert_env'))
+    timsconvert = _mapping(runtime_metadata.get('timsconvert_bin'))
     maxquant = _mapping(runtime_metadata.get('maxquant_cmd_dll'))
+    thermo = _mapping(runtime_metadata.get('thermo_raw_file_parser'))
     missing = []
     if not _is_sha256(runtime_env.get('packages_sha256')):
-        missing.append('conversion environment packages')
+        missing.append('paleoproteomics environment packages')
+    if runtime_metadata.get('requires_timsconvert') and not _is_sha256(timsconvert_env.get('packages_sha256')):
+        missing.append('timsconvert environment packages')
+    if runtime_metadata.get('requires_timsconvert') and not (
+        timsconvert.get('exists') and _is_sha256(timsconvert.get('sha256'))
+    ):
+        missing.append('timsconvert launcher content hash')
+    if runtime_metadata.get('requires_thermo') and not (
+        thermo.get('exists') and _is_sha256(thermo.get('sha256'))
+    ):
+        missing.append('ThermoRawFileParser content hash')
     if not (maxquant.get('exists') and _is_sha256(maxquant.get('sha256'))):
         missing.append('MaxQuantCmd.dll content hash')
     if missing:
@@ -351,7 +364,7 @@ def _paleoproteomics_runtime_identity(runtime_metadata: dict) -> dict:
         'runtime_identity',
         'Runtime identity',
         'ok',
-        'Conversion environment packages and MaxQuant binary are both fingerprinted.',
+        'Paleoproteomics environments and required external binaries are fingerprinted.',
     )
 
 
