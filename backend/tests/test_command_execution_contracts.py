@@ -322,6 +322,50 @@ class CommandExecutionContractTests(unittest.TestCase):
         self.assertTrue(any('Unknown parameter' in error for error in errors))
         self.assertTrue(any('must be at most' in error for error in errors))
 
+    def test_single_valued_parameters_reject_lists_even_without_an_explicit_contract(self):
+        # Most catalog parameters never declare `multiple`, so the guard has to
+        # default to single-valued instead of only rejecting `multiple: false`.
+        tool = get_tool_definition('prokka')
+        genus = next(parameter for parameter in tool['parameters'] if parameter['name'] == '--genus')
+        self.assertNotIn('multiple', genus, 'fixture assumes --genus has no explicit contract')
+        errors = validate_parameter_values(
+            tool,
+            {'contigs_fasta': 'inputs/reference.fa', '--genus': ['Escherichia', '--outdir', '/etc']},
+        )
+        self.assertTrue(any('accepts only one value' in error for error in errors))
+
+    def test_free_form_values_cannot_smuggle_extra_options_into_argv(self):
+        with self.assertRaises(ValueError) as single:
+            build_job_request(
+                'project-1',
+                'job-genus',
+                get_tool_definition('prokka'),
+                {'contigs_fasta': 'inputs/reference.fa', '--genus': '--outdir'},
+            )
+        self.assertIn('must not start with', str(single.exception))
+
+        # `-m` does declare multiple: true, so only the render-time guard stops it.
+        with self.assertRaises(ValueError) as repeated:
+            build_job_request(
+                'project-1',
+                'job-modules',
+                get_tool_definition('multiqc'),
+                {'analysis_directories': ['inputs'], '-m': ['fastqc', '--outdir']},
+            )
+        self.assertIn('must not start with', str(repeated.exception))
+
+    def test_option_guard_leaves_legitimate_free_form_values_alone(self):
+        request = build_job_request(
+            'project-1',
+            'job-modules-ok',
+            get_tool_definition('multiqc'),
+            {'analysis_directories': ['inputs'], '-m': ['fastqc', 'samtools']},
+        )
+        argv = request['command_spec']['argv']
+        self.assertEqual(argv.count('-m'), 2)
+        self.assertIn('fastqc', argv)
+        self.assertIn('samtools', argv)
+
     def test_kraken_paired_mode_requires_exactly_two_inputs(self):
         errors = validate_parameter_values(
             get_tool_definition('krakenuniq'),

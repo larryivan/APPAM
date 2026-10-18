@@ -497,7 +497,7 @@ def validate_parameter_values(tool_info: dict, params: dict) -> list[str]:
             continue
 
         values = value if isinstance(value, list) else [value]
-        if parameter.get('multiple') is False and isinstance(value, list) and len(value) > 1:
+        if not parameter.get('multiple') and isinstance(value, list) and len(value) > 1:
             errors.append(f"Parameter '{name}' accepts only one value")
         minimum_items = parameter.get('minimum_items')
         maximum_items = parameter.get('maximum_items')
@@ -570,6 +570,24 @@ def _parameter_path_role(param: dict) -> str | None:
     return None
 
 
+def _rejects_option_like_values(param: dict) -> bool:
+    """Whether a free-form value for this parameter may start with '-'.
+
+    Commands run with shell=False, so a value can never start a second process,
+    but a value such as '--outdir' is still consumed by the tool as an option of
+    its own and would escape the project workspace. Values constrained by
+    `options`, `pattern`, or a resolved path role are already safe, and numeric
+    types are rejected earlier by their own conversion.
+    """
+    if param.get('type') != 'string':
+        return False
+    if param.get('options') or param.get('pattern'):
+        return False
+    if _parameter_path_role(param):
+        return False
+    return not param.get('allow_option_like', False)
+
+
 def _resolve_shared_path(value: str) -> Path:
     root = Path(os.getenv('APPAM_DATABASES_ROOT', '/databases')).expanduser().resolve()
     raw_value = str(value).strip()
@@ -638,6 +656,7 @@ def _render_parameter_values(
     rendered_values = []
     output_paths = []
     path_role = _parameter_path_role(param)
+    reject_option_like = _rejects_option_like_values(param)
 
     for item in values:
         if path_role:
@@ -652,7 +671,12 @@ def _render_parameter_values(
                 raise ValueError(f'Unsupported path role for {param["name"]}: {path_role}')
             rendered_values.append(str(path))
         else:
-            rendered_values.append(str(item))
+            rendered = str(item)
+            if reject_option_like and rendered.startswith('-'):
+                raise ValueError(
+                    f'{param["name"]} value must not start with "-": {rendered}'
+                )
+            rendered_values.append(rendered)
 
     join_with = param.get('join')
     if join_with is not None and rendered_values:
