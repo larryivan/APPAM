@@ -2429,7 +2429,7 @@ onUnmounted(() => {
   min-width: 0;
   min-height: 92px;
   display: grid;
-  align-content: center;
+  align-content: start;
   gap: 4px;
   padding: 12px 14px;
   border: 1px solid var(--border-color);
