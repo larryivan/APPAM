@@ -665,8 +665,13 @@ const shouldFilterLog = (logData) => {
   return false;
 };
 
+let unmounted = false;
+
 onMounted(() => {
   fetchToolLibrary().then(() => {
+    // onUnmounted may already have run while this request was in flight, in
+    // which case the interval created here would never be cleared.
+    if (unmounted) return;
     updateTool();
     checkTaskStatus();
     statusInterval = setInterval(checkTaskStatus, 2000);
@@ -674,6 +679,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  unmounted = true;
   stopLogPolling();
   if (statusInterval) {
     clearInterval(statusInterval);

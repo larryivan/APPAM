@@ -405,17 +405,24 @@ const artifactPreviewPath = ref('')
 const artifactPreviewData = ref({})
 
 let refreshTimer = null
+let disposed = false
 
 function scheduleRefresh(delay = 0) {
+  if (disposed) return
   if (refreshTimer) window.clearTimeout(refreshTimer)
   refreshTimer = window.setTimeout(async () => {
+    // The component can unmount while refreshAll() is in flight; without this
+    // the finally block below would start a poll loop nothing can ever clear.
+    if (disposed) return
     try {
       await refreshAll()
     } catch (error) {
       console.error('Workflow refresh failed:', error)
     } finally {
-      const active = Boolean(activeWorkflowRun.value)
-      scheduleRefresh(active ? 4000 : 12000)
+      if (!disposed) {
+        const active = Boolean(activeWorkflowRun.value)
+        scheduleRefresh(active ? 4000 : 12000)
+      }
     }
   }, delay)
 }
@@ -1440,6 +1447,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  disposed = true
   if (refreshTimer) {
     window.clearTimeout(refreshTimer)
   }
