@@ -4,9 +4,68 @@ import shutil
 import subprocess
 import json
 import os
+import re
 from datetime import datetime
 import threading
 import time
+
+
+_APFS_VOLUME = re.compile(r'^/dev/(disk\d+)s\d+')
+_MACOS_SUPPORT_VOLUMES = '/System/Volumes/'
+
+
+def _storage_pool(partition, usage):
+    # Every volume of an APFS container reports the container's capacity, and
+    # bind mounts (Docker volumes, /etc/hosts) report the filesystem they come
+    # from. Adding them up counts the same disk many times over.
+    match = _APFS_VOLUME.match(partition.device or '')
+    if match:
+        return ('apfs', match.group(1), usage.total)
+    return ('fs', usage.total, usage.free)
+
+
+def _is_read_only(partition):
+    options = set((partition.opts or '').split(','))
+    return bool(options & {'ro', 'rdonly'})
+
+
+def summarize_storage(volumes):
+    """Collapse mounted volumes into one entry per storage pool.
+
+    `volumes` is a list of (psutil partition, psutil disk usage) pairs. Pools
+    made only of read-only images (macOS system snapshots, mounted disk
+    images) or macOS support volumes are left out: nothing can be written
+    there, so they say nothing about room for analysis output.
+    """
+    pools = {}
+    for partition, usage in volumes:
+        if usage.total > 0:
+            pools.setdefault(_storage_pool(partition, usage), []).append((partition, usage))
+
+    disks = []
+    for members in pools.values():
+        mountpoints = sorted(m[0].mountpoint for m in members)
+        writable = [m[0].mountpoint for m in members if not _is_read_only(m[0])]
+        if '/' not in mountpoints and all(path.startswith(_MACOS_SUPPORT_VOLUMES) for path in writable):
+            continue
+        partition, usage = min(
+            members,
+            key=lambda m: (m[0].mountpoint != '/', not os.path.isdir(m[0].mountpoint), len(m[0].mountpoint)),
+        )
+        total = usage.total
+        free = min(m[1].free for m in members)
+        used = usage.used if len(members) == 1 else total - free
+        disks.append({
+            'device': partition.device,
+            'mountpoint': partition.mountpoint,
+            'mountpoints': mountpoints,
+            'file_system': partition.fstype,
+            'total': total,
+            'used': used,
+            'free': free,
+            'usage_percent': used / (used + free) * 100 if used + free > 0 else 0,
+        })
+    return sorted(disks, key=lambda disk: (disk['mountpoint'] != '/', disk['mountpoint']))
 
 
 class SystemInfoService:
@@ -92,24 +151,14 @@ class SystemInfoService:
     def get_disk_info(self):
         """获取磁盘信息"""
         def _get_disk_info():
-            disks = []
+            volumes = []
             for partition in psutil.disk_partitions():
                 try:
-                    partition_usage = psutil.disk_usage(partition.mountpoint)
-                    disks.append({
-                        'device': partition.device,
-                        'mountpoint': partition.mountpoint,
-                        'file_system': partition.fstype,
-                        'total': partition_usage.total,
-                        'used': partition_usage.used,
-                        'free': partition_usage.free,
-                        'usage_percent': (partition_usage.used / partition_usage.total) * 100 if partition_usage.total > 0 else 0
-                    })
-                except PermissionError:
+                    volumes.append((partition, psutil.disk_usage(partition.mountpoint)))
+                except OSError:
                     continue
-            
-            return disks
-        
+            return summarize_storage(volumes)
+
         return self._get_cached_or_update('disk', _get_disk_info)
     
     def get_system_load(self):
