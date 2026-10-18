@@ -261,6 +261,33 @@ class RenderMqparTests(unittest.TestCase):
                 str((tmp_path / "results" / "maxquant" / "mqpar" / "tmp").resolve()),
             )
 
+    def test_shipped_template_sends_maxquant_tables_to_the_expected_txt_folder(self):
+        # MaxQuant 2.8 ignores fixedCombinedFolder; customTxtFolder is the
+        # only setting that still decides where proteinGroups.txt and the
+        # other tables are written.
+        module = load_render_mqpar_module()
+        shipped_template = Path(__file__).resolve().parents[2] / "workflow" / "templates" / "mqpar.template.xml"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            input_path = tmp_path / "S1_F1.RAW"
+            input_path.write_text("raw1", encoding="utf-8")
+            samples_path = self.write_samples_tsv(tmp_path, [("S1_F1", str(input_path), "S1", "1")])
+            output_xml = tmp_path / "maxquant" / "batch" / "mqpar.xml"
+
+            module.render_mqpar(
+                samples_path=samples_path,
+                config_path=FIXTURE_DIR / "test_config.yaml",
+                template_path=shipped_template,
+                mzml_dir=Path("results/mzml"),
+                output_path=output_xml,
+            )
+
+            root = ET.parse(output_xml).getroot()
+            self.assertEqual(
+                root.findtext(".//customTxtFolder"),
+                str((tmp_path / "maxquant" / "batch" / "combined" / "txt").resolve()),
+            )
+
     def test_render_mqpar_preserves_scalar_types_from_template(self):
         module = load_render_mqpar_module()
         with tempfile.TemporaryDirectory() as tmpdir:

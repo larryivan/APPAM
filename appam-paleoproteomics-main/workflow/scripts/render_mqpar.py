@@ -292,6 +292,12 @@ def render_mqpar(
     temp_folder = str(run_dir / "tmp")
     _replace_text(root, ".//fixedSearchFolder", fixed_search_folder)
     _replace_any_text(root, [".//fixedCombinedFolder", ".//combinedFolder"], fixed_combined_folder)
+    # MaxQuant 2.8 no longer reads fixedCombinedFolder: it writes "combined"
+    # next to the first input file and only customTxtFolder still moves the
+    # result tables. Set it so the tables land where the workflow expects them.
+    custom_txt_folder = root.find(".//customTxtFolder")
+    if custom_txt_folder is not None:
+        custom_txt_folder.text = str(Path(fixed_combined_folder) / "txt")
     _replace_text(root, ".//tempFolder", temp_folder)
     _replace_text(
         root,
