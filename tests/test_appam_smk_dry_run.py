@@ -20,6 +20,23 @@ class AppamSmkDryRunTests(unittest.TestCase):
         self.assertGreaterEqual(annotation.count('No MAG FASTA files found'), 4)
         self.assertIn('No Prokka protein FASTA files found', annotation)
 
+    def test_script_directives_have_no_future_imports(self):
+        # Snakemake prepends a preamble to every `script:` file before running
+        # it, so a `from __future__` import is no longer the first statement and
+        # the script dies with a SyntaxError. Dry runs never execute scripts, so
+        # only this check catches it; it once broke megahit and bowtie2_align on
+        # every real run.
+        import re
+
+        rules_dir = WORKFLOW_ROOT / 'workflow' / 'rules'
+        offenders = []
+        for rule_file in sorted(rules_dir.glob('*.smk')):
+            for script in re.findall(r'script:\s*\n?\s*"([^"]+)"', rule_file.read_text(encoding='utf-8')):
+                path = (rules_dir / script).resolve()
+                if re.search(r'^\s*from __future__ import', path.read_text(encoding='utf-8'), re.M):
+                    offenders.append(f'{rule_file.name} -> {path.name}')
+        self.assertEqual(offenders, [], 'script: files must not use __future__ imports')
+
     @unittest.skipUnless(shutil.which('snakemake'), 'snakemake is not installed')
     def test_core_and_experimental_dags(self):
         with tempfile.TemporaryDirectory() as tmpdir:
