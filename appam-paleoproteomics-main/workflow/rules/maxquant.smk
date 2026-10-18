@@ -41,9 +41,15 @@ rule run_maxquant_batch:
         r"""
         mkdir -p "$(dirname {log:q})"
         (cd {params.run_dir:q} && {params.dotnet_bin:q} {params.maxquant_cmd_dll:q} mqpar.xml) > {log:q} 2>&1
-        test -s {output.protein_groups:q}
-        test -s {output.peptides:q}
-        test -s {output.evidence:q}
+        # MaxQuant exits cleanly but skips its result tables when nothing passes
+        # FDR, which otherwise surfaces only as a bare failed test.
+        for table in {output.protein_groups:q} {output.peptides:q} {output.evidence:q}; do
+            if [ ! -s "$table" ]; then
+                echo "MaxQuant finished without writing $(basename "$table"): no peptide passed the FDR threshold." >> {log:q}
+                echo "Check that the FASTA matches the sample and that the enzyme mode and modifications suit it." >> {log:q}
+                exit 1
+            fi
+        done
         """
 
 
@@ -109,9 +115,15 @@ rule run_maxquant_sample:
         r"""
         mkdir -p "$(dirname {log:q})"
         (cd {params.run_dir:q} && {params.dotnet_bin:q} {params.maxquant_cmd_dll:q} mqpar.xml) > {log:q} 2>&1
-        test -s {output.protein_groups:q}
-        test -s {output.peptides:q}
-        test -s {output.evidence:q}
+        # MaxQuant exits cleanly but skips its result tables when nothing passes
+        # FDR, which otherwise surfaces only as a bare failed test.
+        for table in {output.protein_groups:q} {output.peptides:q} {output.evidence:q}; do
+            if [ ! -s "$table" ]; then
+                echo "MaxQuant finished without writing $(basename "$table"): no peptide passed the FDR threshold." >> {log:q}
+                echo "Check that the FASTA matches the sample and that the enzyme mode and modifications suit it." >> {log:q}
+                exit 1
+            fi
+        done
         """
 
 

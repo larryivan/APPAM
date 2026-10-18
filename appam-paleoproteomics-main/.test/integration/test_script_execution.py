@@ -12,6 +12,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 import unittest
@@ -33,26 +34,68 @@ class ScriptDirectiveTests(unittest.TestCase):
         self.assertEqual(offenders, [], "script: files must not use __future__ imports")
 
 
+def write_fixture(root, dotnet_bin="dotnet"):
+    """Sample table, FASTA, converted mzML and workflow config under `root`."""
+    results = root / "results"
+    maxquant = root / "maxquant"
+
+    raw = root / "raw" / "S1.RAW"
+    raw.parent.mkdir()
+    raw.write_bytes(b"thermo raw placeholder")
+    fasta = root / "reference.fasta"
+    fasta.write_text(">sp|P02452|CO1A1_HUMAN Collagen alpha-1(I) chain\nMFSFVDLRLLLLLAATALLTHG\n")
+    samples = root / "samples.tsv"
+    samples.write_text(f"sample_id\tinput_path\texperiment\tfraction\nS1\t{raw}\tbone\t1\n")
+
+    # Output of the conversion stage, which needs vendor software.
+    mzml = results / "mzml" / "S1.mzML"
+    mzml.parent.mkdir(parents=True)
+    mzml.write_text("<mzML/>\n")
+
+    config = root / "config.yaml"
+    config.write_text(
+        "\n".join([
+            f"sample_table: {samples}",
+            "mqpar_template: workflow/templates/mqpar.template.xml",
+            f"results_dir: {results}",
+            f"maxquant_output_dir: {maxquant}",
+            "maxquant_mode: batch",
+            "threads: 1",
+            f"fasta_path: {fasta}",
+            f"runtime_env: {Path('docker/environment.yml').resolve()}",
+            f"dotnet_bin: {dotnet_bin}",
+            "maxquant_cmd_dll: /path/to/MaxQuantCmd.dll",
+            "thermo_raw_file_parser: ThermoRawFileParser",
+            "timsconvert_bin: timsconvert",
+            "openms_fileconverter: FileConverter",
+        ]) + "\n"
+    )
+    return config, results, maxquant, mzml, fasta
+
+
+def run_snakemake(root, config, target, rules):
+    env = os.environ.copy()
+    env.update({"HOME": str(root), "XDG_CACHE_HOME": str(root / "cache"), "TMPDIR": str(root)})
+    return subprocess.run(
+        [
+            shutil.which("snakemake"), str(target),
+            "--snakefile", str(SNAKEFILE),
+            "--configfile", str(config),
+            "--cores", "1", "--latency-wait", "1",
+            "--allowed-rules", *rules,
+        ],
+        env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=False,
+    )
+
+
 @unittest.skipUnless(shutil.which("snakemake"), "snakemake is not installed")
 class ScriptExecutionTests(unittest.TestCase):
     def test_mqpar_rendering_and_qc_rules_execute(self):
         with tempfile.TemporaryDirectory(prefix="paleo-script-exec-") as tmpdir:
             root = Path(tmpdir)
-            results = root / "results"
-            maxquant = root / "maxquant"
+            config, results, maxquant, mzml, fasta = write_fixture(root)
 
-            raw = root / "raw" / "S1.RAW"
-            raw.parent.mkdir()
-            raw.write_bytes(b"thermo raw placeholder")
-            fasta = root / "reference.fasta"
-            fasta.write_text(">sp|P02452|CO1A1_HUMAN Collagen alpha-1(I) chain\nMFSFVDLRLLLLLAATALLTHG\n")
-            samples = root / "samples.tsv"
-            samples.write_text(f"sample_id\tinput_path\texperiment\tfraction\nS1\t{raw}\tbone\t1\n")
-
-            # Outputs of the stages this test does not run (conversion, MaxQuant).
-            mzml = results / "mzml" / "S1.mzML"
-            mzml.parent.mkdir(parents=True)
-            mzml.write_text("<mzML/>\n")
+            # Outputs of the MaxQuant search, which this test does not run.
             txt = maxquant / "batch" / "combined" / "txt"
             txt.mkdir(parents=True)
             (txt / "proteinGroups.txt").write_text(
@@ -69,49 +112,16 @@ class ScriptExecutionTests(unittest.TestCase):
                 "GEAGPQGPR\tUnmodified\t_GEAGPQGPR_\tS1\n"
             )
 
-            config = root / "config.yaml"
-            config.write_text(
-                "\n".join([
-                    f"sample_table: {samples}",
-                    "mqpar_template: workflow/templates/mqpar.template.xml",
-                    f"results_dir: {results}",
-                    f"maxquant_output_dir: {maxquant}",
-                    "maxquant_mode: batch",
-                    "threads: 1",
-                    f"fasta_path: {fasta}",
-                    f"runtime_env: {Path('docker/environment.yml').resolve()}",
-                    "dotnet_bin: dotnet",
-                    "maxquant_cmd_dll: /path/to/MaxQuantCmd.dll",
-                    "thermo_raw_file_parser: ThermoRawFileParser",
-                    "timsconvert_bin: timsconvert",
-                    "openms_fileconverter: FileConverter",
-                ]) + "\n"
-            )
-
-            env = os.environ.copy()
-            env.update({"HOME": str(root), "XDG_CACHE_HOME": str(root / "cache"), "TMPDIR": str(root)})
             qc_report = results / "reports" / "paleoproteomics-qc.json"
             mqpar = maxquant / "batch" / "mqpar.xml"
 
-            def snakemake(target, rules):
-                return subprocess.run(
-                    [
-                        shutil.which("snakemake"), str(target),
-                        "--snakefile", str(SNAKEFILE),
-                        "--configfile", str(config),
-                        "--cores", "1", "--latency-wait", "1",
-                        "--allowed-rules", *rules,
-                    ],
-                    env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=False,
-                )
-
             # Same order as a real run: render the parameter file, MaxQuant then
             # writes its tables (simulated by refreshing their timestamps), then QC.
-            rendered_run = snakemake(mqpar, ["render_mqpar_batch"])
+            rendered_run = run_snakemake(root, config, mqpar, ["render_mqpar_batch"])
             self.assertEqual(rendered_run.returncode, 0, rendered_run.stdout[-4000:])
             for table in txt.iterdir():
                 table.touch()
-            qc_run = snakemake(qc_report, ["paleoproteomics_qc_batch", "paleoproteomics_qc_report"])
+            qc_run = run_snakemake(root, config, qc_report, ["paleoproteomics_qc_batch", "paleoproteomics_qc_report"])
             self.assertEqual(qc_run.returncode, 0, qc_run.stdout[-4000:])
 
             rendered = mqpar.read_text(encoding="utf-8")
@@ -126,6 +136,24 @@ class ScriptExecutionTests(unittest.TestCase):
             self.assertEqual(report["counts"]["protein_reverse"], 1)
             self.assertEqual(report["counts"]["deamidated_evidence"], 1)
             self.assertEqual(report["evidence_by_raw_file"], {"S1": 2})
+
+    def test_search_without_identifications_says_so(self):
+        # MaxQuant exits 0 but writes no tables when nothing passes FDR; the
+        # log has to say why instead of only failing a test command.
+        with tempfile.TemporaryDirectory(prefix="paleo-no-ids-") as tmpdir:
+            root = Path(tmpdir)
+            dotnet = root / "dotnet"
+            dotnet.write_text("#!/bin/sh\necho 'Prepare protein assembly'\nexit 0\n")
+            dotnet.chmod(dotnet.stat().st_mode | stat.S_IEXEC)
+            config, results, maxquant, _, _ = write_fixture(root, dotnet_bin=dotnet)
+
+            evidence = maxquant / "batch" / "combined" / "txt" / "evidence.txt"
+            run = run_snakemake(root, config, evidence, ["render_mqpar_batch", "run_maxquant_batch"])
+
+            self.assertNotEqual(run.returncode, 0)
+            log = (results / "logs" / "run_maxquant" / "batch.log").read_text(encoding="utf-8")
+            self.assertIn("Prepare protein assembly", log)
+            self.assertIn("no peptide passed the FDR threshold", log)
 
 
 if __name__ == "__main__":
