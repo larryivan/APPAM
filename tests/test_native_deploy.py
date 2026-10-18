@@ -137,7 +137,10 @@ class NativeDeploymentTests(unittest.TestCase):
         self.assertIn('run -n timsconvert python', installer)
         self.assertIn('patch_pytdfsdk.py', installer)
         self.assertIn('appam-timsconvert', installer)
-        self.assertIn('unset LD_LIBRARY_PATH', installer)
+        # libEGL ships with the environment, which is the only library path.
+        self.assertIn('create -y -n timsconvert -c conda-forge python=3.11 pip libegl', installer)
+        self.assertIn('export LD_LIBRARY_PATH="${TIMSCONVERT_PREFIX}/lib"', installer)
+        self.assertNotIn('paleoproteomics/lib', installer)
         self.assertIn('unset QT_PLUGIN_PATH', installer)
         self.assertIn('ln -sfn appam-timsconvert', installer)
 

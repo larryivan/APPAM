@@ -116,12 +116,12 @@ if [[ "${WITH_PALEO}" == true ]]; then
 
   if environment_exists timsconvert; then
     if [[ "${UPDATE}" == true ]]; then
-      "${RUNNER}" install -y -n timsconvert -c conda-forge python=3.11 pip
+      "${RUNNER}" install -y -n timsconvert -c conda-forge python=3.11 pip libegl
     else
       printf '[skip] environment exists: timsconvert\n'
     fi
   else
-    "${RUNNER}" create -y -n timsconvert -c conda-forge python=3.11 pip
+    "${RUNNER}" create -y -n timsconvert -c conda-forge python=3.11 pip libegl
   fi
   "${RUNNER}" run -n timsconvert python -m pip install \
     --requirement "${REPO_ROOT}/appam-paleoproteomics-main/docker/requirements-pypi.txt"
@@ -137,7 +137,11 @@ if [[ "${WITH_PALEO}" == true ]]; then
   cat >"${HOME}/.local/bin/appam-timsconvert" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-unset LD_LIBRARY_PATH
+# PySide6 loads libEGL even for command-line conversion. Hosts without the
+# system libegl1 package (LXC containers, minimal servers) take it from the
+# environment itself; nothing outside it joins the library path, so the
+# OpenMS environment's Qt cannot leak in.
+export LD_LIBRARY_PATH="${TIMSCONVERT_PREFIX}/lib"
 unset QT_PLUGIN_PATH
 unset QML2_IMPORT_PATH
 export PYTHONNOUSERSITE=1
