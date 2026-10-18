@@ -321,6 +321,31 @@ class AuthPermissionApiTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'require'):
             validate_remote_url('ftp://example.com/data.fastq.gz')
 
+    def test_remote_download_pins_the_addresses_that_passed_validation(self):
+        import socket
+
+        from app.services import url_security
+
+        pinned = '203.0.113.10'
+        rebound = ('127.0.0.1', 0, 0, '', ('127.0.0.1', 443))
+
+        # Outside a pin, resolution is untouched.
+        with mock.patch.object(url_security, '_real_getaddrinfo', return_value=[rebound]):
+            self.assertEqual(socket.getaddrinfo('host.example', 443), [rebound])
+
+            # Inside a pin for the same host, an address that did not pass
+            # validation is refused instead of being connected to.
+            with url_security.pinned_addresses('host.example', {pinned}):
+                with self.assertRaises(url_security.PinnedAddressError):
+                    socket.getaddrinfo('host.example', 443)
+
+                # A different host in the same thread is unaffected.
+                self.assertEqual(socket.getaddrinfo('other.example', 443), [rebound])
+
+        # The pin is released once the block exits.
+        with mock.patch.object(url_security, '_real_getaddrinfo', return_value=[rebound]):
+            self.assertEqual(socket.getaddrinfo('host.example', 443), [rebound])
+
     def test_chunk_upload_validates_bounds_and_reassembles_streams(self):
         self.register(self.client, 'uploadadmin')
         project = self.create_project(self.client, name='Chunk upload')

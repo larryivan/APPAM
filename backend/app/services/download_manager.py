@@ -10,7 +10,13 @@ from urllib.parse import urlparse, unquote
 from concurrent.futures import ThreadPoolExecutor
 import ftplib
 from ..paths import resolve_project_path as resolve_project_workspace_path
-from .url_security import max_remote_download_bytes, safe_request, validate_remote_url
+from .url_security import (
+    max_remote_download_bytes,
+    pinned_addresses,
+    resolve_and_validate,
+    safe_request,
+    validate_remote_url,
+)
 from .download_store import (
     delete_download_task,
     delete_terminal_download_tasks,
@@ -240,15 +246,20 @@ def extract_filename_from_url(url):
 def get_ftp_file_info(url):
     """获取FTP文件信息"""
     try:
+        _, hostname, addresses = resolve_and_validate(url)
         parsed = urlparse(url)
         host = parsed.hostname
         port = parsed.port or 21
         path = parsed.path
         username = parsed.username or 'anonymous'
         password = parsed.password or 'anonymous@'
-        
+
         ftp = ftplib.FTP()
-        ftp.connect(host, port, timeout=30)
+        # Never follow an IPv4 address advertised in a 227 PASV reply; reuse the
+        # validated control-connection peer for the data channel instead.
+        ftp.trust_server_pasv_ipv4_address = False
+        with pinned_addresses(hostname, addresses):
+            ftp.connect(host, port, timeout=30)
         ftp.login(username, password)
         
         # 获取文件大小
@@ -613,15 +624,20 @@ def download_worker(task):
 def single_thread_ftp_download(task):
     """单线程FTP下载"""
     try:
+        # Re-validate on every attempt: a restored or resumed task must not
+        # bypass a host allowlist that changed after it was created.
+        _, hostname, addresses = resolve_and_validate(task.url)
         parsed = urlparse(task.url)
         host = parsed.hostname
         port = parsed.port or 21
         path = parsed.path
         username = parsed.username or 'anonymous'
         password = parsed.password or 'anonymous@'
-        
+
         ftp = ftplib.FTP()
-        ftp.connect(host, port, timeout=60)
+        ftp.trust_server_pasv_ipv4_address = False
+        with pinned_addresses(hostname, addresses):
+            ftp.connect(host, port, timeout=60)
         ftp.login(username, password)
         ftp.set_pasv(True)
         
