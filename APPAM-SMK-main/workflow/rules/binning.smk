@@ -26,10 +26,15 @@ rule metawrap_binning:
     shell:
         r"""
         mkdir -p {params.outdir:q} "$(dirname {log:q})"
+        # metaWRAP binning only accepts uncompressed *.fastq reads. Decompress
+        # a working copy and remove it however the step ends.
+        reads_dir=$(mktemp -d {params.outdir:q}/reads.XXXXXX)
+        trap 'rm -rf "$reads_dir"' EXIT
+        gzip -dc {input.all_se:q} > "$reads_dir/{wildcards.sample}.fastq"
         metawrap binning -o {params.outdir:q} -t {threads} \
             --metabat2 --maxbin2 --concoct  \
             -a {input.contigs:q} \
-            --single-end {input.all_se:q} &> {log:q}
+            --single-end "$reads_dir/{wildcards.sample}.fastq" &> {log:q}
         shopt -s nullglob
         selected_bins=({params.selected_dir:q}/*.fa)
         if [ "${{#selected_bins[@]}}" -eq 0 ]; then

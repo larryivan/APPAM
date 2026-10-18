@@ -68,6 +68,20 @@ STUBS = {
         else:
             sys.exit(f'samtools stub: unsupported {command}')
     ''',
+    'metawrap': '''
+        args = sys.argv[1:]
+        if args[0] != 'binning':
+            sys.exit(f'metawrap stub: unsupported module {args[0]}')
+        reads = args[args.index('--single-end') + 1:]
+        # metaWRAP binning rejects anything but existing, uncompressed *.fastq files.
+        if not reads or not all(r.endswith('.fastq') and Path(r).is_file() for r in reads):
+            sys.exit('Unable to find read files in format *.fastq (for single-end or interleaved reads)')
+        out = Path(args[args.index('-o') + 1])
+        first_contig = '>' + Path(args[args.index('-a') + 1]).read_text().split('>')[1]
+        for binner in ('metabat2', 'maxbin2', 'concoct'):
+            (out / f'{binner}_bins').mkdir(parents=True, exist_ok=True)
+            (out / f'{binner}_bins' / 'bin.1.fa').write_text(first_contig)
+    ''',
     'seqkit': '''
         args = sys.argv[1:]
         invert = '-v' in args
@@ -85,7 +99,7 @@ STUBS = {
 
 RULES = [
     'megahit', 'bowtie2_index', 'bowtie2_align', 'index_bam',
-    'count_read_lengths', 'split_contigs_by_pydamage',
+    'count_read_lengths', 'split_contigs_by_pydamage', 'metawrap_binning',
     'mag_summary_per_sample', 'mag_summary',
 ]
 
@@ -126,7 +140,7 @@ class AppamSmkScriptExecutionTests(unittest.TestCase):
                 f'S1\t{raw / "S1_R1.fastq.gz"}\t{raw / "S1_R2.fastq.gz"}\n'
             )
 
-            # Outputs of rules this test does not run (preprocessing, PyDamage, binning).
+            # Outputs of rules this test does not run (preprocessing, PyDamage).
             preprocess = results / 'preprocess'
             write_fastq(preprocess / 'S1.paired_R1.fastq.gz', ['ACGTACGTAC', 'GGCCGGCC'])
             write_fastq(preprocess / 'S1.paired_R2.fastq.gz', ['GTACGTACGT', 'GGCCGGCC'])
@@ -135,9 +149,6 @@ class AppamSmkScriptExecutionTests(unittest.TestCase):
             damage = results / 'pydamage' / 'S1' / 'pydamage_results.csv'
             damage.parent.mkdir(parents=True)
             damage.write_text('reference,qvalue,predicted_accuracy\nk141_1,0.001,0.93\nk141_2,0.6,0.12\n')
-            bins = results / 'metawrap' / 'binning' / 'S1' / 'metabat2_bins'
-            bins.mkdir(parents=True)
-            (bins / 'bin.1.fa').write_text('>k141_1\n' + 'ACGT' * 150 + '\n')
 
             config = yaml.safe_load((WORKFLOW_ROOT / 'config' / 'config.yaml').read_text(encoding='utf-8'))
             config['samples_file'] = str(samples)
@@ -200,6 +211,11 @@ class AppamSmkScriptExecutionTests(unittest.TestCase):
             ancient = (results / 'pydamage' / 'S1' / 'ancient.contigs.fa').read_text()
             self.assertIn('>k141_1', ancient)
             self.assertNotIn('>k141_2', ancient)
+
+            # metawrap_binning: reads handed over uncompressed, working copy removed
+            binning = results / 'metawrap' / 'binning' / 'S1'
+            self.assertTrue((binning / 'metabat2_bins' / 'bin.1.fa').is_file())
+            self.assertEqual(list(binning.glob('reads.*')), [])
 
             # mag_summary: one row per bin, sample-qualified
             summary = (results / 'summaries' / 'MAG_summary.tsv').read_text().splitlines()
