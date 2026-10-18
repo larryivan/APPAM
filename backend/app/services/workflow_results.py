@@ -188,12 +188,24 @@ def _metrics_from_summary(summary: dict) -> list[dict]:
     return metrics
 
 
+def _mag_id(report: Path, bin_name) -> str | None:
+    """Qualify a bin with the sample it came from.
+
+    Binners number bins per sample (bin.1, bin.2, ...), so a bare bin name
+    collides across samples. Report files live in one directory per sample,
+    which is where the sample identity comes from.
+    """
+    if bin_name in (None, ''):
+        return None
+    return f'{report.parent.name}/{str(bin_name).strip().rstrip(".")}'
+
+
 def build_appam_smk_metrics(results_dir: Path, summary: dict | None = None) -> list[dict]:
     metrics = _metrics_from_summary(summary or build_appam_smk_summary(results_dir))
 
     for report in sorted(results_dir.glob('checkm2/*/quality_report.tsv')):
         for row in _read_tsv_rows(report):
-            sample_id = _first(row, 'Name', 'name', 'Bin Id', 'bin_id', 'genome')
+            sample_id = _mag_id(report, _first(row, 'Name', 'name', 'Bin Id', 'bin_id', 'genome'))
             for column, metric_name, unit in (
                 ('Completeness', 'completeness', '%'),
                 ('Contamination', 'contamination', '%'),
@@ -205,7 +217,7 @@ def build_appam_smk_metrics(results_dir: Path, summary: dict | None = None) -> l
 
     for report in sorted(results_dir.glob('gunc/*/GUNC.progenomes_2.1.maxCSS_level.tsv')):
         for row in _read_tsv_rows(report):
-            sample_id = _first(row, 'genome', 'genome_name', 'name')
+            sample_id = _mag_id(report, _first(row, 'genome', 'genome_name', 'name'))
             pass_text = _first(row, 'pass.GUNC', 'pass_gunc', 'clade_separation_score', 'CSS')
             metrics.append(_metric('gunc', 'status', text=str(pass_text), sample_id=sample_id, payload=row))
             css = _numeric(_first(row, 'clade_separation_score', 'CSS'))
@@ -214,7 +226,7 @@ def build_appam_smk_metrics(results_dir: Path, summary: dict | None = None) -> l
 
     for report in sorted(results_dir.glob('gtdbtk/*/*.summary.tsv')):
         for row in _read_tsv_rows(report):
-            sample_id = _first(row, 'user_genome', 'genome', 'name')
+            sample_id = _mag_id(report, _first(row, 'user_genome', 'genome', 'name'))
             classification = _first(row, 'classification', 'fastani_reference')
             if classification:
                 metrics.append(_metric('gtdbtk', 'classification', text=str(classification), sample_id=sample_id, payload=row))
