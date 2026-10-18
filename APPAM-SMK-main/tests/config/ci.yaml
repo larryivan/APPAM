@@ -4,15 +4,18 @@ paths:
   results_dir: /tmp/appam-smk-ci/results
   logs_dir: /tmp/appam-smk-ci/logs
   benchmark_dir: /tmp/appam-smk-ci/benchmarks
+# Keep the enabled modules identical to the shipped defaults in
+# config/config.yaml. Linting a reduced DAG would leave the configuration every
+# user actually runs unchecked.
 params:
   preprocess_method: fastp
   use_ancient_contigs: false
   enable_bin_refinement: false
   enable_checkm1: false
-  enable_checkm2: false
-  enable_gunc: false
-  enable_gtdbtk: false
-  enable_prokka: false
+  enable_checkm2: true
+  enable_gunc: true
+  enable_gtdbtk: true
+  enable_prokka: true
   enable_eggnog: false
   enable_abricate: false
   enable_rgi: false

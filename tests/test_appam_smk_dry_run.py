@@ -69,6 +69,13 @@ class AppamSmkDryRunTests(unittest.TestCase):
                 'metawrap_env': str(environment_root / 'metawrap.yml'),
                 'pydamage_env': str(environment_root / 'ancient_dna.yml'),
                 'checkm1_env': str(environment_root / 'checkm.yml'),
+                'checkm2_env': str(environment_root / 'checkm2.yml'),
+                'gunc_env': str(environment_root / 'binning.yml'),
+                'gtdbtk_env': str(environment_root / 'gtdbtk.yml'),
+                'prokka_env': str(environment_root / 'prokka.yml'),
+                'freebayes_env': str(environment_root / 'freebayes.yml'),
+                'bcftools_env': str(environment_root / 'bcftools.yml'),
+                'reporting_env': str(environment_root / 'reporting.yml'),
             })
             base['params'].update({
                 'enable_checkm2': False,
@@ -125,9 +132,67 @@ class AppamSmkDryRunTests(unittest.TestCase):
                     if refinement:
                         self.assertIn('metawrap_bin_refinement', result.stdout)
 
+            def dry_run(config, filename):
+                config_path = root / filename
+                config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding='utf-8')
+                return subprocess.run(
+                    [
+                        'snakemake',
+                        '--snakefile',
+                        'workflow/Snakefile',
+                        '--configfile',
+                        str(config_path),
+                        '--cores',
+                        '1',
+                        '--dry-run',
+                    ],
+                    cwd=WORKFLOW_ROOT,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    check=False,
+                )
+
+            # The modules that config/config.yaml ships as enabled. Without this
+            # scenario the DAG every user actually runs is never built, because
+            # the scenarios above disable CheckM2, GUNC and GTDB-Tk.
+            shipped_defaults = yaml.safe_load(
+                (WORKFLOW_ROOT / 'config' / 'config.yaml').read_text(encoding='utf-8')
+            )['params']
+            default_modules = {
+                key: value for key, value in shipped_defaults.items() if key.startswith('enable_')
+            }
+            self.assertTrue(
+                default_modules['enable_checkm2']
+                and default_modules['enable_gunc']
+                and default_modules['enable_gtdbtk']
+                and default_modules['enable_prokka'],
+                'shipped defaults changed; update this scenario to match config/config.yaml',
+            )
+
+            defaults_config = dict(base)
+            defaults_config['params'] = {**base['params'], **default_modules}
+            defaults_result = dry_run(defaults_config, 'shipped-defaults.yaml')
+            self.assertEqual(defaults_result.returncode, 0, defaults_result.stdout)
+            for rule_name in (
+                'checkm2',
+                'gunc',
+                'gtdbtk_classify',
+                'prokka_annotation',
+                'mag_summary_per_sample',
+                'plot_checkm2_quality',
+                'plot_gunc_quality',
+                'plot_gtdb_ani',
+                'plot_taxonomy_rose',
+                'compute_taxonomy_alpha_diversity',
+                'visualization_report',
+            ):
+                self.assertIn(rule_name, defaults_result.stdout)
+
             annotation_config = dict(base)
             annotation_config['params'] = dict(base['params'])
             annotation_config['params'].update({
+                **default_modules,
                 'enable_prokka': True,
                 'enable_eggnog': True,
                 'enable_abricate': True,
@@ -135,26 +200,10 @@ class AppamSmkDryRunTests(unittest.TestCase):
                 'enable_antismash': True,
                 'enable_variants': True,
             })
-            annotation_path = root / 'full-annotation.yaml'
-            annotation_path.write_text(yaml.safe_dump(annotation_config, sort_keys=False), encoding='utf-8')
-            annotation_result = subprocess.run(
-                [
-                    'snakemake',
-                    '--snakefile',
-                    'workflow/Snakefile',
-                    '--configfile',
-                    str(annotation_path),
-                    '--cores',
-                    '1',
-                    '--dry-run',
-                ],
-                cwd=WORKFLOW_ROOT,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                check=False,
-            )
+            annotation_result = dry_run(annotation_config, 'full-annotation.yaml')
             self.assertEqual(annotation_result.returncode, 0, annotation_result.stdout)
+            self.assertIn('eggnog_annotation', annotation_result.stdout)
+            self.assertIn('abricate_annotation', annotation_result.stdout)
             self.assertIn('rgi_annotation', annotation_result.stdout)
             self.assertIn('antismash_annotation', annotation_result.stdout)
             self.assertIn('freebayes_variants', annotation_result.stdout)
