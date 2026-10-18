@@ -36,6 +36,17 @@ rule metawrap_binning:
             -a {input.contigs:q} \
             --single-end "$reads_dir/{wildcards.sample}.fastq" &> {log:q}
         shopt -s nullglob
+        # metaBAT2 also leaves bin.unbinned.fa, bin.tooShort.fa and bin.lowDepth.fa
+        # in its bin directory. They are not genomes: keep them beside the bins
+        # so CheckM2, GUNC, GTDB-Tk, Prokka and the MAG summary see only bins.
+        for bin_dir in {output.metabat2:q} {output.maxbin2:q} {output.concoct:q}; do
+            for fasta in "$bin_dir"/bin.*.fa; do
+                bin_id=$(basename "$fasta" .fa)
+                [[ "${{bin_id#bin.}}" =~ ^[0-9]+$ ]] && continue
+                mkdir -p "${{bin_dir%_bins}}_unbinned"
+                mv "$fasta" "${{bin_dir%_bins}}_unbinned/"
+            done
+        done
         selected_bins=({params.selected_dir:q}/*.fa)
         if [ "${{#selected_bins[@]}}" -eq 0 ]; then
             echo "Selected binner produced no FASTA bins: {params.selected_dir}" >> {log:q}

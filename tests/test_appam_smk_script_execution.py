@@ -81,6 +81,9 @@ STUBS = {
         for binner in ('metabat2', 'maxbin2', 'concoct'):
             (out / f'{binner}_bins').mkdir(parents=True, exist_ok=True)
             (out / f'{binner}_bins' / 'bin.1.fa').write_text(first_contig)
+        # Like metaBAT2, leave the non-genome leftovers in the bin directory.
+        (out / 'metabat2_bins' / 'bin.unbinned.fa').write_text(first_contig)
+        (out / 'metabat2_bins' / 'bin.lowDepth.fa').write_text('')
     ''',
     'seqkit': '''
         args = sys.argv[1:]
@@ -216,6 +219,10 @@ class AppamSmkScriptExecutionTests(unittest.TestCase):
             binning = results / 'metawrap' / 'binning' / 'S1'
             self.assertTrue((binning / 'metabat2_bins' / 'bin.1.fa').is_file())
             self.assertEqual(list(binning.glob('reads.*')), [])
+            # metaBAT2's unbinned/lowDepth files are kept, but not as bins
+            self.assertEqual(sorted(p.name for p in (binning / 'metabat2_bins').glob('*.fa')), ['bin.1.fa'])
+            self.assertEqual(sorted(p.name for p in (binning / 'metabat2_unbinned').glob('*.fa')),
+                             ['bin.lowDepth.fa', 'bin.unbinned.fa'])
 
             # mag_summary: one row per bin, sample-qualified
             summary = (results / 'summaries' / 'MAG_summary.tsv').read_text().splitlines()
