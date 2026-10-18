@@ -167,6 +167,40 @@ class AuthPermissionApiTests(unittest.TestCase):
         self.assertEqual(invalid.status_code, 400)
         self.assertEqual(invalid.get_json()['error'], 'Unsupported analysis workflow')
 
+    def test_project_report_is_served_inline_with_restricted_content_policy(self):
+        self.register(self.client, 'reportowner')
+        project = self.create_project(self.client, name='Report viewer')
+        project_dir = self.projects_dir / project['id']
+        report_dir = project_dir / 'results'
+        report_dir.mkdir(parents=True, exist_ok=True)
+        (report_dir / 'report.html').write_text(
+            '<!doctype html><title>APPAM report</title><script>document.body.dataset.ready="1"</script>',
+            encoding='utf-8',
+        )
+        (report_dir / 'summary.txt').write_text('not a report', encoding='utf-8')
+
+        response = self.client.get(
+            f"/api/filemanager/{project['id']}/report?path=results%2Freport.html"
+        )
+        self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
+        self.assertEqual(response.mimetype, 'text/html')
+        self.assertTrue(response.headers['Content-Disposition'].startswith('inline;'))
+        csp = response.headers['Content-Security-Policy']
+        self.assertIn("script-src 'unsafe-inline'", csp)
+        # The report isolates itself however it is opened: a new tab or a direct
+        # link must not run user-derived HTML at APPAM's own origin.
+        self.assertTrue(csp.startswith('sandbox allow-scripts;'), csp)
+        self.assertNotIn('allow-same-origin', csp)
+        self.assertIn("frame-ancestors 'self'", csp)
+        self.assertIn("connect-src 'none'", csp)
+        self.assertEqual(response.headers['Cache-Control'], 'private, no-store')
+        response.close()
+
+        rejected = self.client.get(
+            f"/api/filemanager/{project['id']}/report?path=results%2Fsummary.txt"
+        )
+        self.assertEqual(rejected.status_code, 400)
+
     def test_dry_run_cannot_bypass_queue_limits(self):
         self.register(self.client, 'queueadmin')
         project = self.create_project(self.client, name='Queue limits')

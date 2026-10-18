@@ -1,4 +1,5 @@
 import fcntl
+import hashlib
 import uuid
 import os
 import shutil
@@ -32,6 +33,10 @@ TEXT_EXTENSIONS = {
 
 
 class UploadTooLargeError(ValueError):
+    pass
+
+
+class PlotTableTooLargeError(ValueError):
     pass
 
 LANG_MAP = {
@@ -413,6 +418,56 @@ def preview_file_head(project_id, path, lines=1000):
             'lines_count': 0,
             'preview_type': 'error'
         }
+
+
+def read_plot_table(project_id, path):
+    """Return a complete, bounded table for the browser plot studio."""
+    abs_path = get_project_path(project_id, path)
+    if not os.path.exists(abs_path) or os.path.isdir(abs_path):
+        raise FileNotFoundError("Table not found")
+
+    allowed_extensions = {'.csv', '.tsv', '.tab', '.txt'}
+    extension = os.path.splitext(abs_path)[1].lower()
+    if extension not in allowed_extensions:
+        raise ValueError('Plot data must be a CSV or tab-separated table')
+
+    try:
+        max_bytes = max(1, int(os.getenv('APPAM_MAX_PLOT_TABLE_BYTES', str(8 * 1024 * 1024))))
+        max_rows = max(2, int(os.getenv('APPAM_MAX_PLOT_TABLE_ROWS', '50000')))
+    except ValueError:
+        max_bytes = 8 * 1024 * 1024
+        max_rows = 50000
+
+    file_size = os.path.getsize(abs_path)
+    if file_size > max_bytes:
+        raise PlotTableTooLargeError(
+            f'This table is larger than the {max_bytes // (1024 * 1024)} MB plotting limit. '
+            'Create a filtered summary table before plotting.'
+        )
+
+    with open(abs_path, 'rb') as handle:
+        raw_content = handle.read(max_bytes + 1)
+    if len(raw_content) > max_bytes:
+        raise PlotTableTooLargeError('This table exceeds the plotting limit. Create a filtered summary table first.')
+    try:
+        content = raw_content.decode('utf-8-sig')
+    except UnicodeDecodeError as exc:
+        raise ValueError('Plot data must be UTF-8 encoded text') from exc
+
+    line_count = content.count('\n') + (1 if content and not content.endswith('\n') else 0)
+    data_rows = max(0, line_count - 1)
+    if data_rows > max_rows:
+        raise PlotTableTooLargeError(
+            f'This table has more than {max_rows:,} rows. Create a filtered summary table before plotting.'
+        )
+
+    return {
+        'content': content,
+        'file_size': file_size,
+        'line_count': line_count,
+        'sha256': hashlib.sha256(raw_content).hexdigest(),
+        'complete': True,
+    }
 
 def preview_file_sample(project_id, path, samples=100):
     """Preview sample lines from a file"""

@@ -167,6 +167,47 @@ def serve_image(project_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+
+@filemanager_bp.route('/<project_id>/report', methods=['GET'])
+def serve_report(project_id):
+    """Serve a project HTML report inline for the sandboxed report viewer."""
+    try:
+        path = request.args.get('path')
+        if not path:
+            return jsonify({'error': 'Missing path'}), 400
+
+        abs_path = services.get_project_path(project_id, path)
+        if not os.path.isfile(abs_path):
+            return jsonify({'error': 'Report not found'}), 404
+        if os.path.splitext(abs_path)[1].lower() not in {'.html', '.htm'}:
+            return jsonify({'error': 'Not an HTML report'}), 400
+
+        response = send_from_directory(
+            os.path.dirname(abs_path),
+            os.path.basename(abs_path),
+            mimetype='text/html',
+            as_attachment=False,
+            conditional=True,
+        )
+        response.headers['Cache-Control'] = 'private, no-store'
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        # Reports are HTML assembled from user-supplied data. `sandbox` gives the
+        # document an opaque origin however it is opened (embedded viewer, new
+        # tab, direct link), so its inline scripts can never act as the signed-in
+        # user. `frame-ancestors` lets only APPAM itself embed it.
+        response.headers['Content-Security-Policy'] = (
+            "sandbox allow-scripts; "
+            "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; "
+            "script-src 'unsafe-inline'; font-src data:; connect-src 'none'; "
+            "media-src data:; frame-src 'none'; base-uri 'none'; form-action 'none'; "
+            "frame-ancestors 'self'"
+        )
+        return response
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @filemanager_bp.route('/<project_id>/download', methods=['GET'])
 def download_file(project_id):
     try:
@@ -254,6 +295,24 @@ def preview_file_head(project_id):
         lines = min(max(int(request.args.get('lines', 1000)), 1), 5000)
         result = services.preview_file_head(project_id, path, lines)
         return jsonify(result)
+    except FileNotFoundError as e:
+        return jsonify({'error': str(e)}), 404
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@filemanager_bp.route('/<project_id>/plot-table', methods=['GET'])
+def read_plot_table(project_id):
+    """Read a complete, safely bounded table for interactive plotting."""
+    try:
+        path = request.args.get('path')
+        if not path:
+            return jsonify({'error': 'Missing path'}), 400
+        return jsonify(services.read_plot_table(project_id, path))
+    except services.PlotTableTooLargeError as e:
+        return jsonify({'error': str(e)}), 413
     except FileNotFoundError as e:
         return jsonify({'error': str(e)}), 404
     except ValueError as e:
