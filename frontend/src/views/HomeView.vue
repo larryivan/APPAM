@@ -2,7 +2,7 @@
   <div class="home-view">
     <main class="home-main">
       <section class="home-intro" aria-labelledby="home-title">
-        <img class="home-logo" src="/assets/logo.svg" alt="">
+        <img class="home-logo" :src="logoUrl" alt="">
         <span class="home-eyebrow">Laboratory analysis platform</span>
         <h1 id="home-title">APPAM</h1>
         <p>
@@ -45,6 +45,9 @@ import { computed } from 'vue'
 import Icon from '../components/ui/Icon.vue'
 import { authState } from '../lib/auth.js'
 import { WORKFLOW_OPTIONS } from '../lib/workflowUi.js'
+import { withBase } from '../lib/basePath.js'
+
+const logoUrl = withBase('/assets/logo.svg')
 
 const workflows = WORKFLOW_OPTIONS
 const primaryRoute = computed(() => authState.user ? '/projects' : '/login')

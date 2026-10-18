@@ -385,6 +385,7 @@ import FilePreviewModal from '@/components/FilePreviewModal.vue'
 import DragDropUpload from '@/components/DragDropUpload.vue'
 import Icon from '@/components/ui/Icon.vue'
 import Modal from '@/components/ui/Modal.vue'
+import { withBase } from '@/lib/basePath.js'
 import { collectWorkflowFigures } from '@/lib/plotStudio.js'
 import {
   collectWorkflowReports,
@@ -894,7 +895,7 @@ function closeArtifactPreview() {
 function downloadProjectPath(path) {
   if (!path) return
   const anchor = document.createElement('a')
-  anchor.href = `/api/filemanager/${projectId.value}/download?path=${encodeURIComponent(path)}`
+  anchor.href = withBase(`/api/filemanager/${projectId.value}/download?path=${encodeURIComponent(path)}`)
   anchor.download = String(path).split('/').pop() || 'result'
   document.body.appendChild(anchor)
   anchor.click()

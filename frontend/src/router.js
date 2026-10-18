@@ -126,7 +126,7 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes,
   scrollBehavior(to, from, savedPosition) {
     if (savedPosition) return savedPosition
@@ -143,7 +143,7 @@ router.onError((error, to) => {
   const message = String(error?.message || '')
   const isStaleChunk = /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(message)
   if (isStaleChunk && to?.fullPath) {
-    window.location.assign(to.fullPath)
+    window.location.assign(router.resolve(to).href)
     return
   }
   console.error('Navigation failed:', error)

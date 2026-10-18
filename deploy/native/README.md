@@ -40,6 +40,28 @@ mamba run -n appam-web pnpm install --frozen-lockfile
 mamba run -n appam-web pnpm build
 ```
 
+### Serving under a URL prefix
+
+A gateway can publish APPAM under a path such as
+`https://gateway.example/proxy/relative/10.0.0.5/25078/` and strip that prefix
+before forwarding. Render the environment with `--public-base-path` and the
+gateway origin, then build the UI with the environment loaded so the prefix is
+baked into its URLs:
+
+```bash
+./deploy/native/render-env.sh ... \
+  --web-origin "https://gateway.example" \
+  --public-base-path /proxy/relative/10.0.0.5/25078
+set -a; . deploy/native/appam.env; set +a
+cd frontend && mamba run -n appam-web pnpm build
+```
+
+The session cookie is then scoped to the prefix, which matters on a gateway
+host shared with other services. Every service on that host still shares one
+browser origin, so prefer a dedicated domain when one is available. Enable the
+commented prefix block in `nginx-appam.conf.example` to keep direct access
+working.
+
 ## 4. Start and verify
 
 Foreground smoke test:

@@ -380,6 +380,7 @@
 
 <script setup>
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { withBase } from '@/lib/basePath.js'
 import { useOverlay } from '@/lib/overlay.js'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -816,11 +817,11 @@ async function loadGallery(force = false) {
 }
 
 function imageUrl(path) {
-  return `/api/filemanager/${projectId.value}/image?path=${encodeURIComponent(path)}`
+  return withBase(`/api/filemanager/${projectId.value}/image?path=${encodeURIComponent(path)}`)
 }
 
 function downloadUrl(path) {
-  return `/api/filemanager/${projectId.value}/download?path=${encodeURIComponent(path)}`
+  return withBase(`/api/filemanager/${projectId.value}/download?path=${encodeURIComponent(path)}`)
 }
 
 function preferredDownload(figure) {

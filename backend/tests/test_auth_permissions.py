@@ -143,6 +143,20 @@ class AuthPermissionApiTests(unittest.TestCase):
         self.register(member, 'assistantmember')
         self.assertEqual(member.get('/api/terminal/assistant').status_code, 403)
 
+    def test_session_cookie_is_scoped_to_the_public_base_path(self):
+        # On a gateway host shared with other services, the session cookie
+        # must only be sent to APPAM's own prefix.
+        self.assertIn('Path=/;', self.register_and_cookie(self.client, 'rootadmin'))
+        with mock.patch.dict(os.environ, {'APPAM_PUBLIC_BASE_PATH': '/proxy/relative/172.16.17.93/25078/'}):
+            prefixed = create_app().test_client()
+        cookie = self.register_and_cookie(prefixed, 'prefixeduser')
+        self.assertIn('Path=/proxy/relative/172.16.17.93/25078;', cookie)
+
+    def register_and_cookie(self, client, username):
+        response = client.post('/api/auth/register', json={'username': username, 'password': 'password123'})
+        self.assertEqual(response.status_code, 201, response.get_data(as_text=True))
+        return next(value for value in response.headers.getlist('Set-Cookie') if value.startswith('session='))
+
     def test_parameter_fill_rejects_invalid_json(self):
         self.register(self.client, 'parameterjsonadmin')
         response = self.client.post(

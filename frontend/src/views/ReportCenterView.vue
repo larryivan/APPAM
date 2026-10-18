@@ -149,6 +149,7 @@ import { useRoute, useRouter } from 'vue-router'
 
 import Icon from '@/components/ui/Icon.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
+import { withBase } from '@/lib/basePath.js'
 import { collectWorkflowReports } from '@/lib/resultArtifacts.js'
 import { getWorkflowOption } from '@/lib/workflowUi.js'
 
@@ -215,11 +216,11 @@ function plotsRoute(report) {
 }
 
 function reportUrl(path) {
-  return `/api/filemanager/${projectId.value}/report?path=${encodeURIComponent(path)}`
+  return withBase(`/api/filemanager/${projectId.value}/report?path=${encodeURIComponent(path)}`)
 }
 
 function downloadUrl(path) {
-  return `/api/filemanager/${projectId.value}/download?path=${encodeURIComponent(path)}`
+  return withBase(`/api/filemanager/${projectId.value}/download?path=${encodeURIComponent(path)}`)
 }
 
 function shortRunId(runId) {

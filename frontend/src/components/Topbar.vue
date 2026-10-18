@@ -4,7 +4,7 @@
       <div class="topbar-leading">
         <router-link to="/" class="brand" aria-label="APPAM home">
           <span class="brand-mark" aria-hidden="true">
-            <img src="/assets/logo.svg" alt="">
+            <img :src="logoUrl" alt="">
           </span>
           <span class="brand-name">APPAM</span>
         </router-link>
@@ -116,10 +116,11 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-
 import Icon from './ui/Icon.vue'
 import { authState, logout } from '../lib/auth'
+import { withBase } from '../lib/basePath.js'
 
+const logoUrl = withBase('/assets/logo.svg')
 const route = useRoute()
 const router = useRouter()
 const topbarRoot = ref(null)

@@ -1,4 +1,5 @@
 import { clearCurrentUser } from './auth'
+import { withBase, withoutBase } from './basePath'
 
 const AUTH_EXEMPT_PATHS = new Set([
   '/api/auth/login',
@@ -24,7 +25,7 @@ const sameOriginPath = (url) => {
   if (!url) return ''
   try {
     const parsed = new URL(url, window.location.origin)
-    return parsed.origin === window.location.origin ? parsed.pathname : ''
+    return parsed.origin === window.location.origin ? withoutBase(parsed.pathname) : ''
   } catch {
     return ''
   }
@@ -56,8 +57,11 @@ export const installApiInterceptors = (router) => {
 
   const originalFetch = window.fetch.bind(window)
   window.fetch = async (input, init) => {
-    const url = normalizeUrl(input)
-    const response = await originalFetch(input, init)
+    // Every root-relative request ("/api/...", "/docs/...") is for APPAM itself,
+    // so it follows the base path the UI is served under.
+    const target = typeof input === 'string' ? withBase(input) : input
+    const url = normalizeUrl(target)
+    const response = await originalFetch(target, init)
 
     if (shouldHandleUnauthorized(url, response)) {
       clearCurrentUser()

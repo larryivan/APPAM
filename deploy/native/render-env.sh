@@ -9,6 +9,7 @@ OUTPUT="${SCRIPT_DIR}/appam.env"
 DB_ROOT="${HOME}/db"
 PROJECTS_ROOT="${HOME}/appam-data/projects"
 WEB_ORIGIN="http://127.0.0.1:25078"
+PUBLIC_BASE_PATH=""
 MAXQUANT_ROOT="${HOME}/MaxQuant_v2.8.1.0"
 ENV_RUNNER="${APPAM_ENV_RUNNER:-mamba}"
 
@@ -18,7 +19,8 @@ Usage: render-env.sh [options]
   --output FILE          Output environment file
   --db-root DIR          Database root (default: ~/db)
   --projects-root DIR    Project data root
-  --web-origin URL       Public Web origin
+  --web-origin URL       Public Web origin (comma-separate several)
+  --public-base-path P   URL prefix the UI is served under, e.g. a gateway path
   --maxquant-root DIR    MaxQuant release directory
 EOF
 }
@@ -29,6 +31,7 @@ while [[ $# -gt 0 ]]; do
     --db-root) DB_ROOT="$2"; shift ;;
     --projects-root) PROJECTS_ROOT="$2"; shift ;;
     --web-origin) WEB_ORIGIN="$2"; shift ;;
+    --public-base-path) PUBLIC_BASE_PATH="$2"; shift ;;
     --maxquant-root) MAXQUANT_ROOT="$2"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'Unknown option: %s\n' "$1" >&2; usage >&2; exit 2 ;;
@@ -55,6 +58,7 @@ FLASK_HOST=127.0.0.1
 FLASK_PORT=25079
 FLASK_SECRET_KEY=${SECRET}
 APPAM_ALLOWED_ORIGINS=${WEB_ORIGIN}
+APPAM_PUBLIC_BASE_PATH=${PUBLIC_BASE_PATH}
 APPAM_TRUST_PROXY_HEADERS=true
 APPAM_ALLOW_REGISTRATION=false
 APPAM_ALLOW_FIRST_USER_ADMIN=false

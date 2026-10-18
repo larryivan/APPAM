@@ -87,6 +87,10 @@ class NativeDeploymentTests(unittest.TestCase):
                     str(database_root),
                     '--projects-root',
                     str(root / 'projects'),
+                    '--web-origin',
+                    'https://gateway.example',
+                    '--public-base-path',
+                    '/proxy/relative/10.0.0.5/25078',
                 ],
                 check=False,
                 capture_output=True,
@@ -111,6 +115,8 @@ class NativeDeploymentTests(unittest.TestCase):
             self.assertIn(f'APPAM_PALEO_THERMO_RAW_FILE_PARSER={root / ".local" / "bin" / "ThermoRawFileParser"}', rendered)
             self.assertIn(f'APPAM_KRAKENUNIQ_KDB={database_root / "krakenuniq_refseq_bav" / "database.kdb"}', rendered)
             self.assertIn(f'APPAM_SMK_REPORTING_ENV={root / "conda" / "envs" / "reporting"}', rendered)
+            self.assertIn('APPAM_ALLOWED_ORIGINS=https://gateway.example', rendered)
+            self.assertIn('APPAM_PUBLIC_BASE_PATH=/proxy/relative/10.0.0.5/25078', rendered)
 
     def test_checkm_contract_uses_compatible_runtime(self):
         spec = (REPO_ROOT / 'docker' / 'tools' / 'environments' / 'checkm.yml').read_text(encoding='utf-8')

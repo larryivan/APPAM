@@ -12,7 +12,12 @@ export default defineConfig(({ mode }) => {
   // target in that form; a ws:// origin is never accepted.
   const wsOrigin = new URL(wsTarget.replace(/^ws/, 'http')).origin
 
+  // Build for a URL prefix, e.g. VITE_BASE_PATH=/proxy/relative/<host>/<port>
+  // behind a gateway that strips it; see src/lib/basePath.js.
+  const base = (env.VITE_BASE_PATH || env.APPAM_PUBLIC_BASE_PATH || '/').replace(/\/*$/, '/')
+
   return {
+    base,
     plugins: [vue()],
     resolve: {
       alias: {

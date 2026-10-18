@@ -16,6 +16,13 @@ server {
     add_header Referrer-Policy "same-origin" always;
     add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
 
+    # With APPAM_PUBLIC_BASE_PATH set, the UI requests prefixed URLs. A gateway
+    # strips the prefix before forwarding; strip it here too so the server can
+    # still be reached directly (e.g. through an SSH tunnel):
+    # location ^~ /proxy/relative/10.0.0.5/25078/ {
+    #     rewrite ^/proxy/relative/10\.0\.0\.5/25078(/.*)$ $1 last;
+    # }
+
     location /assets/ {
         try_files $uri =404;
         expires 1y;

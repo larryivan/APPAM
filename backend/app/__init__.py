@@ -71,6 +71,10 @@ def create_app():
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
     app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
+    # Behind a gateway that serves APPAM under a URL prefix on a shared host,
+    # scope the session cookie to that prefix so it is not sent to other
+    # services on the same host. Matches the Web UI's VITE_BASE_PATH.
+    app.config['SESSION_COOKIE_PATH'] = '/' + os.getenv('APPAM_PUBLIC_BASE_PATH', '').strip().strip('/')
     app.config['MAX_CONTENT_LENGTH'] = _max_request_bytes()
 
     # Initialize extensions with the app

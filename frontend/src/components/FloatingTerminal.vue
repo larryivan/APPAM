@@ -61,6 +61,7 @@
 <script setup>
 import { ref, computed, inject, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { BASE_PATH } from '@/lib/basePath.js'
 import { clampToViewport, useFloatingWindow } from '@/lib/floatingWindows.js'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
@@ -409,6 +410,7 @@ const initTerminal = () => {
 // 连接 Socket
 const connectSocket = () => {
   socket = io('/', {
+    path: `${BASE_PATH}/socket.io`,
     withCredentials: true
   })
 

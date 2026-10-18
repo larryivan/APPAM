@@ -436,6 +436,7 @@ import { useRoute } from 'vue-router'
 import DragDropUpload from './DragDropUpload.vue'
 import FilePreviewModal from './FilePreviewModal.vue'
 import DownloadManager from './DownloadManager.vue'
+import { withBase } from '@/lib/basePath.js'
 import { confirmAction, notifyError, notifyInfo } from '@/lib/notify.js'
 import { useOverlay } from '@/lib/overlay.js'
 
@@ -706,7 +707,7 @@ const generateThumbnail = (item) => {
   const ext = getFileExtension(item.name).toLowerCase()
   if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext)) {
     const filePath = `${currentPath.value === '/' ? '' : currentPath.value}/${item.name}`
-    return `/api/filemanager/${projectId.value}/thumbnail?path=${encodeURIComponent(filePath)}&size=128`
+    return withBase(`/api/filemanager/${projectId.value}/thumbnail?path=${encodeURIComponent(filePath)}&size=128`)
   }
   return null
 }
@@ -1099,7 +1100,7 @@ const handlePreviewSave = ({ path, content }) => {
 const handlePreviewDownload = ({ fileName, filePath }) => {
   // Implement download functionality
   const link = document.createElement('a')
-  link.href = `/api/filemanager/${projectId.value}/download?path=${encodeURIComponent(filePath || '')}`
+  link.href = withBase(`/api/filemanager/${projectId.value}/download?path=${encodeURIComponent(filePath || '')}`)
   link.download = fileName
   link.click()
 }
