@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import socket
 import uuid
 import hashlib
@@ -220,18 +221,34 @@ def _insert_workflow_run(conn, workflow_run_spec: dict) -> None:
         )
 
 
-def update_job(job_id: str, **fields) -> None:
-    if not fields:
-        return
+_COLUMN_NAME = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+
+
+def _assignments(fields: dict) -> tuple[str, list]:
+    """Build a parameterised SET clause from caller-supplied column names.
+
+    Values are always bound, but the column names are interpolated, so reject
+    anything that is not a plain identifier rather than trusting every caller
+    to pass literals forever.
+    """
     keys = []
     values = []
     for key, value in fields.items():
-        keys.append(f"{key} = ?")
+        if not _COLUMN_NAME.match(str(key)):
+            raise ValueError(f'Invalid column name: {key}')
+        keys.append(f'{key} = ?')
         values.append(value)
+    return ', '.join(keys), values
+
+
+def update_job(job_id: str, **fields) -> None:
+    if not fields:
+        return
+    assignments, values = _assignments(fields)
     values.append(job_id)
     conn = get_db_connection()
     try:
-        conn.execute(f"UPDATE jobs SET {', '.join(keys)} WHERE id = ?", values)
+        conn.execute(f"UPDATE jobs SET {assignments} WHERE id = ?", values)
         conn.commit()
     finally:
         conn.close()
@@ -240,15 +257,11 @@ def update_job(job_id: str, **fields) -> None:
 def update_process_history(job_id: str, **fields) -> None:
     if not fields:
         return
-    keys = []
-    values = []
-    for key, value in fields.items():
-        keys.append(f"{key} = ?")
-        values.append(value)
+    assignments, values = _assignments(fields)
     values.append(job_id)
     conn = get_db_connection()
     try:
-        conn.execute(f"UPDATE process_history SET {', '.join(keys)} WHERE job_id = ?", values)
+        conn.execute(f"UPDATE process_history SET {assignments} WHERE job_id = ?", values)
         conn.commit()
     finally:
         conn.close()
@@ -257,15 +270,11 @@ def update_process_history(job_id: str, **fields) -> None:
 def update_workflow_run(run_id: str, **fields) -> None:
     if not run_id or not fields:
         return
-    keys = []
-    values = []
-    for key, value in fields.items():
-        keys.append(f"{key} = ?")
-        values.append(value)
+    assignments, values = _assignments(fields)
     values.append(run_id)
     conn = get_db_connection()
     try:
-        conn.execute(f"UPDATE workflow_runs SET {', '.join(keys)} WHERE id = ?", values)
+        conn.execute(f"UPDATE workflow_runs SET {assignments} WHERE id = ?", values)
         conn.commit()
     finally:
         conn.close()
@@ -274,16 +283,12 @@ def update_workflow_run(run_id: str, **fields) -> None:
 def update_workflow_stage(run_id: str, stage_id: str, **fields) -> None:
     if not run_id or not stage_id or not fields:
         return
-    keys = []
-    values = []
-    for key, value in fields.items():
-        keys.append(f"{key} = ?")
-        values.append(value)
+    assignments, values = _assignments(fields)
     values.extend([run_id, stage_id])
     conn = get_db_connection()
     try:
         conn.execute(
-            f"UPDATE workflow_stage_states SET {', '.join(keys)} WHERE run_id = ? AND stage_id = ?",
+            f"UPDATE workflow_stage_states SET {assignments} WHERE run_id = ? AND stage_id = ?",
             values,
         )
         conn.commit()
